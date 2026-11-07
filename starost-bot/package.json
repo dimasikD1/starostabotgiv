@@ -1,0 +1,15 @@
+{
+  "name": "starost-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram-бот «Староста 24»: посещаемость, расписание, домашка, опросы",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs",
+    "check": "node --check index.mjs && node --check db.mjs && node --check format.mjs && node --check seed.mjs"
+  }
+}

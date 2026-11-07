@@ -1,0 +1,24 @@
+{
+  "name": "starost-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram-бот «Староста 24» для студенческой группы: посещаемость, расписание, домашка, опросы. Готов к развертыванию на Amvera Cloud и GitHub.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs",
+    "check": "node --check index.mjs && node --check db.mjs && node --check format.mjs && node --check seed.mjs"
+  },
+  "keywords": [
+    "telegram-bot",
+    "amvera",
+    "starosta",
+    "university",
+    "attendance",
+    "schedule"
+  ],
+  "author": "Дмитрий Дунаев"
+}
