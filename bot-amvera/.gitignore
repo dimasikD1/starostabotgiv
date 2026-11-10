@@ -1,19 +1,7 @@
-# Зависимости Node.js
 node_modules/
-
-# Файлы окружения с секретными токенами (НЕ заливать в GitHub!)
 .env
 .env.*
 !.env.example
-
-# Временные файлы записи базы
-data/*.tmp
-*.tmp
-
-# Логи
 *.log
-npm-debug.log*
-
-# Системные файлы ОС
 .DS_Store
 Thumbs.db
