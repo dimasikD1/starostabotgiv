@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { createWorker } from 'tesseract.js';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc.mjs';
 
@@ -234,6 +235,22 @@ function studentName(s) {
   return typeof s === 'string' ? s : String(s?.name || 'Без имени') + (s?.username ? ' (@' + s.username + ')' : '');
 }
 function attendanceKey(s) { return typeof s === 'string' ? s : (s.telegramId || s.name); }
+let ocrWorkerPromise;
+async function recognizeStudentPhoto(buffer){if(!ocrWorkerPromise)ocrWorkerPromise=createWorker('rus+eng');const w=await ocrWorkerPromise,r=await w.recognize(buffer);return String(r.data.text||'');}
+function parseStudentNames(raw){
+ const out=[],seen=new Set();
+ for(let line of String(raw||'').split(/\r?\n/)){
+  line=line.replace(/\t+/g,' ').replace(/^\s*(?:№\s*)?\d+[.)]?[\s.)-]*/,'').replace(/^\s*[-•*]\s*/,'').trim();
+  line=line.split(/\s{3,}/)[0].trim().replace(/\s+/g,' ').replace(/\s+\d+\s*$/,'').trim();
+  const words=line.split(' ').filter(Boolean);
+  if(line.length<5||words.length<2||words.length>5||!/^[a-zа-яё -]+$/i.test(line)||/^(список|группа|фамилия|имя|отчество|студенты|итого|всего)$/i.test(words[0]))continue;
+  const name=words.map(w=>w[0].toLocaleUpperCase('ru-RU')+w.slice(1)).join(' '),key=name.toLocaleLowerCase('ru-RU');
+  if(!seen.has(key)){seen.add(key);out.push(name);}
+ }
+ return out.slice(0,100);
+}
+function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.callback('✅ Подтвердить','studentimport:confirm')],[Markup.button.callback('❌ Отменить','studentimport:cancel')]]);}
+
 function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn' }).format(new Date()); }
 function managedGroup(userId) {
  const id=String(userId),u=normalizeUser(user(id));let g=Object.values(db.groups).find(x=>String(x.starostaId||'')===id||String(x.zamId||'')===id);
@@ -380,8 +397,10 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;');
 }
 
-function attendanceButtons(g) {
- const rows=(g.students||[]).map((x,i)=>[Markup.button.callback(('👨‍🎓 '+studentName(x)).slice(0,60),'attstudent:'+i)]);rows.push([Markup.button.callback('📊 Сводка за сегодня','attsummary')]);return Markup.inlineKeyboard(rows);
+function attendanceButtons(g,page=0){
+ const students=g.students||[],size=10,pages=Math.max(1,Math.ceil(students.length/size));page=Math.max(0,Math.min(Number(page)||0,pages-1));const today=attendanceDate();
+ const rows=students.slice(page*size,(page+1)*size).map((student,offset)=>{const i=page*size+offset,status=g.attendance?.[attendanceKey(student)]?.[today];return [Markup.button.callback((status==='present'?'✅ Был':'▫️ Был')+' '+(i+1),'attmark:'+i+':present'),Markup.button.callback((status==='absent'?'❌ Нет':'▫️ Нет')+' '+(i+1),'attmark:'+i+':absent')];});
+ const nav=[];if(page>0)nav.push(Markup.button.callback('⬅️','attpage:'+(page-1)));nav.push(Markup.button.callback((page+1)+'/'+pages,'attsummary'));if(page<pages-1)nav.push(Markup.button.callback('➡️','attpage:'+(page+1)));rows.push(nav);return Markup.inlineKeyboard(rows);
 }
 function attendanceStatusButtons(index) {
   return Markup.inlineKeyboard([
@@ -904,9 +923,33 @@ bot.start(async ctx => {
   );
 });
 
+bot.on('photo',async(ctx,next)=>{
+ if(!isPrivate(ctx))return next();const u=normalizeUser(user(ctx.from.id));if(!u.pendingStudentImport)return next();
+ const g=managedGroup(ctx.from.id);if(!g){u.pendingStudentImport=false;saveDb();return ctx.reply('Группа не найдена.');}
+ try{const photo=ctx.message.photo?.at(-1),url=await ctx.telegram.getFileLink(photo.file_id),res=await fetch(url);if(!res.ok)throw Error('download failed');
+ const buf=Buffer.from(await res.arrayBuffer()),ocr=await recognizeStudentPhoto(buf),names=parseStudentNames(ocr);
+ if(!names.length)return ctx.reply('Не удалось распознать ФИО. Пришли более чёткое фото или список текстом.');
+ u.pendingStudentImport=false;u.pendingStudentImportReview=names;saveDb();
+ return ctx.reply('🔎 <b>Проверь распознанный список</b>\n\n'+names.map((n,i)=>(i+1)+'. '+escapeHtml(n)).join('\n')+'\n\nСохраняю только после подтверждения.',{parse_mode:'HTML',...importPreviewKeyboard()});
+ }catch(e){console.error('[student OCR]',e);return ctx.reply('Ошибка распознавания фото. Попробуй другое изображение.');}
+});
+bot.action('studentimport:confirm',async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery();const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id);
+ if(!g||!Array.isArray(u.pendingStudentImportReview))return ctx.answerCbQuery('Нет списка для подтверждения.');
+ const names=u.pendingStudentImportReview,seen=new Set((g.students||[]).map(x=>studentName(x).toLowerCase())),fresh=names.filter(n=>!seen.has(n.toLowerCase())),room=Math.max(0,100-(g.students||[]).length),added=fresh.slice(0,room);
+ g.students||=[];g.students.push(...added);delete u.pendingStudentImportReview;saveDb();await ctx.answerCbQuery('Список сохранён');
+ return ctx.editMessageText('✅ Добавлено: '+added.length+'; дубликатов: '+(names.length-fresh.length)+(fresh.length>added.length?'; лимит превышен: '+(fresh.length-added.length):'')+'. Открой /attendance.');
+});
+bot.action('studentimport:cancel',async ctx=>{const u=normalizeUser(user(ctx.from.id));u.pendingStudentImport=false;delete u.pendingStudentImportReview;saveDb();await ctx.answerCbQuery('Отменено');return ctx.editMessageText('Импорт отменён.');});
 bot.on('text', async (ctx, next) => {
   if (!isPrivate(ctx)) return next();
   const u = normalizeUser(user(ctx.from.id));
+  if(u.pendingStudentImport){
+   const raw=String(ctx.message.text||'').trim();if(raw.startsWith('/cancel')){u.pendingStudentImport=false;saveDb();return ctx.reply('Импорт отменён.');}if(raw.startsWith('/'))return next();
+   const names=parseStudentNames(raw);if(!names.length)return ctx.reply('Не распознал список. Отправь по одному ФИО на строку или /cancel.');
+   u.pendingStudentImport=false;u.pendingStudentImportReview=names;saveDb();const g=managedGroup(ctx.from.id);
+   return ctx.reply('🔎 <b>Проверь список</b>\n\n'+names.map((n,i)=>(i+1)+'. '+escapeHtml(n)).join('\n')+'\n\nПодтверди добавление в '+escapeHtml(g?.title||'группу')+'.',{parse_mode:'HTML',...importPreviewKeyboard()});
+  }
   if (!u.pendingFullName) return next();
   const value = (ctx.message.text || '').trim().replace(/\\s+/g, ' ');
   if (value.startsWith('/')) return next();
@@ -1043,6 +1086,12 @@ bot.command('detach', async ctx => {
   await ctx.reply('✅ Группа откреплена от рассылки опросов.');
 });
 
+bot.command('importstudents',async ctx=>{
+ if(!isPrivate(ctx))return ctx.reply('Используй команду в личке.');
+ if(!managedGroup(ctx.from.id))return ctx.reply('Команда доступна старосте или заместителю группы.');
+ const u=normalizeUser(user(ctx.from.id));u.pendingStudentImport=true;delete u.pendingStudentImportReview;saveDb();
+ return ctx.reply('Отправь фото списка группы или вставь ФИО текстом — по одному человеку на строку. Я покажу результат для проверки. Для отмены: /cancel.');
+});
 bot.command('students',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
  if(!g.students.length)return ctx.reply('Список группы пуст. Добавь студентов ответом на сообщение в группе командой /student.');
@@ -1208,6 +1257,9 @@ bot.action(/^attmark:(\d+):(present|absent|clear)$/,async ctx=>{
  if(st==='clear')delete g.attendance[k][attendanceDate()];else g.attendance[k][attendanceDate()]=st;saveDb();await ctx.answerCbQuery(st==='clear'?'Отметка снята':'Сохранено');
  await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
 });
+bot.action(/^attpage:(\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery();const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');await ctx.answerCbQuery();return ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g,Number(ctx.match[1]))});
+});
 bot.action(['attsummary','attback'],async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  await ctx.answerCbQuery();await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
@@ -1361,6 +1413,7 @@ async function main() {
     { command: 'hw', description: 'Домашние задания' },
     { command: 'attendance', description: 'Журнал посещаемости' },
     { command: 'students', description: 'Список студентов группы' },
+    { command: 'importstudents', description: 'Импорт списка по фото или тексту' },
     { command: 'pollreport', description: 'Ответы на последний опрос' },
     { command: 'subscription', description: 'Статус подписки' }
   ], { scope: { type: 'all_private_chats' } });
