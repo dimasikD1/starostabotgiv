@@ -497,19 +497,19 @@ bot.command('stats', ctx => {
   const yooTotal = yooPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   return ctx.reply(
-    '📊 <b>Статистика Староста Бота</b>\\n\\n' +
-    '👥 Всего пользователей: <b>' + entries.length + '</b>\\n' +
-    '🆕 Новых за 30 дней: <b>' + newUsers30d + '</b>\\n' +
-    '📌 Активных подписок: <b>' + active + '</b>\\n' +
-    '♾ Пожизненных подписок: <b>' + lifetime + '</b>\\n' +
-    '⌛ Истекших подписок: <b>' + expired + '</b>\\n' +
-    '🔓 Без подписки: <b>' + noSubscription + '</b>\\n\\n' +
-    '👑 Старост: <b>' + starostas + '</b>\\n' +
-    '🎓 Студентов: <b>' + students + '</b>\\n' +
-    '🏫 Прикреплённых групп: <b>' + Object.keys(db.groups).length + '</b>\\n\\n' +
-    '💳 Оплаты Telegram Stars: <b>' + starsPayments.length + '</b> (' + starsTotal + ' ⭐)\\n' +
-    '💳 Оплаты ЮKassa: <b>' + yooPayments.length + '</b> (' + yooTotal.toFixed(2) + ' ₽)\\n' +
-    '🎁 Выдано вручную подписок: <b>' + manualGrants + '</b>\\n\\n' +
+    '📊 <b>Статистика Староста Бота</b>\n\n' +
+    '👥 Всего пользователей: <b>' + entries.length + '</b>\n' +
+    '🆕 Новых за 30 дней: <b>' + newUsers30d + '</b>\n' +
+    '📌 Активных подписок: <b>' + active + '</b>\n' +
+    '♾ Пожизненных подписок: <b>' + lifetime + '</b>\n' +
+    '⌛ Истекших подписок: <b>' + expired + '</b>\n' +
+    '🔓 Без подписки: <b>' + noSubscription + '</b>\n\n' +
+    '👑 Старост: <b>' + starostas + '</b>\n' +
+    '🎓 Студентов: <b>' + students + '</b>\n' +
+    '🏫 Прикреплённых групп: <b>' + Object.keys(db.groups).length + '</b>\n\n' +
+    '💳 Оплаты Telegram Stars: <b>' + starsPayments.length + '</b> (' + starsTotal + ' ⭐)\n' +
+    '💳 Оплаты ЮKassa: <b>' + yooPayments.length + '</b> (' + yooTotal.toFixed(2) + ' ₽)\n' +
+    '🎁 Выдано вручную подписок: <b>' + manualGrants + '</b>\n\n' +
     '<i>Исторические оплаты Stars, совершённые до установки этой версии, не учитываются.</i>',
     { parse_mode: 'HTML' }
   );
