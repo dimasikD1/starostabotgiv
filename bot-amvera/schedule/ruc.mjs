@@ -262,6 +262,11 @@ async function getNewSite(group, days, timeout) {
   return items.filter(x => x.dayOffset >= 0 && x.dayOffset < days);
 }
 
+function extractClock(value) {
+  const match = String(value || '').match(/(?:T|\\b)(\\d{1,2}:\\d{2})/);
+  return match ? match[1] : '';
+}
+
 function normalizeJson(data, days) {
   const raw = Array.isArray(data)
     ? data
@@ -284,8 +289,8 @@ function normalizeJson(data, days) {
       date,
       dayOffset,
       time: item.time || item.startTime || (item.start_time && item.end_time ? item.start_time + '–' + item.end_time : ''),
-      timeStart: item.startTime || item.start_time || item.beginTime || item.timeStart || '',
-      timeEnd: item.endTime || item.end_time || item.finishTime || item.timeEnd || '',
+      timeStart: item.startTime || item.start_time || item.beginTime || item.timeStart || extractClock(item.start),
+      timeEnd: item.endTime || item.end_time || item.finishTime || item.timeEnd || extractClock(item.end),
       subject: item.subject || item.name || item.discipline || item.title || '',
       teacher: item.teacher || item.teacherName || item.lecturer || '',
       room: item.room || item.auditory || item.classroom || '',
