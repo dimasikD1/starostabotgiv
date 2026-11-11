@@ -344,7 +344,7 @@ bot.hears('👨‍🎓 Список студентов', ctx => {
 
 bot.command('role', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Роль настраивается в личных сообщениях или через администратора группы.');
-  const value = ctx.message.text.replace(/^\\/role(?:@\\S+)?/i, '').trim().toLowerCase();
+  const value = ctx.message.text.replace(/^\/role(?:@\S+)?/i, '').trim().toLowerCase();
   const u = normalizeUser(user(ctx.from.id));
   if (!value) return ctx.reply('Твоя роль: ' + roleLabel(u.role) + '\\n\\nСтатус старосты назначает администратор группы.');
   if (value !== 'student') return ctx.reply('❌ Самостоятельно назначить себя старостой нельзя. Это делает администратор группы.');
@@ -391,7 +391,7 @@ bot.command('mark', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Отметки посещаемости делаются в личных сообщениях.');
   const u = normalizeUser(user(ctx.from.id));
   if (u.role !== 'starosta') return ctx.reply('❌ Только староста может отмечать посещаемость.');
-  const parts = ctx.message.text.replace(/^\\/mark(?:@\\S+)?/i, '').trim().split(/\\s+/);
+  const parts = ctx.message.text.replace(/^\/mark(?:@\S+)?/i, '').trim().split(/\s+/);
   const index = Number(parts[0]) - 1;
   const status = parts[1] === 'absent' ? 'absent' : parts[1] === 'present' ? 'present' : '';
   if (!Number.isInteger(index) || index < 0 || index >= u.students.length || !status) {
