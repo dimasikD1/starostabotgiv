@@ -1312,13 +1312,13 @@ bot.hears('📊 Создать опрос', ctx => {
 });
 
 // Отдельные обработчики кнопок посещаемости.
-bot.action(/^studentcard:(\\d+)$/,async ctx=>{
+bot.action(/^studentcard:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой список в личке.');
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
  await ctx.answerCbQuery();return ctx.editMessageText(studentCardText(g,i),{parse_mode:'HTML',...studentCardKeyboard(i)});
 });
-bot.action(/^studentedit:(username|phone):(\\d+)$/,async ctx=>{
+bot.action(/^studentedit:(username|phone):(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Только в личных сообщениях.');
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const type=ctx.match[1],i=Number(ctx.match[2]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
@@ -1331,7 +1331,7 @@ bot.action('studentback',async ctx=>{
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  await ctx.answerCbQuery();return ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g)});
 });
-bot.action(/^studentpage:(\\d+)$/,async ctx=>{
+bot.action(/^studentpage:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery();
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  await ctx.answerCbQuery();return ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g,Number(ctx.match[1]))});
