@@ -314,8 +314,18 @@ async function checkAutomaticAttendancePolls() {
           const match = String(lesson.timeStart).match(/^(\\d{1,2}):(\\d{2})$/);
           if (!match) continue;
           const startMinutes = Number(match[1]) * 60 + Number(match[2]);
-          if (currentMinutes < startMinutes - 10 || currentMinutes > startMinutes - 9) continue;
           const key = [g.chatId, lesson.date, lesson.timeStart, lesson.subject].join('|');
+          db.sentLessonNotices ||= {};
+          if (currentMinutes >= startMinutes - 30 && currentMinutes <= startMinutes - 29 && !db.sentLessonNotices[key]) {
+            await bot.telegram.sendMessage(g.chatId,
+              '⏰ <b>Напоминание о занятии</b>\\n\\nЧерез 30 минут начинается: <b>' + escapeHtml(lesson.subject) +
+              '</b>\\n🕒 Начало: ' + lesson.timeStart + (lesson.room ? '\\n🚪 Аудитория: ' + escapeHtml(lesson.room) : ''),
+              { parse_mode: 'HTML' }
+            );
+            db.sentLessonNotices[key] = new Date().toISOString();
+            saveDb();
+          }
+          if (currentMinutes < startMinutes - 10 || currentMinutes > startMinutes - 9) continue;
           if (db.sentAttendancePolls[key]) continue;
           const sent = await bot.telegram.sendPoll(
             g.chatId,
@@ -623,6 +633,57 @@ bot.command('paysupport', ctx => ctx.reply(
   'Если оплата прошла, но доступ не появился, отправь сюда скриншот платежа и свой Telegram ID.',
   { parse_mode: 'HTML' }
 ));
+
+bot.on('poll_answer', async ctx => {
+  const answer = ctx.update.poll_answer;
+  if (!answer?.poll_id) return;
+  db.sentAttendancePolls ||= {};
+  const record = Object.values(db.sentAttendancePolls).find(x => String(x.pollId) === String(answer.poll_id));
+  if (!record) return;
+  const userId = String(answer.user?.id || '');
+  if (!userId) return;
+  const option = Number(answer.option_ids?.[0]);
+  record.responses ||= {};
+  record.responses[userId] = {
+    userId, username: answer.user?.username || '',
+    firstName: answer.user?.first_name || '',
+    status: option === 0 ? 'present' : option === 1 ? 'absent' : 'unknown',
+    answeredAt: new Date().toISOString()
+  };
+  const group = db.groups[String(record.groupId)];
+  const student = group?.students?.find(x => String(typeof x === 'object' ? x.telegramId : '') === userId);
+  if (student) {
+    group.attendance ||= {};
+    const key = attendanceKey(student);
+    group.attendance[key] ||= {};
+    group.attendance[key][record.date] = option === 0 ? 'present' : option === 1 ? 'absent' : 'unmarked';
+  }
+  saveDb();
+  console.log('[attendance poll] Answer recorded for ' + userId + ' in ' + record.groupName);
+});
+
+bot.command('pollreport', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Отчёт доступен в личных сообщениях.');
+  const g = managedGroup(ctx.from.id);
+  if (!g) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
+  const records = Object.values(db.sentAttendancePolls || {})
+    .filter(x => String(x.groupId) === String(g.chatId))
+    .sort((a,b) => String(b.date + b.time).localeCompare(String(a.date + a.time)));
+  const latest = records[0];
+  if (!latest) return ctx.reply('Пока нет автоматических опросов посещаемости для «' + g.title + '».');
+  const answers = Object.values(latest.responses || {});
+  const yes = answers.filter(x => x.status === 'present');
+  const no = answers.filter(x => x.status === 'absent');
+  const names = answers.map(x => (x.firstName || 'Студент') + (x.username ? ' (@' + x.username + ')' : '') + (x.status === 'present' ? ' — ✅ Будет' : x.status === 'absent' ? ' — ❌ Не будет' : ''));
+  return ctx.reply(
+    '📊 <b>Ответы на последний опрос</b>\\n👥 ' + escapeHtml(g.title) +
+    '\\n📚 ' + escapeHtml(latest.subject) + '\\n📅 ' + latest.date + ' в ' + latest.time +
+    '\\n\\n✅ Будут: <b>' + yes.length + '</b>\\n❌ Не будут: <b>' + no.length +
+    '</b>\\n▫️ Не ответили: <b>' + Math.max(0, (g.students || []).length - answers.length) +
+    '</b>\\n\\n' + (names.length ? names.map(escapeHtml).join('\\n') : 'Ответов пока нет.'),
+    { parse_mode: 'HTML' }
+  );
+});
 
 bot.on('callback_query', async ctx => {
   if (ctx.callbackQuery?.data === 'yookassa_check') {
