@@ -174,20 +174,9 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = groups[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
   u.group = selected;
-  if (ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type)) {
-    const chatId = String(ctx.chat.id);
-    const chatGroup = db.groups[chatId] || {
-      chatId: ctx.chat.id,
-      title: ctx.chat.title || 'Группа без названия',
-      addedBy: ctx.from.id,
-      addedAt: new Date().toISOString()
-    };
-    chatGroup.scheduleGroup = selected;
-    db.groups[chatId] = chatGroup;
-  }
   saveDb();
   await ctx.answerCbQuery('Группа сохранена');
-  await ctx.editMessageText('✅ Учебная группа сохранена: ' + selected + '\\nТеперь расписание в этом чате будет показываться для неё.');
+  await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.');
 });
 
 const managerMenu = Markup.keyboard([
@@ -276,11 +265,8 @@ function format(items, group) {
 
 async function show(ctx, days, offset) {
   const u = user(ctx.from.id);
-  const chatGroup = ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type)
-    ? String(db.groups[String(ctx.chat.id)]?.scheduleGroup || '').trim()
-    : '';
-  const selectedGroup = chatGroup || u.group;
-  if (!selectedGroup) return ctx.reply('Сначала выбери учебную группу в этом чате или укажи её командой /group.', menuFor(ctx));
+  const selectedGroup = String(u.group || '').trim();
+  if (!selectedGroup) return ctx.reply('Сначала выбери свою учебную группу: БИ(ЭБ)1-ОЗ/Бп/КД26 или БИ(ЭБ)2-ОЗ/Бп/КД26.', menuFor(ctx));
   await ctx.reply('⏳ Загружаю расписание для «' + selectedGroup + '»…');
   try {
     let items = await getSchedule(selectedGroup, days);
