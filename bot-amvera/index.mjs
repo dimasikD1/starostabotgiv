@@ -115,7 +115,7 @@ async function subscriptionMiddleware(ctx, next) {
   if (
     ctx.updateType === 'pre_checkout_query' ||
     ctx.message?.successful_payment ||
-    (ctx.updateType === 'callback_query' && (['subscribe', 'subscribe_card'].includes(ctx.callbackQuery?.data) || String(ctx.callbackQuery?.data || '').startsWith('studygroup:')))
+    (ctx.updateType === 'callback_query' && (['subscribe', 'subscribe_card'].includes(ctx.callbackQuery?.data) || String(ctx.callbackQuery?.data || '').startsWith('studygroup:') || String(ctx.callbackQuery?.data || '').startsWith('studentimport:')))
   ) return next();
 
   if (!ctx.from) return next();
