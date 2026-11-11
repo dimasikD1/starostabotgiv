@@ -146,7 +146,7 @@ const menu = Markup.keyboard([
 
 function user(id) {
   const key = String(id);
-  db.users[key] ||= { group: '', role: 'student', pendingPoll: null, pendingHomework: null, students: [], attendance: {} };
+  db.users[key] ||= { group: '', role: 'student', createdAt: new Date().toISOString(), pendingPoll: null, pendingHomework: null, students: [], attendance: {} };
   return db.users[key];
 }
 
@@ -157,6 +157,7 @@ function normalizeUser(u) {
   u.subscriptionUntil ||= 0;
   u.paymentHistory ||= [];
   u.pendingYooKassaPaymentId ||= '';
+  u.createdAt ||= null;
   return u;
 }
 
@@ -451,6 +452,44 @@ bot.command('subinfo', ctx => {
   return ctx.reply('Пользователь: <code>' + targetId + '</code>\nПодписка: <b>' + (active ? 'активна' : 'не активна') + '</b>\nДействует до: ' + until, { parse_mode: 'HTML' });
 });
 
+// Личная статистика доступна только владельцу в личном чате.
+bot.command('stats', ctx => {
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Статистика доступна только владельцу бота.');
+  if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /stats.');
+
+  const entries = Object.entries(db.users);
+  const now = Date.now();
+  const active = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) > now).length;
+  const expired = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) > 0 && subscriptionUntil(u) <= now).length;
+  const noSubscription = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) <= 0).length;
+  const starostas = entries.filter(([, u]) => u.role === 'starosta').length;
+  const students = entries.filter(([, u]) => (u.role || 'student') === 'student').length;
+  const newUsers30d = entries.filter(([, u]) => u.createdAt && (now - Date.parse(u.createdAt)) <= 30 * 24 * 60 * 60 * 1000).length;
+  const history = entries.flatMap(([, u]) => Array.isArray(u.paymentHistory) ? u.paymentHistory : []);
+  const starsPayments = history.filter(p => p.method === 'stars');
+  const yooPayments = history.filter(p => p.method === 'yookassa');
+  const manualGrants = history.filter(p => p.method === 'owner_grant').length;
+  const starsTotal = starsPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const yooTotal = yooPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+  return ctx.reply(
+    '📊 <b>Статистика Староста Бота</b>\\n\\n' +
+    '👥 Всего пользователей: <b>' + entries.length + '</b>\\n' +
+    '🆕 Новых за 30 дней: <b>' + newUsers30d + '</b>\\n' +
+    '📌 Активных подписок: <b>' + active + '</b>\\n' +
+    '⌛ Истекших подписок: <b>' + expired + '</b>\\n' +
+    '🔓 Без подписки: <b>' + noSubscription + '</b>\\n\\n' +
+    '👑 Старост: <b>' + starostas + '</b>\\n' +
+    '🎓 Студентов: <b>' + students + '</b>\\n' +
+    '🏫 Прикреплённых групп: <b>' + Object.keys(db.groups).length + '</b>\\n\\n' +
+    '💳 Оплаты Telegram Stars: <b>' + starsPayments.length + '</b> (' + starsTotal + ' ⭐)\\n' +
+    '💳 Оплаты ЮKassa: <b>' + yooPayments.length + '</b> (' + yooTotal.toFixed(2) + ' ₽)\\n' +
+    '🎁 Выдано вручную подписок: <b>' + manualGrants + '</b>\\n\\n' +
+    '<i>Исторические оплаты Stars, совершённые до установки этой версии, не учитываются.</i>',
+    { parse_mode: 'HTML' }
+  );
+});
+
 bot.command('terms', ctx => ctx.reply(
   '📄 <b>Условия использования</b>\\n\\n' +
   'Подписка предоставляет доступ к функциям бота на оплаченный период. ' +
@@ -563,6 +602,13 @@ bot.on('successful_payment', async ctx => {
   const base = Math.max(Date.now(), subscriptionUntil(u));
   u.subscriptionUntil = expiration > 0 ? expiration * 1000 : base + SUBSCRIPTION_SECONDS * 1000;
   u.subscriptionChargeId = payment.telegram_payment_charge_id || '';
+  u.paymentHistory.push({
+    method: 'stars',
+    amount: Number(payment.total_amount || 0),
+    currency: payment.currency || 'XTR',
+    paidAt: new Date().toISOString(),
+    chargeId: payment.telegram_payment_charge_id || ''
+  });
   saveDb();
 
   await ctx.reply(
@@ -999,6 +1045,7 @@ async function main() {
     { command: 'help', description: 'Помощь' },
     { command: 'subscribe', description: 'Оформить подписку' },
     { command: 'subscription', description: 'Статус подписки' },
+    { command: 'stats', description: 'Статистика владельца' },
     { command: 'terms', description: 'Условия использования' },
     { command: 'paysupport', description: 'Поддержка по оплате' },
     { command: 'group', description: 'Выбрать учебную группу' },
