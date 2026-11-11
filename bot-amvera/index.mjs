@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc.mjs';
 
@@ -125,9 +126,7 @@ async function startPoll(ctx) {
   }
 
   const parts = text.split('|').map(x => x.trim()).filter(Boolean);
-  if (parts.length < 3) {
-    return ctx.reply('❌ Нужно минимум: вопрос + 2 варианта. Разделяй их символом |');
-  }
+  if (parts.length < 3) return ctx.reply('❌ Нужно минимум: вопрос + 2 варианта. Разделяй их символом |');
 
   const question = parts.shift();
   const options = parts.slice(0, 10);
@@ -147,10 +146,7 @@ async function startPoll(ctx) {
     );
   }
 
-  await ctx.reply(
-    '📊 Опрос создан. Выбери, куда его отправить:',
-    Markup.inlineKeyboard(groupButtons())
-  );
+  await ctx.reply('📊 Опрос создан. Выбери, куда его отправить:', Markup.inlineKeyboard(groupButtons()));
 }
 
 bot.start(async ctx => {
@@ -172,8 +168,9 @@ bot.help(ctx => ctx.reply(
   '/week — неделя\n' +
   '/poll — создать опрос в личке\n' +
   '/groups — список прикреплённых групп\n\n' +
-  'В учебной группе администратор может выполнить /attach, чтобы прикрепить её к боту для отправки опросов.'
-, menu));
+  'В учебной группе администратор может выполнить /attach, чтобы прикрепить её к боту для отправки опросов.',
+  menu
+));
 
 bot.command('group', async ctx => {
   const value = ctx.message.text.replace(/^\/group(?:@\S+)?/i, '').trim();
@@ -187,9 +184,7 @@ bot.command('attach', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) {
     return ctx.reply('Эту команду нужно выполнить внутри группы, которую хочешь прикрепить.');
   }
-  if (!(await isGroupAdmin(ctx))) {
-    return ctx.reply('❌ Прикреплять группу может только её администратор.');
-  }
+  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Прикреплять группу может только её администратор.');
   registerGroup(ctx);
   await ctx.reply(
     '✅ Группа прикреплена.\n\n' +
@@ -208,10 +203,7 @@ bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
   if (!groups.length) return ctx.reply('Нет прикреплённых групп. Добавь бота в группу и выполни /attach.');
-  await ctx.reply(
-    '👥 Прикреплённые группы:\n\n' +
-    groups.map((g, i) => (i + 1) + '. ' + g.title).join('\n')
-  );
+  await ctx.reply('👥 Прикреплённые группы:\n\n' + groups.map((g, i) => (i + 1) + '. ' + g.title).join('\n'));
 });
 
 bot.command('poll', startPoll);
@@ -237,9 +229,7 @@ bot.on('callback_query', async ctx => {
 
   const target = data.slice('pollsend:'.length);
   const groups = Object.values(db.groups);
-  const targets = target === 'all'
-    ? groups
-    : groups.filter(g => String(g.chatId) === target);
+  const targets = target === 'all' ? groups : groups.filter(g => String(g.chatId) === target);
 
   if (!targets.length) {
     await ctx.answerCbQuery('Группа не найдена.');
@@ -249,15 +239,10 @@ bot.on('callback_query', async ctx => {
   let sent = 0;
   for (const g of targets) {
     try {
-      await ctx.telegram.sendPoll(
-        g.chatId,
-        u.pendingPoll.question,
-        u.pendingPoll.options,
-        {
-          is_anonymous: true,
-          allows_multiple_answers: false
-        }
-      );
+      await ctx.telegram.sendPoll(g.chatId, u.pendingPoll.question, u.pendingPoll.options, {
+        is_anonymous: true,
+        allows_multiple_answers: false
+      });
       sent++;
     } catch (e) {
       console.error('[poll]', g.title, e);
@@ -277,7 +262,6 @@ bot.on('callback_query', async ctx => {
 bot.command('schedule', ctx => show(ctx, 1, 0));
 bot.command('tomorrow', ctx => show(ctx, 2, 1));
 bot.command('week', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
-
 bot.hears('📅 Сегодня', ctx => show(ctx, 1, 0));
 bot.hears('📅 Завтра', ctx => show(ctx, 2, 1));
 bot.hears('🗓 Неделя', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
@@ -288,8 +272,7 @@ bot.hears('👥 Моя группа', ctx => {
 bot.hears('👥 Группы', ctx => {
   const groups = Object.values(db.groups);
   return ctx.reply(
-    groups.length ? '👥 Прикреплено групп: ' + groups.length + '\n' + groups.map(g => '• ' + g.title).join('\n')
-      : 'Нет прикреплённых групп.',
+    groups.length ? '👥 Прикреплено групп: ' + groups.length + '\n' + groups.map(g => '• ' + g.title).join('\n') : 'Нет прикреплённых групп.',
     menu
   );
 });
@@ -298,17 +281,33 @@ bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу че�
 
 bot.catch(e => console.error('[bot]', e));
 
+const port = Number(process.env.PORT || 80);
+const healthServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('OK');
+});
+
 async function main() {
+  healthServer.listen(port, '0.0.0.0', () => {
+    console.log('[health] HTTP сервер слушает 0.0.0.0:' + port);
+  });
+
   await bot.telegram.deleteWebhook({ drop_pending_updates: false });
   const me = await bot.telegram.getMe();
   console.log('Бот запущен: @' + me.username);
   await bot.launch({ dropPendingUpdates: false });
 }
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+function shutdown(signal) {
+  console.log('[bot] Остановка (' + signal + ').');
+  try { bot.stop(signal); } catch {}
+  try { healthServer.close(); } catch {}
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));
 
 main().catch(e => {
-  console.error(e);
+  console.error('[fatal]', e);
   process.exit(1);
 });
