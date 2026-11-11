@@ -133,7 +133,7 @@ async function subscriptionMiddleware(ctx, next) {
 
   const u = normalizeUser(user(ctx.from.id));
   // При первом сообщении в группе просим выбрать учебную группу.
-  if (ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.group && !String(ctx.message?.text || '').startsWith('/')) {
+  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.group && !String(ctx.message?.text || '').startsWith('/')) {
     await ctx.reply(
       '👋 Чтобы показывать правильное расписание и домашние задания, выбери свою учебную группу:',
       Markup.inlineKeyboard([
