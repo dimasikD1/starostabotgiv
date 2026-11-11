@@ -920,41 +920,6 @@ bot.start(async ctx => {
   );
 });
 
-bot.on('photo',async(ctx,next)=>{
- if(!isPrivate(ctx))return next();
- const u=normalizeUser(user(ctx.from.id));
- if(!u.pendingStudentImport)return next();
- return ctx.reply('⚠️ Импорт по фотографии временно отключён, чтобы бот стабильно работал на текущем тарифе.\n\nПришли список студентов обычным текстом — по одному ФИО на строку.');
-});
-bot.action('studentimport:confirm',async ctx=>{
- if(!isPrivate(ctx))return ctx.answerCbQuery();const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id);
- if(!g||!Array.isArray(u.pendingStudentImportReview))return ctx.answerCbQuery('Нет списка для подтверждения.');
- const names=u.pendingStudentImportReview,seen=new Set((g.students||[]).map(x=>studentName(x).toLowerCase())),fresh=names.filter(n=>!seen.has(n.toLowerCase())),room=Math.max(0,100-(g.students||[]).length),added=fresh.slice(0,room);
- g.students||=[];g.students.push(...added);delete u.pendingStudentImportReview;saveDb();await ctx.answerCbQuery('Список сохранён');
- return ctx.editMessageText('✅ Добавлено: '+added.length+'; дубликатов: '+(names.length-fresh.length)+(fresh.length>added.length?'; лимит превышен: '+(fresh.length-added.length):'')+'. Открой /attendance.');
-});
-bot.action('studentimport:cancel',async ctx=>{const u=normalizeUser(user(ctx.from.id));u.pendingStudentImport=false;delete u.pendingStudentImportReview;saveDb();await ctx.answerCbQuery('Отменено');return ctx.editMessageText('Импорт отменён.');});
-bot.on('text', async (ctx, next) => {
-  if (!isPrivate(ctx)) return next();
-  const u = normalizeUser(user(ctx.from.id));
-  if(u.pendingStudentImport){
-   const raw=String(ctx.message.text||'').trim();if(raw.startsWith('/cancel')){u.pendingStudentImport=false;saveDb();return ctx.reply('Импорт отменён.');}if(raw.startsWith('/'))return next();
-   const names=parseStudentNames(raw);if(!names.length)return ctx.reply('Не распознал список. Отправь по одному ФИО на строку или /cancel.');
-   u.pendingStudentImport=false;u.pendingStudentImportReview=names;saveDb();const g=managedGroup(ctx.from.id);
-   return ctx.reply('🔎 <b>Проверь список</b>\n\n'+names.map((n,i)=>(i+1)+'. '+escapeHtml(n)).join('\n')+'\n\nПодтверди добавление в '+escapeHtml(g?.title||'группу')+'.',{parse_mode:'HTML',...importPreviewKeyboard()});
-  }
-  if (!u.pendingFullName) return next();
-  const value = (ctx.message.text || '').trim().replace(/\\s+/g, ' ');
-  if (value.startsWith('/')) return next();
-  if (value.split(' ').length < 2 || value.length < 5) {
-    return ctx.reply('Пожалуйста, напиши фамилию и имя. Например: Иванов Иван.');
-  }
-  u.fullName = value;
-  u.pendingFullName = false;
-  saveDb();
-  return ctx.reply('✅ ФИО сохранено: ' + escapeHtml(value) + '\\nСпасибо! Теперь можешь пользоваться ботом.', { parse_mode: 'HTML', ...menuFor(ctx) });
-});
-
 bot.help(ctx => ctx.reply(
   '📚 <b>Команды Староста Бота</b>\\n\\n' +
   '📅 <b>Расписание</b>\\n' +
@@ -1083,7 +1048,7 @@ bot.command('importstudents',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('Используй команду в личке.');
  if(!managedGroup(ctx.from.id))return ctx.reply('Команда доступна старосте или заместителю группы.');
  const u=normalizeUser(user(ctx.from.id));u.pendingStudentImport=true;delete u.pendingStudentImportReview;saveDb();
- return ctx.reply('Отправь фото списка группы или вставь ФИО текстом — по одному человеку на строку. Я покажу результат для проверки. Для отмены: /cancel.');
+ return ctx.reply('Вставь список студентов текстом — по одному ФИО на строку. Я покажу результат для проверки. Для отмены: /cancel.');
 });
 bot.command('students',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
@@ -1406,7 +1371,7 @@ async function main() {
     { command: 'hw', description: 'Домашние задания' },
     { command: 'attendance', description: 'Журнал посещаемости' },
     { command: 'students', description: 'Список студентов группы' },
-    { command: 'importstudents', description: 'Импорт списка по фото или тексту' },
+    { command: 'importstudents', description: 'Импорт списка студентов из текста' },
     { command: 'pollreport', description: 'Ответы на последний опрос' },
     { command: 'subscription', description: 'Статус подписки' }
   ], { scope: { type: 'all_private_chats' } });
