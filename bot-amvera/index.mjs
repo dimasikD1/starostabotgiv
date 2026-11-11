@@ -838,6 +838,7 @@ bot.command(['admin', 'adminhelp', 'commands'], ctx => {
     '/delstudent НОМЕР — удалить студента\n' +
     '/attendance — открыть журнал посещаемости\n' +
     '/mark НОМЕР present|absent — отметить посещаемость\n' +
+    '/starosta — назначить себя старостой <i>(в группе, владелец или администратор)</i>\n' +
     '/setstarosta — назначить старосту <i>(ответом на сообщение)</i>\n' +
     '/setstudent — вернуть роль студента <i>(ответом на сообщение)</i>\n\n' +
     '📨 <b>РАБОТА С ГРУППОЙ</b>\n' +
@@ -953,6 +954,23 @@ async function showRole(ctx) {
 bot.command('role', showRole);
 bot.command('roles', showRole);
 
+
+bot.command('starosta', async ctx => {
+  if (!['group', 'supergroup'].includes(ctx.chat.type)) {
+    return ctx.reply('❌ Команду /starosta нужно выполнить в учебной группе.');
+  }
+  if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) {
+    return ctx.reply('❌ Назначить себя старостой может владелец бота или администратор этой группы.');
+  }
+  const u = normalizeUser(user(ctx.from.id));
+  u.role = 'starosta';
+  u.username = ctx.from.username || u.username || '';
+  u.group = ctx.chat.title || u.group;
+  db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
+  db.groups[String(ctx.chat.id)].starostaId = ctx.from.id;
+  saveDb();
+  return ctx.reply('👑 ' + (ctx.from.first_name || 'Пользователь') + ' назначил(а) себя старостой этой группы. Теперь доступны команды посещаемости.');
+});
 
 bot.command('setstarosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
@@ -1227,6 +1245,7 @@ async function main() {
     { command: 'delstudent', description: 'Удалить студента' },
     { command: 'attendance', description: 'Посещаемость' },
     { command: 'mark', description: 'Отметить посещаемость' },
+    { command: 'starosta', description: 'Назначить себя старостой в группе' },
     { command: 'appointstarosta', description: 'Назначить старосту (владелец)' },
     { command: 'poll', description: 'Создать опрос' },
     { command: 'setgroup', description: 'Настроить автоопросы в группе' },
