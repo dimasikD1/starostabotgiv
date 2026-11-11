@@ -70,7 +70,9 @@ function parseCards(html, requestedGroup) {
           (new Date(date + 'T00:00:00') -
             new Date(isoToday(0) + 'T00:00:00')) / 86400000
         ),
-        time: timeLabel,\n        timeStart: timeRange ? timeRange[1] : '',\n        timeEnd: timeRange ? timeRange[2] : '',
+        time: timeLabel,
+        timeStart: timeRange ? timeRange[1] : '',
+        timeEnd: timeRange ? timeRange[2] : '',
         subject,
         teacher,
         room,
@@ -263,7 +265,7 @@ async function getNewSite(group, days, timeout) {
 }
 
 function extractClock(value) {
-  const match = String(value || '').match(/(?:T|\\b)(\\d{1,2}:\\d{2})/);
+  const match = String(value || '').match(/(?:T|\b)(\d{1,2}:\d{2})/);
   return match ? match[1] : '';
 }
 
