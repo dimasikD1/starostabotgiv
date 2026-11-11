@@ -234,28 +234,6 @@ function studentName(s) {
   return typeof s === 'string' ? s : String(s?.name || 'Без имени') + (s?.username ? ' (@' + s.username + ')' : '');
 }
 function attendanceKey(s) { return typeof s === 'string' ? s : (s.telegramId || s.name); }
-// OCR запускается только по запросу и завершается сразу после распознавания,
-// чтобы не держать WASM worker и языковую модель в памяти постоянно.
-let ocrBusy = false;
-async function recognizeStudentPhoto(buffer) {
-  if (ocrBusy) throw new Error('OCR_BUSY');
-  ocrBusy = true;
-  let worker;
-  try {
-    const { createWorker } = await import('tesseract.js');
-    // Для списков на русском достаточно одной языковой модели — это экономит RAM.
-    worker = await createWorker('rus', 1, { cacheMethod: 'none' });
-    await worker.setParameters({ tessedit_pageseg_mode: '6' });
-    const result = await worker.recognize(buffer);
-    return String(result.data.text || '');
-  } finally {
-    if (worker) {
-      try { await worker.terminate(); }
-      catch (e) { console.error('[student OCR] Не удалось завершить OCR worker:', e.message || e); }
-    }
-    ocrBusy = false;
-  }
-}
 function parseStudentNames(raw){
  const out=[],seen=new Set();
  for(let line of String(raw||'').split(/\r?\n/)){
@@ -943,15 +921,10 @@ bot.start(async ctx => {
 });
 
 bot.on('photo',async(ctx,next)=>{
- if(!isPrivate(ctx))return next();const u=normalizeUser(user(ctx.from.id));if(!u.pendingStudentImport)return next();
- const g=managedGroup(ctx.from.id);if(!g){u.pendingStudentImport=false;saveDb();return ctx.reply('Группа не найдена.');}
- try{const photo=ctx.message.photo?.at(-1);if(!photo)return ctx.reply('Не удалось получить фотографию. Пришли её ещё раз.');const url=await ctx.telegram.getFileLink(photo.file_id),res=await fetch(url);if(!res.ok)throw Error('download failed');
- const buf=Buffer.from(await res.arrayBuffer());if(buf.length>8*1024*1024)return ctx.reply('Фото слишком большое. Отправь его как обычное сжатое изображение, а не как файл.');
- const ocr=await recognizeStudentPhoto(buf),names=parseStudentNames(ocr);
- if(!names.length)return ctx.reply('Не удалось распознать ФИО. Пришли более чёткое фото или список текстом.');
- u.pendingStudentImport=false;u.pendingStudentImportReview=names;saveDb();
- return ctx.reply('🔎 <b>Проверь распознанный список</b>\n\n'+names.map((n,i)=>(i+1)+'. '+escapeHtml(n)).join('\n')+'\n\nСохраняю только после подтверждения.',{parse_mode:'HTML',...importPreviewKeyboard()});
- }catch(e){console.error('[student OCR]',e);return ctx.reply('Ошибка распознавания фото. Попробуй другое изображение.');}
+ if(!isPrivate(ctx))return next();
+ const u=normalizeUser(user(ctx.from.id));
+ if(!u.pendingStudentImport)return next();
+ return ctx.reply('⚠️ Импорт по фотографии временно отключён, чтобы бот стабильно работал на текущем тарифе.\n\nПришли список студентов обычным текстом — по одному ФИО на строку.');
 });
 bot.action('studentimport:confirm',async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery();const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id);
