@@ -1,6 +1,0 @@
-{
-  "name": "Староста 24 — Amvera & GitHub Deploy Hub",
-  "description": "Готовый пакет и интерактивная панель развертывания Telegram-бота «Староста 24» в Amvera Cloud через GitHub с поддержкой персистентности данных.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
