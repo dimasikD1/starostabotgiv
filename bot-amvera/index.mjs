@@ -32,13 +32,14 @@ const menu = Markup.keyboard([
   ['📅 Сегодня', '📅 Завтра'],
   ['🗓 Неделя', '👥 Моя группа'],
   ['📊 Создать опрос', '📚 Создать ДЗ'],
+  ['👨‍🎓 Список студентов'],
   ['👥 Группы'],
   ['🔄 Обновить', 'ℹ️ Помощь']
 ]).resize();
 
 function user(id) {
   const key = String(id);
-  db.users[key] ||= { group: '', pendingPoll: null, pendingHomework: null };
+  db.users[key] ||= { group: '', pendingPoll: null, pendingHomework: null, students: [] };
   return db.users[key];
 }
 
@@ -108,6 +109,11 @@ function escapeHtml(value) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function studentButtons() {
+  const groups = Object.values(db.groups);
+  return groups.map(g => [Markup.button.callback('👨‍🎓 ' + String(g.title).slice(0, 45), 'students:' + String(g.chatId))]);
 }
 
 function groupButtons() {
@@ -217,7 +223,10 @@ bot.help(ctx => ctx.reply(
   '/week — неделя\n' +
   '/poll — создать опрос в личке\n' +
   '/дз — создать ДЗ и отправить в группу\n' +
-  '/groups — список прикреплённых групп\n\n' +
+  '/groups — список прикреплённых групп\n' +
+  '/students — список студентов\n' +
+  '/student — добавить студента\n' +
+  '/delstudent — удалить студента\n\n' + +
   'В учебной группе администратор может выполнить /attach, чтобы прикрепить её к боту для отправки опросов.',
   menu
 ));
@@ -249,6 +258,44 @@ bot.command('detach', async ctx => {
   await ctx.reply('✅ Группа откреплена от рассылки опросов.');
 });
 
+bot.command('students', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
+  const u = user(ctx.from.id);
+  if (!u.students?.length) {
+    return ctx.reply('👨‍🎓 Список студентов пока пуст.\n\nДобавь студентов командой:\n/student Иван Иванов\n\nМожно добавить несколько человек по одному.');
+  }
+  await ctx.reply('👨‍🎓 Список студентов:\n\n' + u.students.map((s, i) => (i + 1) + '. ' + s).join('\n'));
+});
+
+bot.command('student', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Добавление студентов выполняется в личных сообщениях.');
+  const value = ctx.message.text.replace(/^\/student(?:@\S+)?/i, '').trim();
+  if (!value) return ctx.reply('Пример: /student Иван Иванов');
+  const u = user(ctx.from.id);
+  u.students ||= [];
+  if (u.students.includes(value)) return ctx.reply('ℹ️ Этот студент уже есть в списке.');
+  if (u.students.length >= 100) return ctx.reply('❌ Максимум 100 студентов.');
+  u.students.push(value);
+  saveDb();
+  await ctx.reply('✅ Студент добавлен: ' + value);
+});
+
+bot.command('delstudent', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Управление списком студентов доступно в личных сообщениях.');
+  const value = ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i, '').trim();
+  const u = user(ctx.from.id);
+  const index = Number(value) - 1;
+  if (!value || !Number.isInteger(index) || index < 0 || index >= (u.students?.length || 0)) return ctx.reply('Пример: /delstudent 3');
+  const removed = u.students.splice(index, 1)[0];
+  saveDb();
+  await ctx.reply('🗑 Удалён: ' + removed);
+});
+
+bot.hears('👨‍🎓 Список студентов', ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
+  return ctx.reply('👨‍🎓 Чтобы посмотреть список, используй /students.\n\nДобавить: /student Имя Фамилия\nУдалить: /delstudent номер');
+});
+
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
@@ -257,6 +304,12 @@ bot.command('groups', async ctx => {
 });
 
 bot.command('poll', startPoll);
+bot.command('students', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
+  const u = user(ctx.from.id);
+  if (!u.students?.length) return ctx.reply('👨‍🎓 Список студентов пуст. Добавить: /student Иван Иванов');
+  await ctx.reply('👨‍🎓 Список студентов:\n\n' + u.students.map((s,i)=>(i+1)+'. '+s).join('\n'));
+});
 bot.command('дз', startHomework);
 bot.command('homework', startHomework);
 bot.hears('📚 Создать ДЗ', ctx => {
@@ -270,9 +323,21 @@ bot.hears('📊 Создать опрос', ctx => {
 
 bot.on('callback_query', async ctx => {
   const data = ctx.callbackQuery?.data || '';
-  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:')) return;
+  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:')) return;
 
+  const isStudentList = data.startsWith('students:');
   const isHomework = data.startsWith('hwsend:');
+  if (isStudentList) {
+    if (!isPrivate(ctx)) { await ctx.answerCbQuery('Только в личке.'); return; }
+    const groupId = data.slice('students:'.length);
+    const g = db.groups[groupId];
+    if (!g) { await ctx.answerCbQuery('Группа не найдена.'); return; }
+    const u = user(ctx.from.id);
+    if (!u.students?.length) { await ctx.answerCbQuery('Список пуст.'); return; }
+    await ctx.answerCbQuery('Готово');
+    await ctx.editMessageText('👨‍🎓 Список студентов для «' + g.title + '»:\n\n' + u.students.map((s,i)=>(i+1)+'. '+s).join('\n'));
+    return;
+  }
 
   if (!isPrivate(ctx)) {
     await ctx.answerCbQuery('Опросы отправляются только из личных сообщений.');
@@ -301,7 +366,7 @@ bot.on('callback_query', async ctx => {
         await ctx.telegram.sendMessage(g.chatId, '📚 <b>Домашнее задание</b>\n\n<b>' + escapeHtml(u.pendingHomework.subject) + '</b>\n' + escapeHtml(u.pendingHomework.homework), { parse_mode: 'HTML' });
       } else {
         await ctx.telegram.sendPoll(g.chatId, u.pendingPoll.question, u.pendingPoll.options, {
-          is_anonymous: true,
+          is_anonymous: false,
           allows_multiple_answers: false
         });
       }
