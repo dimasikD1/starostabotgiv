@@ -1,212 +1,98 @@
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { Telegraf, Markup } from 'telegraf';
+import { getSchedule } from './schedule/ruc.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = process.env.DATA_DIR || '/data';
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+fs.mkdirSync(DATA_DIR, { recursive: true });
 
-function loadDotEnv() {
-  const file = path.join(__dirname, '.env');
-  if (!fs.existsSync(file)) return;
-  const text = fs.readFileSync(file, 'utf8');
-  for (const line of text.split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!match) continue;
-    let value = match[2].trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
+function readUsers() {
+  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); }
+  catch { return {}; }
+}
+function saveUsers() {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+}
+const users = readUsers();
+const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+if (!token) { console.error('TELEGRAM_BOT_TOKEN не задан.'); process.exit(1); }
+
+const bot = new Telegraf(token);
+const menu = Markup.keyboard([
+  ['📅 Сегодня', '📅 Завтра'],
+  ['🗓 Неделя', '👥 Моя группа'],
+  ['🔄 Обновить', 'ℹ️ Помощь']
+]).resize();
+
+function user(id) {
+  const key = String(id);
+  if (!users[key]) users[key] = { group: '' };
+  return users[key];
+}
+function format(items, group) {
+  if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
+  const out = [];
+  let current = '';
+  for (const x of items) {
+    if (x.date !== current) {
+      current = x.date;
+      out.push('\n📅 ' + (x.date || 'Дата не указана'));
     }
-    if (!process.env[match[1]]) process.env[match[1]] = value;
+    let line = '• ' + (x.time ? x.time + ' — ' : '') + (x.subject || 'Занятие');
+    if (x.teacher) line += '\n   👨‍🏫 ' + x.teacher;
+    if (x.room) line += '\n   🚪 ' + x.room;
+    out.push(line);
   }
+  return out.join('\n').trim();
 }
-
-loadDotEnv();
-
-const TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
-
-if (!TOKEN || !TOKEN.includes(':')) {
-  console.error(
-    '\n[!] Не задан токен Telegram-бота (TELEGRAM_BOT_TOKEN).\n' +
-      '    Локально: создайте .env со строкой TELEGRAM_BOT_TOKEN="123456789:AA..."\n' +
-      '    На Amvera: Проект → Переменные → TELEGRAM_BOT_TOKEN.\n'
-  );
-  process.exit(1);
-}
-
-const API = 'https://api.telegram.org';
-const EMPTY_TEXT = 'Бот пустой. Команд и данных пока нет.';
-const BOT_COMMANDS = [
-  { command: 'start', description: 'Запуск' },
-  { command: 'help', description: 'Помощь' },
-];
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function tg(method, payload = {}) {
-  const res = await fetch(`${API}/bot${TOKEN}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  let json;
+async function show(ctx, days, offset) {
+  const u = user(ctx.from.id);
+  if (!u.group) return ctx.reply('Сначала укажи группу. Пример: /group ИСП-21', menu);
+  await ctx.reply('⏳ Загружаю расписание…');
   try {
-    json = await res.json();
-  } catch {
-    json = { ok: false, description: `HTTP ${res.status}` };
-  }
-  if (!json.ok) {
-    const error = new Error(`Telegram ${method}: ${json.description || res.status}`);
-    error.code = json.error_code || res.status;
-    error.description = json.description || '';
-    error.parameters = json.parameters;
-    throw error;
-  }
-  return json.result;
-}
-
-async function send(chatId, text) {
-  if (!chatId) return null;
-  try {
-    return await tg('sendMessage', {
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-    });
-  } catch (error) {
-    if (error.code === 429) {
-      await sleep(((error.parameters && error.parameters.retry_after) || 2) * 1000);
-      return send(chatId, text);
-    }
-    console.error('[send]', error.message);
-    return null;
+    let items = await getSchedule(u.group, days);
+    if (offset) items = items.filter(x => Number(x.dayOffset) === offset);
+    await ctx.reply(format(items, u.group), menu);
+  } catch (e) {
+    console.error('[schedule]', e);
+    await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь доступность источника или настрой SCHEDULE_API_URL.', menu);
   }
 }
 
-async function answer(callbackId) {
-  try {
-    await tg('answerCallbackQuery', { callback_query_id: callbackId });
-  } catch (error) {
-    console.error('[answer]', error.message);
-  }
-}
-
-async function handleMessage(message) {
-  const chatId = message.chat && message.chat.id;
-  const raw = (message.text || '').trim();
-  if (!raw.startsWith('/')) {
-    if (message.chat && message.chat.type === 'private') await send(chatId, EMPTY_TEXT);
-    return;
-  }
-  const command = raw.split(/\s+/)[0].split('@')[0].toLowerCase();
-  if (command === '/start' || command === '/help') {
-    await send(chatId, EMPTY_TEXT);
-    return;
-  }
-  await send(chatId, EMPTY_TEXT);
-}
-
-async function handleUpdate(update) {
-  try {
-    if (update.message) await handleMessage(update.message);
-    else if (update.callback_query) await answer(update.callback_query.id);
-  } catch (error) {
-    console.error('[update]', error);
-  }
-}
-
-let offset = 0;
-let running = true;
-
-async function pollLoop() {
-  while (running) {
-    try {
-      const updates = await tg('getUpdates', {
-        offset,
-        timeout: 30,
-        allowed_updates: ['message', 'callback_query'],
-      });
-      for (const update of updates) {
-        offset = update.update_id + 1;
-        await handleUpdate(update);
-      }
-    } catch (error) {
-      if (error.code === 401) {
-        console.error('[!] Неверный токен бота (401 Unauthorized). Проверьте TELEGRAM_BOT_TOKEN.');
-        process.exit(1);
-      }
-      if (error.code === 409) {
-        console.error('[!] Конфликт: похоже, запущен другой экземпляр бота. Жду 10 секунд...');
-        await sleep(10000);
-        continue;
-      }
-      if (error.code === 429) {
-        await sleep(((error.parameters && error.parameters.retry_after) || 3) * 1000);
-        continue;
-      }
-      console.error('[poll]', error.message);
-      await sleep(3000);
-    }
-  }
-}
-
-const PORT = process.env.PORT || (process.env.ENABLE_HTTP === 'true' ? 8080 : null);
-let httpServer = null;
-
-if (PORT) {
-  httpServer = http.createServer((_req, res) => {
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(
-      JSON.stringify({
-        status: 'ok',
-        service: 'empty-bot',
-        uptimeSec: Math.floor(process.uptime()),
-        timestamp: new Date().toISOString(),
-      })
-    );
-  });
-  httpServer.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`[http] Health-check слушает порт :${PORT}`);
-  });
-}
-
-async function start() {
-  try {
-    await tg('deleteWebhook', { drop_pending_updates: false });
-  } catch (error) {
-    console.error('[webhook]', error.message);
-  }
-
-  const me = await tg('getMe');
-  console.log(`\nБот запущен: @${me.username} (${me.first_name})`);
-  console.log('Режим: long polling. Логики нет.');
-  if (PORT) console.log(`Порт health-check: ${PORT}`);
-
-  try {
-    await tg('setMyCommands', { commands: BOT_COMMANDS });
-  } catch (error) {
-    console.error('[commands]', error.message);
-  }
-
-  await pollLoop();
-}
-
-function gracefulShutdown(signal) {
-  running = false;
-  console.log(`\n[bot] Остановка (${signal}).`);
-  if (httpServer) {
-    httpServer.close(() => process.exit(0));
-  } else {
-    process.exit(0);
-  }
-}
-
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-
-start().catch((error) => {
-  console.error('[start]', error.message || error);
-  process.exit(1);
+bot.start(async ctx => {
+  user(ctx.from.id); saveUsers();
+  await ctx.reply('👋 Привет! Я бот расписания.\n\nУкажи группу командой /group ИСП-21.', menu);
 });
+bot.help(ctx => ctx.reply('Команды:\n/group — выбрать группу\n/schedule — сегодня\n/tomorrow — завтра\n/week — неделя\n/help — помощь', menu));
+bot.command('group', async ctx => {
+  const value = ctx.message.text.replace(/^\/group(?:@\S+)?/i, '').trim();
+  if (!value) return ctx.reply('Пример: /group ИСП-21');
+  user(ctx.from.id).group = value;
+  saveUsers();
+  await ctx.reply('✅ Группа сохранена: «' + value + '»', menu);
+});
+bot.command('schedule', ctx => show(ctx, 1, 0));
+bot.command('tomorrow', ctx => show(ctx, 2, 1));
+bot.command('week', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
+
+bot.hears('📅 Сегодня', ctx => show(ctx, 1, 0));
+bot.hears('📅 Завтра', ctx => show(ctx, 2, 1));
+bot.hears('🗓 Неделя', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
+bot.hears('👥 Моя группа', ctx => {
+  const g = user(ctx.from.id).group;
+  return ctx.reply(g ? '👥 Твоя группа: «' + g + '»' : 'Группа ещё не выбрана. Используй /group.', menu);
+});
+bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
+bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21, затем смотри расписание кнопками.', menu));
+bot.catch(e => console.error('[bot]', e));
+
+async function main() {
+  await bot.telegram.deleteWebhook({ drop_pending_updates: false });
+  const me = await bot.telegram.getMe();
+  console.log('Бот запущен: @' + me.username);
+  await bot.launch({ dropPendingUpdates: false });
+}
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
+main().catch(e => { console.error(e); process.exit(1); });
