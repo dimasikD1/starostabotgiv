@@ -1097,7 +1097,7 @@ bot.on('text', async (ctx,next) => {
 bot.command('students',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
  if(!g.students.length)return ctx.reply('Список группы пуст. Добавь студентов ответом на сообщение в группе командой /student.');
- return ctx.reply('👨‍🎓 <b>'+escapeHtml(g.title)+' ('+g.students.length+')</b>\\n\\n'+g.students.map((x,i)=>(i+1)+'. '+escapeHtml(studentName(x))).join('\\n')+'\\n\\nУдалить: /delstudent номер',{parse_mode:'HTML'});
+ return ctx.reply('👨‍🎓 <b>'+escapeHtml(g.title)+' ('+g.students.length+')</b>\\n\\n'+g.students.map(x=>escapeHtml(studentName(x))).join('\\n')+'\\n\\nУдалить: /delstudent номер',{parse_mode:'HTML'});
 });
 bot.command('student',async ctx=>{
  const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):ctx.message.text.replace(/^\/student(?:@\S+)?/i,'').trim();
