@@ -37,6 +37,14 @@ const YOOKASSA_SECRET_KEY = (process.env.YOOKASSA_SECRET_KEY || '').trim();
 const YOOKASSA_RETURN_URL = (process.env.YOOKASSA_RETURN_URL || '').trim();
 const SUBSCRIPTION_SECONDS = SUBSCRIPTION_DAYS * 24 * 60 * 60;
 
+// Telegram user ID владельца, которому подписка не требуется.
+// Значение задаётся в переменных окружения сервера.
+const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
+
+function isOwner(userId) {
+  return Boolean(OWNER_TELEGRAM_ID) && String(userId) === OWNER_TELEGRAM_ID;
+}
+
 function subscriptionUntil(u) {
   return Number(u.subscriptionUntil || 0);
 }
@@ -45,7 +53,8 @@ function hasActiveSubscription(u) {
   return subscriptionUntil(u) > Date.now();
 }
 
-function subscriptionText(u) {
+function subscriptionText(u, owner = false) {
+  if (owner) return '👑 <b>Бесплатный доступ владельца</b>\\n\\nПодписка для твоего аккаунта не требуется.';
   if (!hasActiveSubscription(u)) {
     return '🔒 <b>Подписка не активна</b>\\n\\n' +
       'Для использования бота нужна подписка на 30 дней.\\n' +
@@ -115,6 +124,7 @@ function subscriptionMiddleware(ctx, next) {
   if (allowed.has(command)) return next();
 
   if (!ctx.from) return next();
+  if (isOwner(ctx.from.id)) return next();
 
   const u = normalizeUser(user(ctx.from.id));
   if (hasActiveSubscription(u)) return next();
@@ -352,6 +362,7 @@ async function startPoll(ctx) {
 
 bot.command('subscribe', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Оформить подписку можно только в личных сообщениях с ботом.');
+  if (isOwner(ctx.from.id)) return ctx.reply('👑 У тебя бесплатный доступ владельца. Оплата не требуется.', menu);
   const u = normalizeUser(user(ctx.from.id));
   if (hasActiveSubscription(u)) return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...menu });
 
@@ -366,7 +377,7 @@ bot.command('subscribe', async ctx => {
 
 bot.command('subscription', ctx => {
   const u = normalizeUser(user(ctx.from.id));
-  return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...menu });
+  return ctx.reply(subscriptionText(u, isOwner(ctx.from.id)), { parse_mode: 'HTML', ...menu });
 });
 
 bot.command('terms', ctx => ctx.reply(
@@ -413,6 +424,10 @@ bot.on('callback_query', async ctx => {
   }
 
   if (ctx.callbackQuery?.data === 'subscribe_card') {
+    if (isOwner(ctx.from.id)) {
+      await ctx.answerCbQuery('Для владельца доступ бесплатный.');
+      return;
+    }
     if (!isPrivate(ctx)) {
       await ctx.answerCbQuery('Оплата картой доступна в личке.');
       return;
@@ -440,6 +455,10 @@ bot.on('callback_query', async ctx => {
     return;
   }
   if (ctx.callbackQuery?.data === 'subscribe') {
+    if (isOwner(ctx.from.id)) {
+      await ctx.answerCbQuery('Для владельца доступ бесплатный.');
+      return;
+    }
     if (!isPrivate(ctx)) {
       await ctx.answerCbQuery('Оформление подписки доступно в личке.');
       return;
@@ -871,6 +890,7 @@ bot.hears('📋 Посещаемость', async ctx => {
 });
 bot.hears('💳 Подписка', ctx => {
   const u = normalizeUser(user(ctx.from.id));
+  if (isOwner(ctx.from.id)) return ctx.reply(subscriptionText(u, true), { parse_mode: 'HTML', ...menu });
   return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
 });
 
