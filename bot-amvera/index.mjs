@@ -1104,8 +1104,8 @@ bot.on('text', async (ctx,next) => {
    if(value&&!/^[A-Za-z0-9_]{5,32}$/.test(value))return ctx.reply('❌ Неверный username. Введи @username или /cancel.');
    rec.username=value;
   } else {
-    const value=raw==='-'?'':raw.replace(/[\s()-]/g,'');
-    if(value&&!/^\+?[0-9]{6,15}$/.test(value))return ctx.reply('❌ Неверный номер. Пример: +37255555555 или /cancel.');
+    const value=raw==='-'?'':raw.replace(/[^0-9+]/g,'');
+    if(value&&!/^\+[1-9][0-9]{5,14}$/.test(value))return ctx.reply('❌ Неверный номер. Укажи международный формат с плюсом, например +79181651870 или +37255555555. Для отмены: /cancel.');
    rec.phone=value;
   }
   g.students[pending.index]=rec;delete u.pendingStudentField;saveDb();
