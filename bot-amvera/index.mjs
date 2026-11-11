@@ -359,6 +359,10 @@ async function showRole(ctx) {
 bot.command('role', showRole);
 bot.command('roles', showRole);
 
+// Надёжный алиас для Telegram/клиентов, где команда может приходить как обычный текст.
+bot.hears(/^\\/?roles(?:@\\S+)?(?:\\s+.*)?$/i, showRole);
+bot.hears(/^\\/?role(?:@\\S+)?(?:\\s+.*)?$/i, showRole);
+
 bot.command('setstarosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначать старосту может только администратор группы.');
@@ -570,6 +574,26 @@ async function main() {
   await bot.telegram.deleteWebhook({ drop_pending_updates: false });
   const me = await bot.telegram.getMe();
   console.log('Бот запущен: @' + me.username);
+
+  // Обновляем список команд в меню Telegram.
+  await bot.telegram.setMyCommands([
+    { command: 'start', description: 'Запустить бота' },
+    { command: 'help', description: 'Помощь' },
+    { command: 'group', description: 'Выбрать учебную группу' },
+    { command: 'schedule', description: 'Расписание на сегодня' },
+    { command: 'tomorrow', description: 'Расписание на завтра' },
+    { command: 'week', description: 'Расписание на неделю' },
+    { command: 'role', description: 'Показать свою роль' },
+    { command: 'roles', description: 'Показать свою роль' },
+    { command: 'students', description: 'Список студентов' },
+    { command: 'student', description: 'Добавить студента' },
+    { command: 'delstudent', description: 'Удалить студента' },
+    { command: 'attendance', description: 'Посещаемость' },
+    { command: 'mark', description: 'Отметить посещаемость' },
+    { command: 'poll', description: 'Создать опрос' },
+    { command: 'дз', description: 'Создать домашнее задание' }
+  ]);
+
   await bot.launch({ dropPendingUpdates: false });
 }
 
