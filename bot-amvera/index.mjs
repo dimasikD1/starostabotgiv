@@ -272,6 +272,7 @@ bot.help(ctx => ctx.reply(
   '/groups — список прикреплённых групп\n' +
   '/students — список студентов\n' +
   '/student — добавить студента\n' +
+  '/role или /roles — показать свою роль\n' +
   '/delstudent — удалить студента\n\n' +
   'В учебной группе администратор может выполнить /attach, чтобы прикрепить её к боту для отправки опросов.',
   menu
@@ -342,16 +343,21 @@ bot.hears('👨‍🎓 Список студентов', ctx => {
   return ctx.reply('👨‍🎓 Чтобы посмотреть список, используй /students.\n\nДобавить: /student Имя Фамилия\nУдалить: /delstudent номер');
 });
 
-bot.command('role', async ctx => {
+async function showRole(ctx) {
   if (!isPrivate(ctx)) return ctx.reply('📩 Роль настраивается в личных сообщениях или через администратора группы.');
-  const value = ctx.message.text.replace(/^\/role(?:@\S+)?/i, '').trim().toLowerCase();
+  const value = (ctx.message?.text || '').replace(/^\/(?:role|roles)(?:@\S+)?/i, '').trim().toLowerCase();
   const u = normalizeUser(user(ctx.from.id));
-  if (!value) return ctx.reply('Твоя роль: ' + roleLabel(u.role) + '\\n\\nСтатус старосты назначает администратор группы.');
+  if (!value) {
+    return ctx.reply('👤 Твоя роль: ' + roleLabel(u.role) + '\n\n👑 Назначить старостой тебя может только администратор группы.');
+  }
   if (value !== 'student') return ctx.reply('❌ Самостоятельно назначить себя старостой нельзя. Это делает администратор группы.');
   u.role = 'student';
   saveDb();
   await ctx.reply('✅ Роль установлена: 👨‍🎓 Студент', menu);
-});
+}
+
+bot.command('role', showRole);
+bot.command('roles', showRole);
 
 bot.command('setstarosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
