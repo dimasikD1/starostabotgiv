@@ -146,7 +146,7 @@ async function subscriptionMiddleware(ctx, next) {
     }
   }
 
-  const allowed = new Set(['start', 'help', 'subscribe', 'subscription', 'terms', 'paysupport', 'myid', 'grant', 'revoke', 'subinfo']);
+  const allowed = new Set(['start', 'help', 'admin', 'adminhelp', 'commands', 'subscribe', 'subscription', 'terms', 'paysupport', 'myid', 'grant', 'revoke', 'subinfo', 'stats']);
   if (allowed.has(command)) return next();
   if (hasActiveSubscription(u)) return next();
 
@@ -482,7 +482,7 @@ bot.command('stats', ctx => {
 
   const entries = Object.entries(db.users);
   const now = Date.now();
-  const active = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) > now).length;
+  const active = entries.filter(([id, u]) => !isOwner(id) && (Boolean(u.subscriptionForever) || subscriptionUntil(u) > now)).length;\n  const lifetime = entries.filter(([id, u]) => !isOwner(id) && Boolean(u.subscriptionForever)).length;
   const expired = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) > 0 && subscriptionUntil(u) <= now).length;
   const noSubscription = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) <= 0).length;
   const starostas = entries.filter(([, u]) => u.role === 'starosta').length;
@@ -499,7 +499,7 @@ bot.command('stats', ctx => {
     '📊 <b>Статистика Староста Бота</b>\\n\\n' +
     '👥 Всего пользователей: <b>' + entries.length + '</b>\\n' +
     '🆕 Новых за 30 дней: <b>' + newUsers30d + '</b>\\n' +
-    '📌 Активных подписок: <b>' + active + '</b>\\n' +
+    '📌 Активных подписок: <b>' + active + '</b>\\n' +\n    '♾ Пожизненных подписок: <b>' + lifetime + '</b>\\n' +
     '⌛ Истекших подписок: <b>' + expired + '</b>\\n' +
     '🔓 Без подписки: <b>' + noSubscription + '</b>\\n\\n' +
     '👑 Старост: <b>' + starostas + '</b>\\n' +
@@ -738,21 +738,54 @@ bot.start(async ctx => {
 });
 
 bot.help(ctx => ctx.reply(
-  'Команды:\n' +
-  '/group — выбрать учебную группу\n' +
-  '/schedule — сегодня\n' +
-  '/tomorrow — завтра\n' +
-  '/week — неделя\n' +
-  '/poll — создать опрос в личке\n' +
-  '/hw — создать ДЗ и отправить в группу\n' +
-  '/groups — список прикреплённых групп\n' +
-  '/students — список студентов\n' +
-  '/student — добавить студента\n' +
-  '/role или /roles — показать свою роль\n' +
-  '/delstudent — удалить студента\n\n' +
-  'В учебной группе администратор может выполнить /attach, чтобы прикрепить её к боту для отправки опросов.',
-  menu
+  '📚 <b>Команды Староста Бота</b>\\n\\n' +
+  '📅 <b>Расписание</b>\\n' +
+  '/group НАЗВАНИЕ — сохранить учебную группу\\n' +
+  '/schedule — сегодня\\n/tomorrow — завтра\\n/week — неделя\\n\\n' +
+  '👨‍🎓 <b>Студенты и посещаемость</b>\\n' +
+  '/role — посмотреть роль\\n/students — список студентов\\n/student ИМЯ — добавить вручную\\n' +
+  '/delstudent НОМЕР — удалить из списка\\n/attendance — журнал (староста)\\n' +
+  '/mark НОМЕР present|absent — отметить вручную\\n\\n' +
+  '📢 <b>Для группы</b>\\n' +
+  '/poll Вопрос | Вариант 1 | Вариант 2 — создать опрос\\n' +
+  '/hw Предмет | Задание — отправить домашнее задание\\n' +
+  '/groups — прикреплённые группы\\n' +
+  '/myid — узнать свой Telegram ID\\n' +
+  (isOwner(ctx.from.id) ? '\\n👑 <b>Панель владельца</b>\\n/admin — все команды владельца\\n/stats — статистика\\n/grant ID [дней|навсегда] — выдать подписку\\n/revoke ID — отозвать подписку\\n/subinfo ID — проверить подписку\\n/setsubgroup — назначить группу с пожизненным доступом (в группе)\\n/attach и /detach — прикрепить/открепить группу (в группе)\\n' : '') +
+  '\\n💳 /subscription — статус подписки\\n/subscribe — оформить подписку',
+  { parse_mode: 'HTML', ...menu }
 ));
+
+bot.command(['admin', 'adminhelp', 'commands'], ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личные сообщения с ботом и отправь /admin.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Панель владельца доступна только владельцу бота.');
+  return ctx.reply(
+    '👑 <b>Панель владельца — Староста Бот</b>\\n\\n' +
+    '📊 <b>Статистика</b>\\n/stats — пользователи, подписки, роли, группы и оплаты.\\n\\n' +
+    '💳 <b>Управление подписками</b>\\n' +
+    '/grant ID — выдать 30 дней\\n/grant ID 90 — выдать 90 дней\\n/grant ID навсегда — бессрочный доступ\\n' +
+    '/revoke ID — отозвать доступ\\n/subinfo ID — проверить подписку пользователя\\n' +
+    '/subscription — твой статус (у владельца бесплатный доступ).\\n\\n' +
+    '👥 <b>Группы</b>\\n' +
+    '/groups — список прикреплённых групп\\n' +
+    '/attach — прикрепить группу (выполнить внутри группы)\\n' +
+    '/detach — открепить группу (выполнить внутри группы)\\n' +
+    '/setsubgroup — назначить группу с пожизненным доступом (выполнить внутри группы).\\n\\n' +
+    '🎓 <b>Студенты и роли</b>\\n' +
+    '/students — список студентов\\n' +
+    '/student ИМЯ — добавить вручную\\n' +
+    '/delstudent НОМЕР — удалить студента\\n' +
+    '/setstarosta — назначить старосту ответом на сообщение в группе (команда администратора группы)\\n' +
+    '/setstudent — вернуть роль студента ответом на сообщение в группе\\n' +
+    '/attendance — журнал посещаемости\\n' +
+    '/mark НОМЕР present|absent — отметить посещаемость.\\n\\n' +
+    '📢 <b>Рассылки</b>\\n' +
+    '/poll Вопрос | Вариант 1 | Вариант 2 — создать опрос\\n' +
+    '/hw Предмет | Текст задания — создать ДЗ\\n\\n' +
+    'ℹ️ /help — общая справка.',
+    { parse_mode: 'HTML', ...menu }
+  );
+});
 
 bot.command('group', async ctx => {
   const value = ctx.message.text.replace(/^\/group(?:@\S+)?/i, '').trim();
@@ -1084,7 +1117,7 @@ async function main() {
     { command: 'revoke', description: 'Отозвать подписку' },
     { command: 'subinfo', description: 'Проверить подписку пользователя' },
     { command: 'setsubgroup', description: 'Назначить группу с пожизненным доступом' },
-    { command: 'stats', description: 'Статистика владельца' },
+    { command: 'stats', description: 'Статистика владельца' },\n    { command: 'admin', description: 'Панель команд владельца' },
     { command: 'terms', description: 'Условия использования' },
     { command: 'paysupport', description: 'Поддержка по оплате' },
     { command: 'group', description: 'Выбрать учебную группу' },
