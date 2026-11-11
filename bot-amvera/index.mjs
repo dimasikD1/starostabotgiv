@@ -1263,7 +1263,7 @@ async function main() {
     try {
       await bot.telegram.sendMessage(
         starostaId,
-        '🔄 <b>Староста Бот перезапущен</b>\\n\\nБот снова работает и готов принимать команды.',
+        '🔄 <b>Староста Бот перезапущен</b>\nБот снова работает и готов принимать команды.',
         { parse_mode: 'HTML' }
       );
     } catch (e) {
