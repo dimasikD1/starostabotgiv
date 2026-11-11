@@ -50,11 +50,12 @@ function subscriptionUntil(u) {
 }
 
 function hasActiveSubscription(u) {
-  return subscriptionUntil(u) > Date.now();
+  return Boolean(u.subscriptionForever) || subscriptionUntil(u) > Date.now();
 }
 
 function subscriptionText(u, owner = false) {
   if (owner) return '👑 <b>Бесплатный доступ владельца</b>\\n\\nПодписка для твоего аккаунта не требуется.';
+  if (u.subscriptionForever) return '♾ <b>Пожизненная подписка активна</b>\\n\\nДоступ без ограничения по сроку.';
   if (!hasActiveSubscription(u)) {
     return '🔒 <b>Подписка не активна</b>\\n\\n' +
       'Для использования бота нужна подписка на 30 дней.\\n' +
@@ -107,26 +108,46 @@ async function createYooKassaPayment(userId) {
   return data;
 }
 
-function subscriptionMiddleware(ctx, next) {
+async function subscriptionMiddleware(ctx, next) {
   const text = ctx.message?.text || '';
-  const command = text.split(/\s+/)[0].replace(/^\//, '').replace(/@.*$/, '').toLowerCase();
+  const command = text.split(/\\s+/)[0].replace(/^\\//, '').replace(/@.*$/, '').toLowerCase();
 
-  // Платёжные обновления Telegram должны проходить до paywall.
-  // successful_payment приходит как message с полем successful_payment,
-  // поэтому проверка только ctx.updateType === 'successful_payment' не срабатывает.
   if (
     ctx.updateType === 'pre_checkout_query' ||
     ctx.message?.successful_payment ||
     (ctx.updateType === 'callback_query' && ['subscribe', 'subscribe_card'].includes(ctx.callbackQuery?.data))
   ) return next();
 
-  const allowed = new Set(['start', 'help', 'subscribe', 'subscription', 'terms', 'paysupport']);
-  if (allowed.has(command)) return next();
-
   if (!ctx.from) return next();
   if (isOwner(ctx.from.id)) return next();
 
+  // Любой пользователь, написавший в назначенной группе, получает пожизненный доступ.
+  if (ctx.chat && String(ctx.chat.id) === String(db.subscriptionGroupId || '') && ctx.chat.type !== 'private') {
+    const memberUser = normalizeUser(user(ctx.from.id));
+    if (!memberUser.subscriptionForever) {
+      memberUser.subscriptionForever = true;
+      memberUser.paymentHistory.push({ method: 'group_lifetime', groupId: String(ctx.chat.id), grantedAt: new Date().toISOString() });
+      saveDb();
+    }
+  }
+
   const u = normalizeUser(user(ctx.from.id));
+  // При открытии лички бот проверяет членство в назначенной группе.
+  if (isPrivate(ctx) && !u.subscriptionForever && db.subscriptionGroupId) {
+    try {
+      const member = await ctx.telegram.getChatMember(db.subscriptionGroupId, ctx.from.id);
+      if (member.status === 'creator' || member.status === 'administrator' || member.status === 'member' || (member.status === 'restricted' && member.is_member)) {
+        u.subscriptionForever = true;
+        u.paymentHistory.push({ method: 'group_lifetime', groupId: String(db.subscriptionGroupId), grantedAt: new Date().toISOString() });
+        saveDb();
+      }
+    } catch (e) {
+      console.error('[group subscription check]', e.message || e);
+    }
+  }
+
+  const allowed = new Set(['start', 'help', 'subscribe', 'subscription', 'terms', 'paysupport', 'myid', 'grant', 'revoke', 'subinfo']);
+  if (allowed.has(command)) return next();
   if (hasActiveSubscription(u)) return next();
 
   return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
@@ -386,30 +407,35 @@ bot.command('myid', ctx => {
 bot.command('grant', async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const args = ctx.message.text.replace(/^\/grant(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
+  const args = ctx.message.text.replace(/^\\/grant(?:@\\S+)?/i, '').trim().split(/\\s+/).filter(Boolean);
   const targetId = args[0];
+  const forever = ['forever', 'lifetime', 'навсегда', 'пожизненно'].includes((args[1] || '').toLowerCase());
   const days = args[1] === undefined ? SUBSCRIPTION_DAYS : Number(args[1]);
-  if (!targetId || !/^\d+$/.test(targetId) || !Number.isSafeInteger(days) || days < 1 || days > 3650) {
-    return ctx.reply('Формат: /grant TELEGRAM_ID [дней]\nПример: /grant 123456789 30\nПользователь узнает свой ID командой /myid.');
+  if (!targetId || !/^\\d+$/.test(targetId) || (!forever && (!Number.isSafeInteger(days) || days < 1 || days > 3650))) {
+    return ctx.reply('Формат: /grant TELEGRAM_ID [дней|навсегда]\\nПримеры: /grant 123456789 30 или /grant 123456789 навсегда\\nID пользователь узнаёт командой /myid.');
   }
   if (isOwner(targetId)) return ctx.reply('У владельца уже есть бесплатный доступ.');
   const target = normalizeUser(user(targetId));
-  const start = Math.max(Date.now(), subscriptionUntil(target));
-  target.subscriptionUntil = start + days * 24 * 60 * 60 * 1000;
+  if (forever) target.subscriptionForever = true;
+  else {
+    const start = Math.max(Date.now(), subscriptionUntil(target));
+    target.subscriptionUntil = start + days * 24 * 60 * 60 * 1000;
+  }
   target.paymentHistory.push({
     method: 'owner_grant',
-    days,
+    days: forever ? null : days,
+    lifetime: forever,
     grantedBy: String(ctx.from.id),
     grantedAt: new Date().toISOString(),
-    subscriptionUntil: new Date(target.subscriptionUntil).toISOString()
+    subscriptionUntil: forever ? null : new Date(target.subscriptionUntil).toISOString()
   });
   saveDb();
-  const until = new Date(target.subscriptionUntil).toLocaleString('ru-RU', {
-    timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short'
-  });
-  await ctx.reply('✅ Подписка выдана пользователю <code>' + targetId + '</code> на ' + days + ' дн.\nДействует до: <b>' + until + ' МСК</b>.', { parse_mode: 'HTML' });
+  const until = forever ? '' : new Date(target.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' });
+  await ctx.reply(forever
+    ? '♾ Пожизненная подписка выдана пользователю <code>' + targetId + '</code>.'
+    : '✅ Подписка выдана пользователю <code>' + targetId + '</code> на ' + days + ' дн.\\nДействует до: <b>' + until + ' МСК</b>.', { parse_mode: 'HTML' });
   try {
-    await ctx.telegram.sendMessage(Number(targetId), '🎉 Тебе выдана подписка на ' + days + ' дн.\nДействует до: ' + until + ' МСК.');
+    await ctx.telegram.sendMessage(Number(targetId), forever ? '🎉 Тебе выдана пожизненная подписка!' : '🎉 Тебе выдана подписка на ' + days + ' дн.\\nДействует до: ' + until + ' МСК.');
   } catch {
     await ctx.reply('ℹ️ Не удалось отправить уведомление. Пользователь должен сначала открыть бота и нажать /start.');
   }
@@ -423,6 +449,7 @@ bot.command('revoke', async ctx => {
   if (isOwner(targetId)) return ctx.reply('Бесплатный доступ владельца нельзя отозвать.');
   const target = normalizeUser(user(targetId));
   target.subscriptionUntil = 0;
+  target.subscriptionForever = false;
   target.paymentHistory.push({
     method: 'owner_revoke',
     revokedBy: String(ctx.from.id),
@@ -438,15 +465,13 @@ bot.command('revoke', async ctx => {
 bot.command('subinfo', ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const targetId = ctx.message.text.replace(/^\/subinfo(?:@\S+)?/i, '').trim();
-  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /subinfo TELEGRAM_ID');
+  const targetId = ctx.message.text.replace(/^\\/subinfo(?:@\\S+)?/i, '').trim();
+  if (!/^\\d+$/.test(targetId)) return ctx.reply('Формат: /subinfo TELEGRAM_ID');
   if (isOwner(targetId)) return ctx.reply('👑 Это владелец: бесплатный доступ без срока.');
   const target = normalizeUser(user(targetId));
   const active = hasActiveSubscription(target);
-  const until = active ? new Date(subscriptionUntil(target)).toLocaleString('ru-RU', {
-    timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short'
-  }) + ' МСК' : 'не активна';
-  return ctx.reply('Пользователь: <code>' + targetId + '</code>\nПодписка: <b>' + (active ? 'активна' : 'не активна') + '</b>\nДействует до: ' + until, { parse_mode: 'HTML' });
+  const until = target.subscriptionForever ? 'бессрочно' : active ? new Date(subscriptionUntil(target)).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) + ' МСК' : 'не активна';
+  return ctx.reply('Пользователь: <code>' + targetId + '</code>\\nПодписка: <b>' + (active ? 'активна' : 'не активна') + '</b>\\nДействует до: ' + until, { parse_mode: 'HTML' });
 });
 
 // Личная статистика доступна только владельцу в личном чате.
@@ -734,6 +759,17 @@ bot.command('group', async ctx => {
   user(ctx.from.id).group = value;
   saveDb();
   await ctx.reply('✅ Группа сохранена: «' + value + '»', menu);
+});
+
+bot.command('setsubgroup', async ctx => {
+  if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Команду нужно выполнить внутри нужной группы.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Только владелец бота может назначить группу с пожизненным доступом.');
+  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Ты должен быть администратором этой группы.');
+  db.subscriptionGroupId = ctx.chat.id;
+  db.subscriptionGroupTitle = ctx.chat.title || 'Группа';
+  registerGroup(ctx);
+  saveDb();
+  return ctx.reply('♾ Эта группа назначена группой с пожизненным доступом. Участники получат его, когда напишут в группе или откроют личку с ботом.');
 });
 
 bot.command('attach', async ctx => {
@@ -1028,6 +1064,10 @@ async function main() {
     { command: 'help', description: 'Помощь' },
     { command: 'subscribe', description: 'Оформить подписку' },
     { command: 'subscription', description: 'Статус подписки' },
+    { command: 'grant', description: 'Выдать подписку пользователю' },
+    { command: 'revoke', description: 'Отозвать подписку' },
+    { command: 'subinfo', description: 'Проверить подписку пользователя' },
+    { command: 'setsubgroup', description: 'Назначить группу с пожизненным доступом' },
     { command: 'stats', description: 'Статистика владельца' },
     { command: 'terms', description: 'Условия использования' },
     { command: 'paysupport', description: 'Поддержка по оплате' },
