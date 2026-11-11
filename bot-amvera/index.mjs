@@ -66,7 +66,11 @@ function subscriptionMiddleware(ctx, next) {
   const command = text.split(/\\s+/)[0].replace(/^\\//, '').replace(/@.*$/, '').toLowerCase();
 
   // Служебные платежные обновления Telegram должны проходить всегда.
-  if (ctx.updateType === 'pre_checkout_query' || ctx.updateType === 'successful_payment') return next();
+  if (
+    ctx.updateType === 'pre_checkout_query' ||
+    ctx.updateType === 'successful_payment' ||
+    (ctx.updateType === 'callback_query' && ctx.callbackQuery?.data === 'subscribe')
+  ) return next();
 
   const allowed = new Set(['start', 'help', 'subscribe', 'subscription', 'terms', 'paysupport']);
   if (allowed.has(command)) return next();
@@ -344,16 +348,16 @@ bot.on('callback_query', async ctx => {
       return;
     }
     await ctx.answerCbQuery();
-    await ctx.telegram.sendInvoice(ctx.from.id, 'Подписка на бота', 
-      'Доступ ко всем функциям бота на 30 дней', 'bot_subscription_30d', 'XTR',
-      [{ label: 'Подписка на 30 дней', amount: SUBSCRIPTION_STARS }],
-      {
-        subscription_period: SUBSCRIPTION_SECONDS,
-        provider_token: '',
-        start_parameter: 'bot-subscription',
-        payload: 'bot_subscription_30d'
-      }
-    );
+    await ctx.telegram.sendInvoice(ctx.from.id, {
+      title: 'Подписка на бота',
+      description: 'Доступ ко всем функциям бота на 30 дней',
+      payload: 'bot_subscription_30d',
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: 'Подписка на 30 дней', amount: SUBSCRIPTION_STARS }],
+      subscription_period: SUBSCRIPTION_SECONDS,
+      start_parameter: 'bot-subscription'
+    });
     return;
   }
   return next();
