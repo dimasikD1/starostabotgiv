@@ -701,7 +701,7 @@ bot.command('pollreport', async ctx => {
   );
 });
 
-bot.on('callback_query', async ctx => {
+bot.on('callback_query', async (ctx, next) => {
   if (ctx.callbackQuery?.data === 'yookassa_check') {
     await ctx.answerCbQuery('Проверяю платёж…');
     const u = normalizeUser(user(ctx.from.id));
