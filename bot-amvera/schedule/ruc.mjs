@@ -297,19 +297,38 @@ export async function getSchedule(group, days = 7) {
   const api = (process.env.SCHEDULE_API_URL || '').trim();
 
   if (api) {
-    const url = new URL(api);
-    url.searchParams.set('group', group);
+    // Поддерживаем как готовый URL, так и шаблон:
+    // https://api-schedule.ruc.su/api/v1/get_schedule/group/{branchId}/{groupId}/no
+    // UUID можно задать через SCHEDULE_BRANCH_ID и SCHEDULE_GROUP_ID.
+    const branchId = (process.env.SCHEDULE_BRANCH_ID || '').trim();
+    const groupId = (process.env.SCHEDULE_GROUP_ID || '').trim();
+
+    let apiUrl = api
+      .replaceAll('{branchId}', branchId)
+      .replaceAll('{groupId}', groupId)
+      .replaceAll('{group}', groupId || group);
+
+    const url = new URL(apiUrl);
+
+    // Если URL старого формата содержит {group}, но UUID не задан,
+    // оставляем совместимость с прежним API через ?group=...
+    if (!api.includes('{branchId}') && !api.includes('{groupId}') &&
+        !api.includes('{group}') && !api.includes('/get_schedule/')) {
+      url.searchParams.set('group', group);
+    }
 
     const response = await fetch(url, {
       signal: AbortSignal.timeout(timeout),
       headers: {
-        accept: 'application/json',
-        'user-agent': 'StarostaBot/1.0'
+        accept: 'application/json, text/plain, */*',
+        origin: 'https://new-schedule.ruc.su',
+        referer: 'https://new-schedule.ruc.su/',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/155 Safari/537.36'
       }
     });
 
     if (!response.ok) {
-      throw new Error('Schedule API HTTP ' + response.status);
+      throw new Error('Schedule API HTTP ' + response.status + ' from ' + url);
     }
 
     return normalizeJson(await response.json(), days);
