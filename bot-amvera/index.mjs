@@ -1059,17 +1059,28 @@ bot.command('cancel', async ctx => {
  return ctx.reply('❌ Импорт списка отменён.');
 });
 bot.action('studentimport:confirm', async ctx => {
- if(!isPrivate(ctx))return ctx.answerCbQuery('Открой бота в личке.');
- const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id);
- if(!g){delete u.pendingStudentImportReview;saveDb();return ctx.answerCbQuery('Группа не найдена.');}
- const list=u.pendingStudentImportReview;
- if(!Array.isArray(list)||!list.length)return ctx.answerCbQuery('Нет списка для подтверждения.');
- g.students=list.slice(0,100);
- g.attendance||={};
- u.students=JSON.parse(JSON.stringify(g.students));
- delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();
- await ctx.answerCbQuery('Список сохранён');
- return ctx.editMessageText('✅ <b>Список студентов создан!</b>\\n\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Студентов: <b>'+g.students.length+'</b>\\n\\nОткрыть список: /students\\nПосещаемость: /attendance',{parse_mode:'HTML'});
+ try {
+  if(!isPrivate(ctx)){await ctx.answerCbQuery('Открой бота в личке.');return;}
+  const u=normalizeUser(user(ctx.from.id));
+  const list=u.pendingStudentImportReview;
+  if(!Array.isArray(list)||!list.length){await ctx.answerCbQuery('Список не найден. Начни импорт заново: /importstudents');return;}
+  const g=managedGroup(ctx.from.id);
+  if(!g){await ctx.answerCbQuery('Группа не найдена.');return;}
+  g.students=list.slice(0,100);
+  g.attendance||={};
+  u.students=JSON.parse(JSON.stringify(g.students));
+  delete u.pendingStudentImport;
+  delete u.pendingStudentImportReview;
+  saveDb();
+  await ctx.answerCbQuery('Список сохранён!');
+  const result='✅ <b>Список студентов создан!</b>\\n\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Студентов: <b>'+g.students.length+'</b>\\n\\nОткрыть список: /students\\nПосещаемость: /attendance';
+  try { await ctx.editMessageText(result,{parse_mode:'HTML'}); }
+  catch(e) { console.error('[student import confirm edit]',e.message||e); await ctx.reply(result,{parse_mode:'HTML'}); }
+ } catch(e) {
+  console.error('[student import confirm]',e);
+  try { await ctx.answerCbQuery('Не удалось сохранить список. Попробуй ещё раз.'); } catch {}
+  try { await ctx.reply('❌ Ошибка при сохранении списка. Отправь /importstudents и повтори импорт.'); } catch {}
+ }
 });
 bot.action('studentimport:cancel', async ctx => {
  if(!isPrivate(ctx))return ctx.answerCbQuery();
