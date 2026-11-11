@@ -155,7 +155,7 @@ async function subscriptionMiddleware(ctx, next) {
 
 bot.use(subscriptionMiddleware);
 
-const menu = Markup.keyboard([
+const managerMenu = Markup.keyboard([
   ['📅 Сегодня', '📅 Завтра'],
   ['🗓 Неделя', '👥 Моя группа'],
   ['📊 Создать опрос', '📚 Создать ДЗ'],
@@ -163,6 +163,10 @@ const menu = Markup.keyboard([
   ['👥 Группы'],
   ['💳 Подписка'],
   ['🔄 Обновить', 'ℹ️ Помощь']
+]).resize();
+const studentMenu = Markup.keyboard([
+  ['📅 Расписание', '👥 Моя группа'],
+  ['📚 ДЗ']
 ]).resize();
 
 function user(id) {
@@ -182,8 +186,17 @@ function normalizeUser(u) {
   return u;
 }
 
+function isManagerRole(u) {
+  return ['starosta', 'zam'].includes(u?.role);
+}
+function canManageAttendance(u, id) {
+  return isOwner(id) || isManagerRole(u);
+}
+function getMenu(id) {
+  return canManageAttendance(user(id), id) ? managerMenu : studentMenu;
+}
 function roleLabel(role) {
-  return role === 'starosta' ? '👑 Староста' : '👨‍🎓 Студент';
+  return role === 'starosta' ? '👑 Староста' : role === 'zam' ? '⭐ Заместитель старосты' : '👨‍🎓 Студент';
 }
 
 function studentName(s) {
@@ -225,15 +238,15 @@ function format(items, group) {
 
 async function show(ctx, days, offset) {
   const u = user(ctx.from.id);
-  if (!u.group) return ctx.reply('Сначала укажи группу. Пример: /group ИСП-21', menu);
+  if (!u.group) return ctx.reply('Сначала укажи группу. Пример: /group ИСП-21', getMenu(ctx.from.id));
   await ctx.reply('⏳ Загружаю расписание…');
   try {
     let items = await getSchedule(u.group, days);
     if (offset) items = items.filter(x => Number(x.dayOffset) === offset);
-    await ctx.reply(format(items, u.group), menu);
+    await ctx.reply(format(items, u.group), getMenu(ctx.from.id));
   } catch (e) {
     console.error('[schedule]', e);
-    await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь источник или SCHEDULE_API_URL.', menu);
+    await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь источник или SCHEDULE_API_URL.', getMenu(ctx.from.id));
   }
 }
 
@@ -435,9 +448,9 @@ async function startPoll(ctx) {
 
 bot.command('subscribe', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Оформить подписку можно только в личных сообщениях с ботом.');
-  if (isOwner(ctx.from.id)) return ctx.reply('👑 У тебя бесплатный доступ владельца. Оплата не требуется.', menu);
+  if (isOwner(ctx.from.id)) return ctx.reply('👑 У тебя бесплатный доступ владельца. Оплата не требуется.', getMenu(ctx.from.id));
   const u = normalizeUser(user(ctx.from.id));
-  if (hasActiveSubscription(u)) return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...menu });
+  if (hasActiveSubscription(u)) return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
 
   await ctx.reply(
     '💳 <b>Подписка на бота</b>\\n\\n' +
@@ -450,7 +463,7 @@ bot.command('subscribe', async ctx => {
 
 bot.command('subscription', ctx => {
   const u = normalizeUser(user(ctx.from.id));
-  return ctx.reply(subscriptionText(u, isOwner(ctx.from.id)), { parse_mode: 'HTML', ...menu });
+  return ctx.reply(subscriptionText(u, isOwner(ctx.from.id)), { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
 });
 
 // Управление подписками доступно только владельцу и только в личном чате с ботом.
@@ -595,7 +608,7 @@ bot.on('callback_query', async ctx => {
       if (payment.status === 'succeeded' && payment.paid) {
         const activated = await processYooKassaPayment(payment);
         if (activated) {
-          await ctx.reply('✅ Платёж подтверждён. Подписка активирована на 30 дней.', menu);
+          await ctx.reply('✅ Платёж подтверждён. Подписка активирована на 30 дней.', getMenu(ctx.from.id));
         } else {
           await ctx.reply('⚠️ Платёж найден, но не прошёл проверку суммы/назначения. Проверь настройки ЮKassa.');
         }
@@ -695,7 +708,7 @@ bot.on('successful_payment', async ctx => {
     new Date(u.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) +
     ' МСК</b>.\\n\\n' +
     'Теперь можешь пользоваться ботом.',
-    { parse_mode: 'HTML', ...menu }
+    { parse_mode: 'HTML', ...getMenu(ctx.from.id) }
   );
 });
 
@@ -753,7 +766,7 @@ async function processYooKassaPayment(payment) {
       '📅 Подписка действует до: <b>' +
       new Date(u.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) +
       ' МСК</b>.',
-      { parse_mode: 'HTML', ...menu }
+      { parse_mode: 'HTML', ...getMenu(ctx.from.id) }
     );
   } catch (e) {
     console.error('[yookassa:notify]', e);
@@ -788,7 +801,7 @@ bot.start(async ctx => {
     '👋 Привет! Я бот расписания.\n\n' +
     'Укажи группу командой /group ИСП-21.\n\n' +
     '📊 Опросы создаются в личке: /poll Вопрос | Да | Нет',
-    menu
+    getMenu(ctx.from.id)
   );
 });
 
@@ -808,7 +821,7 @@ bot.help(ctx => ctx.reply(
   '/myid — узнать свой Telegram ID\\n' +
   (isOwner(ctx.from.id) ? '\\n👑 <b>Панель владельца</b>\\n/admin — все команды владельца\\n/stats — статистика\\n/grant ID [дней|навсегда] — выдать подписку\\n/revoke ID — отозвать подписку\\n/subinfo ID — проверить подписку\\n/setsubgroup — назначить группу с пожизненным доступом (в группе)\\n/attach и /detach — прикрепить/открепить группу (в группе)\\n' : '') +
   '\\n💳 /subscription — статус подписки\\n/subscribe — оформить подписку',
-  { parse_mode: 'HTML', ...menu }
+  { parse_mode: 'HTML', ...getMenu(ctx.from.id) }
 ));
 
 bot.command(['admin', 'adminhelp', 'commands'], ctx => {
@@ -851,7 +864,7 @@ bot.command(['admin', 'adminhelp', 'commands'], ctx => {
     '/help — общая справка\n\n' +
     '<i>ID — это числовой Telegram ID пользователя. Команды с пометкой «в группе» нужно отправлять непосредственно в нужной группе.</i>';
 
-  return ctx.reply(message, { parse_mode: 'HTML', ...menu });
+  return ctx.reply(message, { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
 });
 
 bot.command('group', async ctx => {
@@ -859,7 +872,7 @@ bot.command('group', async ctx => {
   if (!value) return ctx.reply('Пример: /group ИСП-21');
   user(ctx.from.id).group = value;
   saveDb();
-  await ctx.reply('✅ Группа сохранена: «' + value + '»', menu);
+  await ctx.reply('✅ Группа сохранена: «' + value + '»', getMenu(ctx.from.id));
 });
 
 bot.command('setsubgroup', async ctx => {
@@ -914,7 +927,7 @@ bot.command('student', async ctx => {
   const target = ctx.message.reply_to_message?.from;
   const name = target ? [target.first_name, target.last_name].filter(Boolean).join(' ') : ctx.message.text.replace(/^\/student(?:@\\S+)?/i, '').trim();
   if (target && ['group','supergroup'].includes(ctx.chat.type)) {
-    if (u.role !== 'starosta' && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Добавлять студентов может староста или администратор группы.');
+    if (!isManagerRole(u) && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Добавлять студентов может староста или администратор группы.');
     const record = {name: name || ('ID '+target.id), telegramId: String(target.id), username: target.username || ''};
     const at = u.students.findIndex(x => String(typeof x === 'object' ? x.telegramId : '') === record.telegramId);
     if (at >= 0) u.students[at] = record;
@@ -948,7 +961,7 @@ async function showRole(ctx) {
   if (value !== 'student') return ctx.reply('❌ Самостоятельно назначить себя старостой нельзя. Это делает администратор группы.');
   u.role = 'student';
   saveDb();
-  await ctx.reply('✅ Роль установлена: 👨‍🎓 Студент', menu);
+  await ctx.reply('✅ Роль установлена: 👨‍🎓 Студент', getMenu(ctx.from.id));
 }
 
 bot.command('role', showRole);
@@ -970,6 +983,20 @@ bot.command('starosta', async ctx => {
   db.groups[String(ctx.chat.id)].starostaId = ctx.from.id;
   saveDb();
   return ctx.reply('👑 ' + (ctx.from.first_name || 'Пользователь') + ' назначил(а) себя старостой этой группы. Теперь доступны команды посещаемости.');
+});
+
+bot.command('zam', async ctx => {
+  if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('❌ Команду /zam нужно выполнить в учебной группе.');
+  if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначить заместителя может владелец бота или администратор группы.');
+  const target = ctx.message.reply_to_message?.from || ctx.from;
+  const u = normalizeUser(user(target.id));
+  u.role = 'zam';
+  u.username = target.username || u.username || '';
+  u.group = ctx.chat.title || u.group;
+  db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
+  db.groups[String(ctx.chat.id)].zamId = target.id;
+  saveDb();
+  return ctx.reply('⭐ ' + (target.first_name || 'Пользователь') + ' назначен(а) заместителем старосты. Доступны функции старосты.');
 });
 
 bot.command('setstarosta', async ctx => {
@@ -1012,14 +1039,14 @@ bot.command('setstudent', async ctx => {
 bot.command('attendance', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
   const u = user(ctx.from.id);
-  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.reply('❌ Журнал доступен старосте.');
+  if (!canManageAttendance(u, ctx.from.id)) return ctx.reply('❌ Журнал доступен старосте.');
   if (!u.students.length) return ctx.reply('Сначала добавь студентов ответом на их сообщения в группе: /student.');
   return ctx.reply(formatAttendance(u), {parse_mode:'HTML', ...attendanceButtons(u)});
 });
 bot.command('mark', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личке.');
   const u = user(ctx.from.id);
-  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.reply('❌ Только староста.');
+  if (!canManageAttendance(u, ctx.from.id)) return ctx.reply('❌ Только староста.');
   const p = ctx.message.text.replace(/^\/mark(?:@\\S+)?/i, '').trim().split(/\\s+/);
   const i = Number(p[0])-1, status = p[1] === 'present' ? 'present' : p[1] === 'absent' ? 'absent' : '';
   if (!Number.isInteger(i) || !u.students[i] || !status) return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
@@ -1037,6 +1064,16 @@ bot.command('groups', async ctx => {
 bot.command('poll', startPoll);
 bot.command('hw', startHomework);
 bot.command('homework', startHomework);
+bot.hears('📚 ДЗ', async ctx => {
+  if (!isPrivate(ctx)) return;
+  const u = user(ctx.from.id);
+  const groupName = u.group || '';
+  const matching = Object.values(db.groups).filter(g => !groupName || g.scheduleGroup === groupName || g.title === groupName);
+  const records = matching.flatMap(g => (g.homework || []).map(h => ({...h, groupTitle:g.title})));
+  const latest = records.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 10);
+  if (!latest.length) return ctx.reply('📚 Пока нет опубликованных домашних заданий для твоей группы.', getMenu(ctx.from.id));
+  return ctx.reply('📚 <b>Домашние задания</b>\\n\\n' + latest.map(h => '<b>' + escapeHtml(h.subject) + '</b> — ' + escapeHtml(h.groupTitle) + '\\n' + escapeHtml(h.homework) + '\\n' + escapeHtml(h.createdAt || '')).join('\\n\\n'), {parse_mode:'HTML', ...getMenu(ctx.from.id)});
+});
 bot.hears('📚 Создать ДЗ', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях.');
   return ctx.reply('Напиши ДЗ командой:\n/hw Предмет | Домашнее задание');
@@ -1050,7 +1087,7 @@ bot.hears('📊 Создать опрос', ctx => {
 bot.action(/^attstudent:(\d+)$/, async ctx => {
   if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
   const u = normalizeUser(user(ctx.from.id));
-  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
+  if (!canManageAttendance(u, ctx.from.id)) return ctx.answerCbQuery('Только староста.');
   const index = Number(ctx.match[1]);
   if (!u.students[index]) return ctx.answerCbQuery('Студент не найден.');
   await ctx.answerCbQuery('Выбери статус');
@@ -1060,7 +1097,7 @@ bot.action(/^attstudent:(\d+)$/, async ctx => {
 bot.action(/^attmark:(\d+):(present|absent|clear)$/, async ctx => {
   if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
   const u = normalizeUser(user(ctx.from.id));
-  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
+  if (!canManageAttendance(u, ctx.from.id)) return ctx.answerCbQuery('Только староста.');
   const index = Number(ctx.match[1]), status = ctx.match[2];
   if (!u.students[index]) return ctx.answerCbQuery('Студент не найден.');
   const key = attendanceKey(u.students[index]);
@@ -1075,7 +1112,7 @@ bot.action(/^attmark:(\d+):(present|absent|clear)$/, async ctx => {
 bot.action(['attsummary', 'attback'], async ctx => {
   if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
   const u = normalizeUser(user(ctx.from.id));
-  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
+  if (!canManageAttendance(u, ctx.from.id)) return ctx.answerCbQuery('Только староста.');
   await ctx.answerCbQuery();
   await ctx.editMessageText(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
 });
@@ -1123,6 +1160,9 @@ bot.on('callback_query', async ctx => {
     try {
       if (isHomework) {
         await ctx.telegram.sendMessage(g.chatId, '📚 <b>Домашнее задание</b>\n\n<b>' + escapeHtml(u.pendingHomework.subject) + '</b>\n' + escapeHtml(u.pendingHomework.homework), { parse_mode: 'HTML' });
+        g.homework ||= [];
+        g.homework.push({ subject: u.pendingHomework.subject, homework: u.pendingHomework.homework, createdAt: new Date().toISOString(), authorId: ctx.from.id });
+        if (g.homework.length > 50) g.homework = g.homework.slice(-50);
       } else {
         await ctx.telegram.sendPoll(g.chatId, u.pendingPoll.question, u.pendingPoll.options, {
           is_anonymous: false,
@@ -1150,35 +1190,36 @@ bot.on('callback_query', async ctx => {
 bot.command('schedule', ctx => show(ctx, 1, 0));
 bot.command('tomorrow', ctx => show(ctx, 2, 1));
 bot.command('week', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
+bot.hears('📅 Расписание', ctx => show(ctx, 1, 0));
 bot.hears('📅 Сегодня', ctx => show(ctx, 1, 0));
 bot.hears('📅 Завтра', ctx => show(ctx, 2, 1));
 bot.hears('🗓 Неделя', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
 bot.hears('👥 Моя группа', ctx => {
   const g = user(ctx.from.id).group;
-  return ctx.reply(g ? '👥 Твоя группа: «' + g + '»' : 'Группа ещё не выбрана. Используй /group.', menu);
+  return ctx.reply(g ? '👥 Твоя группа: «' + g + '»' : 'Группа ещё не выбрана. Используй /group.', getMenu(ctx.from.id));
 });
 bot.hears('👥 Группы', ctx => {
   const groups = Object.values(db.groups);
   return ctx.reply(
     groups.length ? '👥 Прикреплено групп: ' + groups.length + '\n' + groups.map(g => '• ' + g.title).join('\n') : 'Нет прикреплённых групп.',
-    menu
+    getMenu(ctx.from.id)
   );
 });
 bot.hears('📋 Посещаемость', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
   const u = normalizeUser(user(ctx.from.id));
-  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.reply('❌ Журнал посещаемости доступен старосте.');
+  if (!canManageAttendance(u, ctx.from.id)) return ctx.reply('❌ Журнал посещаемости доступен старосте.');
   if (!u.students.length) return ctx.reply('Список пуст. Добавь студентов ответом на их сообщения в группе командой /student.');
   return ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
 });
 bot.hears('💳 Подписка', ctx => {
   const u = normalizeUser(user(ctx.from.id));
-  if (isOwner(ctx.from.id)) return ctx.reply(subscriptionText(u, true), { parse_mode: 'HTML', ...menu });
+  if (isOwner(ctx.from.id)) return ctx.reply(subscriptionText(u, true), { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
   return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
 });
 
 bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
-bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются через /poll, а ДЗ — через /дз. Перед отправкой бот даст выбрать группу.', menu));
+bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются через /poll, а ДЗ — через /дз. Перед отправкой бот даст выбрать группу.', getMenu(ctx.from.id)));
 
 bot.catch(e => console.error('[bot]', e));
 
@@ -1246,6 +1287,7 @@ async function main() {
     { command: 'attendance', description: 'Посещаемость' },
     { command: 'mark', description: 'Отметить посещаемость' },
     { command: 'starosta', description: 'Назначить себя старостой в группе' },
+    { command: 'zam', description: 'Назначить заместителя старосты' },
     { command: 'appointstarosta', description: 'Назначить старосту (владелец)' },
     { command: 'poll', description: 'Создать опрос' },
     { command: 'setgroup', description: 'Настроить автоопросы в группе' },
