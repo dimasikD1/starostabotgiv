@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio';
 const DEFAULT_URL = 'https://schedule.ruc.su/';
 const DEFAULT_NEW_URL = 'https://new-schedule.ruc.su/schedule';
 
-const clean = value => String(value ?? '').replace(/\\s+/g, ' ').trim();
+const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 function isoToday(offset = 0) {
   const d = new Date();
@@ -14,52 +14,10 @@ function isoToday(offset = 0) {
 
 function parseDate(value) {
   const s = clean(value);
-  const m = s.match(/(\\d{2})\\.(\\d{2})\\.(\\d{4})/);
-  if (m) return \`\${m[3]}-\${m[2]}-\${m[1]}\`;
-  const iso = s.match(/\\d{4}-\\d{2}-\\d{2}/);
+  const m = s.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const iso = s.match(/\d{4}-\d{2}-\d{2}/);
   return iso ? iso[0] : '';
-}
-
-function findOption($, name, wanted = '') {
-  const select = $(\`select[name="${name}"]\`).first();
-  if (!select.length) return null;
-
-  const options = select.find('option').map((_i, el) => ({
-    value: $(el).attr('value') || '',
-    text: clean($(el).text())
-  })).get().filter(x => x.value);
-
-  if (!options.length) return null;
-  if (wanted) {
-    const exact = options.find(x => x.text.toLowerCase() === wanted.toLowerCase() || x.value.toLowerCase() === wanted.toLowerCase());
-    if (exact) return exact;
-    const partial = options.find(x => x.text.toLowerCase().includes(wanted.toLowerCase()) || wanted.toLowerCase().includes(x.text.toLowerCase()));
-    if (partial) return partial;
-  }
-  return options[0];
-}
-
-async function requestHtml(url, method, data, timeout) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, {
-      method,
-      signal: controller.signal,
-      headers: {
-        accept: 'text/html,application/xhtml+xml',
-        'user-agent': 'Mozilla/5.0 (compatible; StarostaBot/1.0)',
-        ...(method === 'POST' ? { 'content-type': 'application/x-www-form-urlencoded' } : {})
-      },
-      body: method === 'POST' ? new URLSearchParams(data).toString() : undefined
-    });
-
-    if (!response.ok) throw new Error(\`Schedule HTTP ${response.status} from ${url}\`);
-    return await response.text();
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 function parseCards(html, requestedGroup) {
@@ -77,38 +35,39 @@ function parseCards(html, requestedGroup) {
       const title = clean($(pair).children().first().text());
       const raw = $(pair).html() || '';
       const text = clean(raw.replace(/<[^>]+>/g, ' '));
-
       if (!title) return;
 
-      const pieces = text.split(/\\s{2,}|(?<=\\S)\\s+(?=Группа)/).map(clean).filter(Boolean);
-      const timeMatch = title.match(/(\\d{1,2})\\s*[.]?\\s*(\\d{1,2})/);
-
-      let subject = title.replace(/^\\d+\\s*[.]?\\s*/, '').trim();
+      const timeMatch = title.match(/(\d{1,2})\s*[.]?\s*(\d{1,2})/);
+      let subject = title.replace(/^\d+\s*[.]?\s*/, '').trim();
       let teacher = '';
       let room = '';
 
-      const groupMatch = text.match(/Группа\\s*[:\\-]?\\s*([^,;]+)/i);
-      const roomMatch = text.match(/(?:аудитория|кабинет|ауд\\.?)[\\s:]*(\\S+)/i);
+      const groupMatch = text.match(/Группа\s*[:\-]?\s*([^,;]+)/i);
+      const roomMatch = text.match(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*(\S+)/i);
 
-      if (groupMatch && requestedGroup && !groupMatch[1].toLowerCase().includes(requestedGroup.toLowerCase())) return;
+      if (groupMatch && requestedGroup &&
+          !groupMatch[1].toLowerCase().includes(requestedGroup.toLowerCase())) {
+        return;
+      }
 
-      const parts = text.split(/Группа/i);
-      if (parts[0]) {
-        const beforeGroup = clean(parts[0]);
-        const comma = beforeGroup.split(',').map(clean).filter(Boolean);
-        if (comma.length >= 2) {
-          teacher = comma[0];
-          room = comma[1];
-        } else if (comma.length === 1) {
-          teacher = comma[0];
-        }
+      const beforeGroup = clean(text.split(/Группа/i)[0] || '');
+      const commaParts = beforeGroup.split(',').map(clean).filter(Boolean);
+
+      if (commaParts.length >= 2) {
+        teacher = commaParts[0];
+        room = commaParts[1];
+      } else if (commaParts.length === 1) {
+        teacher = commaParts[0];
       }
 
       if (roomMatch) room = roomMatch[1];
 
       result.push({
         date,
-        dayOffset: Math.round((new Date(date + 'T00:00:00') - new Date(isoToday(0) + 'T00:00:00')) / 86400000),
+        dayOffset: Math.round(
+          (new Date(date + 'T00:00:00') -
+            new Date(isoToday(0) + 'T00:00:00')) / 86400000
+        ),
         time: timeMatch ? timeMatch[0] : '',
         subject,
         teacher,
@@ -121,15 +80,50 @@ function parseCards(html, requestedGroup) {
   return result;
 }
 
+async function requestHtml(url, method = 'GET', data = {}, timeout = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      method,
+      signal: controller.signal,
+      headers: {
+        accept: 'text/html,application/xhtml+xml,application/json',
+        'user-agent': 'Mozilla/5.0 (compatible; StarostaBot/1.0)',
+        ...(method === 'POST'
+          ? { 'content-type': 'application/x-www-form-urlencoded' }
+          : {})
+      },
+      body: method === 'POST'
+        ? new URLSearchParams(data).toString()
+        : undefined
+    });
+
+    if (!response.ok) {
+      throw new Error(`Schedule HTTP ${response.status} from ${url}`);
+    }
+
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getLegacySchedule(group, days, timeout) {
-  const baseUrl = (process.env.SCHEDULE_SITE_URL || DEFAULT_URL).trim().replace(/\\/$/, '') + '/';
+  const baseUrl =
+    (process.env.SCHEDULE_SITE_URL || DEFAULT_URL).trim().replace(/\/$/, '') + '/';
+
   const wantedBranch = (process.env.SCHEDULE_BRANCH || '').trim();
   const wantedKit = (process.env.SCHEDULE_KIT || '').trim();
 
   const firstHtml = await requestHtml(baseUrl, 'GET', {}, timeout);
   const $ = cheerio.load(firstHtml);
   const branchSelect = $('select[name="branch"]').first();
-  if (!branchSelect.length) throw new Error('Не найден список филиалов на schedule.ruc.su');
+
+  if (!branchSelect.length) {
+    throw new Error('Не найден список филиалов на schedule.ruc.su');
+  }
 
   const branches = branchSelect.find('option').map((_i, el) => ({
     value: $(el).attr('value') || '',
@@ -137,13 +131,26 @@ async function getLegacySchedule(group, days, timeout) {
   })).get().filter(x => x.value);
 
   let candidates = branches;
+
   if (wantedBranch) {
-    candidates = branches.filter(x => x.text.toLowerCase().includes(wantedBranch.toLowerCase()) || x.value.toLowerCase() === wantedBranch.toLowerCase());
-    if (!candidates.length) throw new Error('Филиал не найден: ' + wantedBranch);
+    candidates = branches.filter(x =>
+      x.text.toLowerCase().includes(wantedBranch.toLowerCase()) ||
+      x.value.toLowerCase() === wantedBranch.toLowerCase()
+    );
+
+    if (!candidates.length) {
+      throw new Error('Филиал не найден: ' + wantedBranch);
+    }
   }
 
   for (const branch of candidates) {
-    const branchHtml = await requestHtml(baseUrl, 'POST', { branch: branch.value }, timeout);
+    const branchHtml = await requestHtml(
+      baseUrl,
+      'POST',
+      { branch: branch.value },
+      timeout
+    );
+
     const branch$ = cheerio.load(branchHtml);
     const kitSelect = branch$('select[name="year"]').first();
     if (!kitSelect.length) continue;
@@ -154,14 +161,20 @@ async function getLegacySchedule(group, days, timeout) {
     })).get().filter(x => x.value);
 
     const kitCandidates = wantedKit
-      ? kits.filter(x => x.text.toLowerCase().includes(wantedKit.toLowerCase()) || x.value.toLowerCase() === wantedKit.toLowerCase())
+      ? kits.filter(x =>
+          x.text.toLowerCase().includes(wantedKit.toLowerCase()) ||
+          x.value.toLowerCase() === wantedKit.toLowerCase()
+        )
       : kits;
 
     for (const kit of kitCandidates) {
-      const groupsHtml = await requestHtml(baseUrl, 'POST', {
-        branch: branch.value,
-        year: kit.value
-      }, timeout);
+      const groupsHtml = await requestHtml(
+        baseUrl,
+        'POST',
+        { branch: branch.value, year: kit.value },
+        timeout
+      );
+
       const groups$ = cheerio.load(groupsHtml);
       const groupSelect = groups$('select[name="group"]').first();
       if (!groupSelect.length) continue;
@@ -171,29 +184,38 @@ async function getLegacySchedule(group, days, timeout) {
         text: clean($(el).text())
       })).get().filter(x => x.value);
 
-      const match = groups.find(x => x.text.toLowerCase() === group.toLowerCase())
-        || groups.find(x => x.text.toLowerCase().includes(group.toLowerCase()));
+      const match =
+        groups.find(x => x.text.toLowerCase() === group.toLowerCase()) ||
+        groups.find(x => x.text.toLowerCase().includes(group.toLowerCase()));
 
       if (!match) continue;
 
       const today = isoToday(0);
-      const html = await requestHtml(baseUrl, 'POST', {
-        branch: branch.value,
-        year: kit.value,
-        group: match.value,
-        'search-date': 'search-date',
-        'scheduler-date': today,
-        'date-search': today
-      }, timeout);
+      const html = await requestHtml(
+        baseUrl,
+        'POST',
+        {
+          branch: branch.value,
+          year: kit.value,
+          group: match.value,
+          'search-date': 'search-date',
+          'scheduler-date': today,
+          'date-search': today
+        },
+        timeout
+      );
 
       const items = parseCards(html, group);
-      if (items.length) return items.filter(x => x.dayOffset >= 0 && x.dayOffset < days);
 
-      return [];
+      return items.filter(
+        x => x.dayOffset >= 0 && x.dayOffset < days
+      );
     }
   }
 
-  throw new Error(\`Группа «${group}» не найдена на schedule.ruc.su. Можно задать SCHEDULE_BRANCH и SCHEDULE_KIT.`);
+  throw new Error(
+    `Группа «${group}» не найдена на schedule.ruc.su. Можно задать SCHEDULE_BRANCH и SCHEDULE_KIT.`
+  );
 }
 
 async function getNewSite(group, days, timeout) {
@@ -201,58 +223,58 @@ async function getNewSite(group, days, timeout) {
   const response = await requestHtml(url, 'GET', {}, timeout);
   const $ = cheerio.load(response);
   const text = clean($.text());
+
   if (!text || /Расписания нет/i.test(text)) return [];
+
   const items = [];
+
   $('table').each((_n, table) => {
-    const rows = $(table).find('tr');
-    if (!rows.length) return;
-    rows.each((_i, row) => {
-      const cells = $(row).find('th,td').map((_j, cell) => clean($(cell).text())).get();
+    $(table).find('tr').each((_i, row) => {
+      const cells = $(row).find('th,td')
+        .map((_j, cell) => clean($(cell).text()))
+        .get();
+
       if (cells.length < 2) return;
+
       const line = cells.join(' | ');
       if (group && !line.toLowerCase().includes(group.toLowerCase())) return;
+
       const date = parseDate(line);
-      if (date) items.push({ date, dayOffset: Math.round((new Date(date) - new Date(isoToday(0))) / 86400000), time: '', subject: line, teacher: '', room: '', group });
+      if (!date) return;
+
+      items.push({
+        date,
+        dayOffset: Math.round(
+          (new Date(date + 'T00:00:00') -
+            new Date(isoToday(0) + 'T00:00:00')) / 86400000
+        ),
+        time: '',
+        subject: line,
+        teacher: '',
+        room: '',
+        group
+      });
     });
   });
+
   return items.filter(x => x.dayOffset >= 0 && x.dayOffset < days);
 }
 
-export async function getSchedule(group, days = 7) {
-  const timeout = Number(process.env.SCHEDULE_TIMEOUT || 20000);
-  const api = (process.env.SCHEDULE_API_URL || '').trim();
-
-  if (api) {
-    const url = new URL(api);
-    url.searchParams.set('group', group);
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(timeout),
-      headers: { accept: 'application/json', 'user-agent': 'StarostaBot/1.0' }
-    });
-    if (!response.ok) throw new Error('Schedule API HTTP ' + response.status);
-    return normalizeJson(await response.json(), days);
-  }
-
-  try {
-    return await getLegacySchedule(group, days, timeout);
-  } catch (legacyError) {
-    console.error('[schedule] legacy source failed:', legacyError.message);
-    if ((process.env.SCHEDULE_FALLBACK_NEW || 'false').toLowerCase() === 'true') {
-      return await getNewSite(group, days, timeout);
-    }
-    throw legacyError;
-  }
-}
-
 function normalizeJson(data, days) {
-  const raw = Array.isArray(data) ? data : (data.items || data.schedule || data.data || []);
+  const raw = Array.isArray(data)
+    ? data
+    : (data?.items || data?.schedule || data?.data || []);
+
   if (!Array.isArray(raw)) return [];
 
   const base = new Date();
   base.setHours(0, 0, 0, 0);
 
   return raw.map(item => {
-    const date = String(item.date || item.day || item.start || '').slice(0, 10);
+    const date = String(
+      item.date || item.day || item.start || ''
+    ).slice(0, 10);
+
     const d = new Date(date + 'T00:00:00');
     const dayOffset = Math.round((d - base) / 86400000);
 
@@ -265,5 +287,43 @@ function normalizeJson(data, days) {
       room: item.room || item.auditory || item.classroom || '',
       group: item.group || item.groupName || ''
     };
-  }).filter(x => x.date && x.subject && x.dayOffset >= 0 && x.dayOffset < days);
+  }).filter(
+    x => x.date && x.subject && x.dayOffset >= 0 && x.dayOffset < days
+  );
+}
+
+export async function getSchedule(group, days = 7) {
+  const timeout = Number(process.env.SCHEDULE_TIMEOUT || 20000);
+  const api = (process.env.SCHEDULE_API_URL || '').trim();
+
+  if (api) {
+    const url = new URL(api);
+    url.searchParams.set('group', group);
+
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeout),
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'StarostaBot/1.0'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Schedule API HTTP ' + response.status);
+    }
+
+    return normalizeJson(await response.json(), days);
+  }
+
+  try {
+    return await getLegacySchedule(group, days, timeout);
+  } catch (legacyError) {
+    console.error('[schedule] legacy source failed:', legacyError.message);
+
+    if ((process.env.SCHEDULE_FALLBACK_NEW || 'true').toLowerCase() === 'true') {
+      return await getNewSite(group, days, timeout);
+    }
+
+    throw legacyError;
+  }
 }
