@@ -28,12 +28,66 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
+const SUBSCRIPTION_STARS = Math.max(1, Number(process.env.SUBSCRIPTION_STARS || 100));
+const SUBSCRIPTION_DAYS = 30;
+const SUBSCRIPTION_SECONDS = SUBSCRIPTION_DAYS * 24 * 60 * 60;
+
+function subscriptionUntil(u) {
+  return Number(u.subscriptionUntil || 0);
+}
+
+function hasActiveSubscription(u) {
+  return subscriptionUntil(u) > Date.now();
+}
+
+function subscriptionText(u) {
+  if (!hasActiveSubscription(u)) {
+    return '🔒 <b>Подписка не активна</b>\\n\\n' +
+      'Для использования бота нужна подписка на 30 дней.\\n' +
+      'Стоимость: <b>' + SUBSCRIPTION_STARS + ' ⭐</b>.\\n\\n' +
+      'Нажми «💳 Подписка», чтобы оформить её.';
+  }
+  const date = new Date(subscriptionUntil(u)).toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  });
+  return '✅ <b>Подписка активна</b>\\n\\nДействует до: <b>' + date + ' МСК</b>';
+}
+
+function subscriptionKeyboard() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('💳 Оформить подписку — ' + SUBSCRIPTION_STARS + ' ⭐', 'subscribe')]
+  ]);
+}
+
+function subscriptionMiddleware(ctx, next) {
+  const text = ctx.message?.text || '';
+  const command = text.split(/\\s+/)[0].replace(/^\\//, '').replace(/@.*$/, '').toLowerCase();
+
+  // Служебные платежные обновления Telegram должны проходить всегда.
+  if (ctx.updateType === 'pre_checkout_query' || ctx.updateType === 'successful_payment') return next();
+
+  const allowed = new Set(['start', 'help', 'subscribe', 'subscription', 'terms', 'paysupport']);
+  if (allowed.has(command)) return next();
+
+  if (!ctx.from) return next();
+
+  const u = normalizeUser(user(ctx.from.id));
+  if (hasActiveSubscription(u)) return next();
+
+  return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
+}
+
+bot.use(subscriptionMiddleware);
+
 const menu = Markup.keyboard([
   ['📅 Сегодня', '📅 Завтра'],
   ['🗓 Неделя', '👥 Моя группа'],
   ['📊 Создать опрос', '📚 Создать ДЗ'],
   ['👨‍🎓 Список студентов', '📋 Посещаемость'],
   ['👥 Группы'],
+  ['💳 Подписка'],
   ['🔄 Обновить', 'ℹ️ Помощь']
 ]).resize();
 
@@ -47,6 +101,7 @@ function normalizeUser(u) {
   u.role ||= 'student';
   u.students ||= [];
   u.attendance ||= {};
+  u.subscriptionUntil ||= 0;
   return u;
 }
 
@@ -249,6 +304,85 @@ async function startPoll(ctx) {
 
   await ctx.reply('📊 Опрос создан. Выбери, куда его отправить:', Markup.inlineKeyboard(groupButtons()));
 }
+
+bot.command('subscribe', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Оформить подписку можно только в личных сообщениях с ботом.');
+  const u = normalizeUser(user(ctx.from.id));
+  if (hasActiveSubscription(u)) return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...menu });
+
+  await ctx.reply(
+    '💳 <b>Подписка на бота</b>\\n\\n' +
+    'Доступ ко всем функциям на 30 дней.\\n' +
+    'Стоимость: <b>' + SUBSCRIPTION_STARS + ' ⭐</b>.\\n\\n' +
+    'Оплата проходит прямо через Telegram Stars.',
+    { parse_mode: 'HTML', ...subscriptionKeyboard() }
+  );
+});
+
+bot.command('subscription', ctx => {
+  const u = normalizeUser(user(ctx.from.id));
+  return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...menu });
+});
+
+bot.command('terms', ctx => ctx.reply(
+  '📄 <b>Условия использования</b>\\n\\n' +
+  'Подписка предоставляет доступ к функциям бота на оплаченный период. ' +
+  'Оплата производится в Telegram Stars. Возвраты и вопросы по оплате рассматриваются через /paysupport.',
+  { parse_mode: 'HTML' }
+));
+
+bot.command('paysupport', ctx => ctx.reply(
+  '🆘 <b>Поддержка по оплате</b>\\n\\n' +
+  'Если оплата прошла, но доступ не появился, отправь сюда скриншот платежа и свой Telegram ID.',
+  { parse_mode: 'HTML' }
+));
+
+bot.on('callback_query', async ctx => {
+  if (ctx.callbackQuery?.data === 'subscribe') {
+    if (!isPrivate(ctx)) {
+      await ctx.answerCbQuery('Оформление подписки доступно в личке.');
+      return;
+    }
+    await ctx.answerCbQuery();
+    await ctx.telegram.sendInvoice(ctx.from.id, 'Подписка на бота', 
+      'Доступ ко всем функциям бота на 30 дней', 'bot_subscription_30d', 'XTR',
+      [{ label: 'Подписка на 30 дней', amount: SUBSCRIPTION_STARS }],
+      {
+        subscription_period: SUBSCRIPTION_SECONDS,
+        provider_token: '',
+        start_parameter: 'bot-subscription',
+        payload: 'bot_subscription_30d'
+      }
+    );
+    return;
+  }
+  return next();
+});
+
+bot.on('pre_checkout_query', async ctx => {
+  await ctx.answerPreCheckoutQuery(true);
+});
+
+bot.on('successful_payment', async ctx => {
+  const payment = ctx.message.successful_payment;
+  if (payment.invoice_payload !== 'bot_subscription_30d') return;
+
+  const u = normalizeUser(user(ctx.from.id));
+  const expiration = Number(payment.subscription_expiration_date || 0);
+  const base = Math.max(Date.now(), subscriptionUntil(u));
+  u.subscriptionUntil = expiration > 0 ? expiration * 1000 : base + SUBSCRIPTION_SECONDS * 1000;
+  u.subscriptionChargeId = payment.telegram_payment_charge_id || '';
+  saveDb();
+
+  await ctx.reply(
+    '🎉 <b>Подписка активирована!</b>\\n\\n' +
+    'Доступ действует до: <b>' +
+    new Date(u.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) +
+    ' МСК</b>.\\n\\n' +
+    'Теперь можешь пользоваться ботом.',
+    { parse_mode: 'HTML', ...menu }
+  );
+});
 
 bot.start(async ctx => {
   user(ctx.from.id);
@@ -553,6 +687,11 @@ bot.hears('📋 Посещаемость', async ctx => {
   if (u.role === 'starosta' && u.students.length) return ctx.reply('📋 Выбери студента для отметки:', Markup.inlineKeyboard(attendanceButtons(u)));
   return ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...menu });
 });
+bot.hears('💳 Подписка', ctx => {
+  const u = normalizeUser(user(ctx.from.id));
+  return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
+});
+
 bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
 bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются через /poll, а ДЗ — через /дз. Перед отправкой бот даст выбрать группу.', menu));
 
@@ -577,6 +716,10 @@ async function main() {
   await bot.telegram.setMyCommands([
     { command: 'start', description: 'Запустить бота' },
     { command: 'help', description: 'Помощь' },
+    { command: 'subscribe', description: 'Оформить подписку' },
+    { command: 'subscription', description: 'Статус подписки' },
+    { command: 'terms', description: 'Условия использования' },
+    { command: 'paysupport', description: 'Поддержка по оплате' },
     { command: 'group', description: 'Выбрать учебную группу' },
     { command: 'schedule', description: 'Расписание на сегодня' },
     { command: 'tomorrow', description: 'Расписание на завтра' },
