@@ -1100,11 +1100,11 @@ bot.on('text', async (ctx,next) => {
   const student=g.students[pending.index];
   const rec=typeof student==='string'?{name:student}:student;
   if(pending.type==='username'){
-   const value=raw.replace(/^@/,'').trim();
+   const value=raw==='-'?'':raw.replace(/^@/,'').trim();
    if(value&&!/^[A-Za-z0-9_]{5,32}$/.test(value))return ctx.reply('❌ Неверный username. Введи @username или /cancel.');
    rec.username=value;
   } else {
-   const value=raw.replace(/[\\s()-]/g,'');
+   const value=raw==='-'?'':raw.replace(/[\\s()-]/g,'');
    if(value&&!/^\\+?[0-9]{6,15}$/.test(value))return ctx.reply('❌ Неверный номер. Пример: +37255555555 или /cancel.');
    rec.phone=value;
   }
@@ -1366,7 +1366,7 @@ bot.on('callback_query', async ctx => {
     const g = db.groups[groupId];
     if (!g) { await ctx.answerCbQuery('Группа не найдена.'); return; }
     const students=g.students||[];if(!students.length){await ctx.answerCbQuery('Список группы пуст.');return;}
-    await ctx.answerCbQuery('Готово');await ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',disable_web_page_preview:true});
+    await ctx.answerCbQuery('Готово');await ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g)});
     return;
   }
 
