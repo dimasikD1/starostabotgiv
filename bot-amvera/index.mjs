@@ -407,7 +407,7 @@ bot.command('myid', ctx => {
 bot.command('grant', async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const args = ctx.message.text.replace(/^\/grant(?:@\S+)?/i, '').trim().split(/\\s+/).filter(Boolean);
+  const args = ctx.message.text.replace(/^\/grant(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
   const targetId = args[0];
   const forever = ['forever', 'lifetime', 'навсегда', 'пожизненно'].includes((args[1] || '').toLowerCase());
   const days = args[1] === undefined ? SUBSCRIPTION_DAYS : Number(args[1]);
