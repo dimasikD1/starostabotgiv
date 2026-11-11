@@ -905,6 +905,17 @@ bot.command('setstarosta', async ctx => {
   await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой.');
 });
 
+bot.command('appointstarosta', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях боту.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу бота.');
+  const targetId = (ctx.message.text || '').replace(/^\\/appointstarosta(?:@\\S+)?/i, '').trim().split(/\\s+/)[0];
+  if (!/^\\d+$/.test(targetId || '')) return ctx.reply('Формат: /appointstarosta TELEGRAM_ID\\nНапример: /appointstarosta 123456789');
+  const target = normalizeUser(user(Number(targetId)));
+  target.role = 'starosta';
+  saveDb();
+  await ctx.reply('👑 Пользователь ' + targetId + ' назначен старостой. Для доступа к личному журналу он должен открыть бота и отправить /start.');
+});
+
 bot.command('setstudent', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Менять роль может только администратор группы.');
@@ -953,38 +964,45 @@ bot.hears('📊 Создать опрос', ctx => {
   return ctx.reply('Напиши опрос командой:\n/poll Вопрос | Вариант 1 | Вариант 2 | Вариант 3');
 });
 
+// Отдельные обработчики кнопок посещаемости.
+bot.action(/^attstudent:(\\d+)$/, async ctx => {
+  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
+  const u = normalizeUser(user(ctx.from.id));
+  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
+  const index = Number(ctx.match[1]);
+  if (!u.students[index]) return ctx.answerCbQuery('Студент не найден.');
+  await ctx.answerCbQuery('Выбери статус');
+  await ctx.editMessageText('📋 <b>Отметка посещаемости</b>\\n\\n' + escapeHtml(studentName(u.students[index])), { parse_mode: 'HTML', ...attendanceStatusButtons(index) });
+});
+
+bot.action(/^attmark:(\\d+):(present|absent|clear)$/, async ctx => {
+  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
+  const u = normalizeUser(user(ctx.from.id));
+  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
+  const index = Number(ctx.match[1]), status = ctx.match[2];
+  if (!u.students[index]) return ctx.answerCbQuery('Студент не найден.');
+  const key = attendanceKey(u.students[index]);
+  u.attendance[key] ||= {};
+  if (status === 'clear') delete u.attendance[key][attendanceDate()];
+  else u.attendance[key][attendanceDate()] = status;
+  saveDb();
+  await ctx.answerCbQuery(status === 'clear' ? 'Отметка снята' : 'Сохранено');
+  await ctx.editMessageText(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
+});
+
+bot.action(['attsummary', 'attback'], async ctx => {
+  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
+  const u = normalizeUser(user(ctx.from.id));
+  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
+  await ctx.answerCbQuery();
+  await ctx.editMessageText(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
+});
+
 bot.on('callback_query', async ctx => {
   const data = ctx.callbackQuery?.data || '';
-  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:') && !data.startsWith('attstudent:') && !data.startsWith('attmark:') && data !== 'attsummary' && data !== 'attback') return;
+  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:')) return;
 
-  const isAttendanceStudent = data.startsWith('attstudent:');
-  const isAttendanceMark = data.startsWith('attmark:');
-  if (isAttendanceStudent || isAttendanceMark || data === 'attsummary' || data === 'attback') {
-    if (!isPrivate(ctx)) { await ctx.answerCbQuery('Только в личке.'); return; }
-    const u = user(ctx.from.id);
-    if (u.role !== 'starosta' && !isOwner(ctx.from.id)) { await ctx.answerCbQuery('Только староста.'); return; }
-    if (data === 'attsummary' || data === 'attback') {
-      await ctx.answerCbQuery();
-      await ctx.editMessageText(formatAttendance(u), {parse_mode:'HTML', ...attendanceButtons(u)});
-      return;
-    }
-    if (isAttendanceStudent) {
-      const index=Number(data.slice('attstudent:'.length));
-      if (!Number.isInteger(index) || !u.students[index]) { await ctx.answerCbQuery('Не найден'); return; }
-      await ctx.answerCbQuery('Выбери статус');
-      await ctx.editMessageText('📋 <b>Отметка посещаемости</b>\\n\\n'+escapeHtml(studentName(u.students[index])), {parse_mode:'HTML', ...attendanceStatusButtons(index)});
-      return;
-    }
-    const p=data.slice('attmark:'.length).split(':'), index=Number(p[0]), status=p[1];
-    if (!u.students[index] || !['present','absent','clear'].includes(status)) { await ctx.answerCbQuery('Ошибка'); return; }
-    const key=attendanceKey(u.students[index]); u.attendance[key] ||= {};
-    if (status==='clear') delete u.attendance[key][attendanceDate()]; else u.attendance[key][attendanceDate()]=status;
-    saveDb(); await ctx.answerCbQuery(status==='clear'?'Снято':'Сохранено');
-    await ctx.editMessageText(formatAttendance(u), {parse_mode:'HTML', ...attendanceButtons(u)});
-    return;
-  }
-
-const isStudentList = data.startsWith('students:');
+  const isStudentList = data.startsWith('students:');
   const isHomework = data.startsWith('hwsend:');
   if (isStudentList) {
     if (!isPrivate(ctx)) { await ctx.answerCbQuery('Только в личке.'); return; }
@@ -1145,6 +1163,7 @@ async function main() {
     { command: 'delstudent', description: 'Удалить студента' },
     { command: 'attendance', description: 'Посещаемость' },
     { command: 'mark', description: 'Отметить посещаемость' },
+    { command: 'appointstarosta', description: 'Назначить старосту (владелец)' },
     { command: 'poll', description: 'Создать опрос' },
     { command: 'hw', description: 'Создать домашнее задание' }
   ]);
