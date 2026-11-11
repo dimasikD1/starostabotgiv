@@ -31,13 +31,14 @@ const bot = new Telegraf(token);
 const menu = Markup.keyboard([
   ['📅 Сегодня', '📅 Завтра'],
   ['🗓 Неделя', '👥 Моя группа'],
-  ['📊 Создать опрос', '👥 Группы'],
+  ['📊 Создать опрос', '📚 Создать ДЗ'],
+  ['👥 Группы'],
   ['🔄 Обновить', 'ℹ️ Помощь']
 ]).resize();
 
 function user(id) {
   const key = String(id);
-  db.users[key] ||= { group: '', pendingPoll: null };
+  db.users[key] ||= { group: '', pendingPoll: null, pendingHomework: null };
   return db.users[key];
 }
 
@@ -102,6 +103,13 @@ function removeGroup(ctx) {
   saveDb();
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function groupButtons() {
   const groups = Object.values(db.groups);
   const buttons = groups.map(g => [
@@ -109,6 +117,47 @@ function groupButtons() {
   ]);
   if (groups.length > 1) buttons.push([Markup.button.callback('📢 Во все группы', 'pollsend:all')]);
   return buttons;
+}
+
+function homeworkButtons() {
+  const groups = Object.values(db.groups);
+  const buttons = groups.map(g => [
+    Markup.button.callback('📚 ' + String(g.title).slice(0, 45), 'hwsend:' + String(g.chatId))
+  ]);
+  if (groups.length > 1) buttons.push([Markup.button.callback('📚 Во все группы', 'hwsend:all')]);
+  return buttons;
+}
+
+async function startHomework(ctx) {
+  if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях с ботом.');
+
+  const text = ctx.message?.text?.replace(/^\/(?:дз|homework)(?:@\S+)?/i, '').trim() || '';
+  if (!text) {
+    return ctx.reply(
+      '📚 Создание домашнего задания\n\n' +
+      'Формат:\n/дз Предмет | Домашнее задание\n\n' +
+      'Пример:\n/дз Математика | Решить задачи 1–10 на странице 25'
+    );
+  }
+
+  const parts = text.split('|').map(x => x.trim()).filter(Boolean);
+  if (parts.length < 2) return ctx.reply('❌ Укажи предмет и задание через |\nПример: /дз Математика | Решить задачи 1–10');
+
+  const subject = parts.shift();
+  const homework = parts.join(' | ');
+  if (subject.length > 100) return ctx.reply('❌ Название предмета слишком длинное.');
+  if (homework.length > 3500) return ctx.reply('❌ Текст ДЗ слишком длинный (максимум 3500 символов).');
+
+  const u = user(ctx.from.id);
+  u.pendingHomework = { subject, homework };
+  saveDb();
+
+  const groups = Object.values(db.groups);
+  if (!groups.length) {
+    return ctx.reply('❌ Нет прикреплённых групп. Добавь бота в нужную группу, сделай себя администратором и выполни там /attach.');
+  }
+
+  await ctx.reply('📚 ДЗ создано. Выбери, в какую группу его отправить:', Markup.inlineKeyboard(homeworkButtons()));
 }
 
 async function startPoll(ctx) {
@@ -167,6 +216,7 @@ bot.help(ctx => ctx.reply(
   '/tomorrow — завтра\n' +
   '/week — неделя\n' +
   '/poll — создать опрос в личке\n' +
+  '/дз — создать ДЗ и отправить в группу\n' +
   '/groups — список прикреплённых групп\n\n' +
   'В учебной группе администратор может выполнить /attach, чтобы прикрепить её к боту для отправки опросов.',
   menu
@@ -207,6 +257,12 @@ bot.command('groups', async ctx => {
 });
 
 bot.command('poll', startPoll);
+bot.command('дз', startHomework);
+bot.command('homework', startHomework);
+bot.hears('📚 Создать ДЗ', ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях.');
+  return ctx.reply('Напиши ДЗ командой:\n/дз Предмет | Домашнее задание');
+});
 bot.hears('📊 Создать опрос', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание опроса выполняется в личных сообщениях.');
   return ctx.reply('Напиши опрос командой:\n/poll Вопрос | Вариант 1 | Вариант 2 | Вариант 3');
@@ -214,7 +270,9 @@ bot.hears('📊 Создать опрос', ctx => {
 
 bot.on('callback_query', async ctx => {
   const data = ctx.callbackQuery?.data || '';
-  if (!data.startsWith('pollsend:')) return;
+  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:')) return;
+
+  const isHomework = data.startsWith('hwsend:');
 
   if (!isPrivate(ctx)) {
     await ctx.answerCbQuery('Опросы отправляются только из личных сообщений.');
@@ -222,12 +280,12 @@ bot.on('callback_query', async ctx => {
   }
 
   const u = user(ctx.from.id);
-  if (!u.pendingPoll) {
-    await ctx.answerCbQuery('Опрос уже отправлен или устарел.');
+  if (isHomework ? !u.pendingHomework : !u.pendingPoll) {
+    await ctx.answerCbQuery(isHomework ? 'ДЗ уже отправлено или устарело.' : 'Опрос уже отправлен или устарел.');
     return;
   }
 
-  const target = data.slice('pollsend:'.length);
+  const target = data.slice(isHomework ? 'hwsend:'.length : 'pollsend:'.length);
   const groups = Object.values(db.groups);
   const targets = target === 'all' ? groups : groups.filter(g => String(g.chatId) === target);
 
@@ -239,23 +297,29 @@ bot.on('callback_query', async ctx => {
   let sent = 0;
   for (const g of targets) {
     try {
-      await ctx.telegram.sendPoll(g.chatId, u.pendingPoll.question, u.pendingPoll.options, {
-        is_anonymous: true,
-        allows_multiple_answers: false
-      });
+      if (isHomework) {
+        await ctx.telegram.sendMessage(g.chatId, '📚 <b>Домашнее задание</b>\n\n<b>' + escapeHtml(u.pendingHomework.subject) + '</b>\n' + escapeHtml(u.pendingHomework.homework), { parse_mode: 'HTML' });
+      } else {
+        await ctx.telegram.sendPoll(g.chatId, u.pendingPoll.question, u.pendingPoll.options, {
+          is_anonymous: true,
+          allows_multiple_answers: false
+        });
+      }
       sent++;
     } catch (e) {
-      console.error('[poll]', g.title, e);
+      console.error(isHomework ? '[homework]' : '[poll]', g.title, e);
     }
   }
 
-  u.pendingPoll = null;
+  if (isHomework) u.pendingHomework = null;
+  else u.pendingPoll = null;
   saveDb();
-  await ctx.answerCbQuery(sent ? 'Опрос отправлен.' : 'Не удалось отправить опрос.');
+  const kind = isHomework ? 'ДЗ' : 'Опрос';
+  await ctx.answerCbQuery(sent ? kind + ' отправлено.' : 'Не удалось отправить.');
   await ctx.editMessageText(
     sent
-      ? '✅ Опрос отправлен в ' + sent + ' группу(ы).'
-      : '❌ Не удалось отправить опрос. Проверь, что бот всё ещё находится в группе и может отправлять сообщения.'
+      ? '✅ ' + kind + ' отправлено в ' + sent + ' группу(ы).'
+      : '❌ Не удалось отправить. Проверь, что бот всё ещё находится в группе и может отправлять сообщения.'
   );
 });
 
@@ -277,7 +341,7 @@ bot.hears('👥 Группы', ctx => {
   );
 });
 bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
-bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются в личке через /poll.', menu));
+bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются через /poll, а ДЗ — через /дз. Перед отправкой бот даст выбрать группу.', menu));
 
 bot.catch(e => console.error('[bot]', e));
 
