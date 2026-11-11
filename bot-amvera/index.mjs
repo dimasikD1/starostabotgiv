@@ -115,7 +115,7 @@ async function subscriptionMiddleware(ctx, next) {
   if (
     ctx.updateType === 'pre_checkout_query' ||
     ctx.message?.successful_payment ||
-    (ctx.updateType === 'callback_query' && ['subscribe', 'subscribe_card'].includes(ctx.callbackQuery?.data))
+    (ctx.updateType === 'callback_query' && (['subscribe', 'subscribe_card'].includes(ctx.callbackQuery?.data) || String(ctx.callbackQuery?.data || '').startsWith('studygroup:')))
   ) return next();
 
   if (!ctx.from) return next();
@@ -132,6 +132,18 @@ async function subscriptionMiddleware(ctx, next) {
   }
 
   const u = normalizeUser(user(ctx.from.id));
+  // При первом сообщении в группе просим выбрать учебную группу.
+  if (ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.group && !String(ctx.message?.text || '').startsWith('/')) {
+    await ctx.reply(
+      '👋 Чтобы показывать правильное расписание и домашние задания, выбери свою учебную группу:',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
+        [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')],
+        [Markup.button.url('❓ Не знаю свою группу — написать', 'https://t.me/givenchytg')]
+      ])
+    );
+    return;
+  }
   // При открытии лички бот проверяет членство в назначенной группе.
   if (isPrivate(ctx) && !u.subscriptionForever && db.subscriptionGroupId) {
     try {
@@ -154,6 +166,16 @@ async function subscriptionMiddleware(ctx, next) {
 }
 
 bot.use(subscriptionMiddleware);
+
+bot.action(/^studygroup:(1|2)$/, async ctx => {
+  const groups = { '1': 'БИ(ЭБ)1-ОЗ/Бп/КД26', '2': 'БИ(ЭБ)2-ОЗ/Бп/КД26' };
+  const selected = groups[ctx.match[1]];
+  const u = normalizeUser(user(ctx.from.id));
+  u.group = selected;
+  saveDb();
+  await ctx.answerCbQuery('Группа сохранена');
+  await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\\nТеперь расписание и ДЗ будут подбираться для неё.');
+});
 
 const managerMenu = Markup.keyboard([
   ['📅 Сегодня', '📅 Завтра'],
