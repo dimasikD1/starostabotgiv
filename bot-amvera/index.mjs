@@ -483,8 +483,8 @@ bot.command('stats', ctx => {
   const entries = Object.entries(db.users);
   const now = Date.now();
   const active = entries.filter(([id, u]) => !isOwner(id) && (Boolean(u.subscriptionForever) || subscriptionUntil(u) > now)).length;\n  const lifetime = entries.filter(([id, u]) => !isOwner(id) && Boolean(u.subscriptionForever)).length;
-  const expired = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) > 0 && subscriptionUntil(u) <= now).length;
-  const noSubscription = entries.filter(([id, u]) => !isOwner(id) && subscriptionUntil(u) <= 0).length;
+  const expired = entries.filter(([id, u]) => !isOwner(id) && !u.subscriptionForever && subscriptionUntil(u) > 0 && subscriptionUntil(u) <= now).length;
+  const noSubscription = entries.filter(([id, u]) => !isOwner(id) && !u.subscriptionForever && subscriptionUntil(u) <= 0).length;
   const starostas = entries.filter(([, u]) => u.role === 'starosta').length;
   const students = entries.filter(([, u]) => (u.role || 'student') === 'student').length;
   const newUsers30d = entries.filter(([, u]) => u.createdAt && (now - Date.parse(u.createdAt)) <= 30 * 24 * 60 * 60 * 1000).length;
