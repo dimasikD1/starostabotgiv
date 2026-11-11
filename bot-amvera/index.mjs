@@ -359,8 +359,6 @@ async function showRole(ctx) {
 bot.command('role', showRole);
 bot.command('roles', showRole);
 
-// Надёжный алиас для Telegram/клиентов, где команда может приходить как обычный текст.
-bot.hears(/^\\/?roles(?:@\\S+)?(?:\\s+.*)?$/i, showRole);
 bot.hears(/^\\/?role(?:@\\S+)?(?:\\s+.*)?$/i, showRole);
 
 bot.command('setstarosta', async ctx => {
