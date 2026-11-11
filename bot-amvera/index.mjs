@@ -214,7 +214,8 @@ function format(items, group) {
       current = x.date;
       out.push('\n📅 ' + (x.date || 'Дата не указана'));
     }
-    let line = '• ' + (x.time ? x.time + ' — ' : '') + (x.subject || 'Занятие');
+    const lessonTime = x.timeStart && x.timeEnd ? x.timeStart + '–' + x.timeEnd : (x.time || '');
+    let line = '• ' + (lessonTime ? lessonTime + ' — ' : '') + (x.subject || 'Занятие');
     if (x.teacher) line += '\n   👨‍🏫 ' + x.teacher;
     if (x.room) line += '\n   🚪 ' + x.room;
     out.push(line);
