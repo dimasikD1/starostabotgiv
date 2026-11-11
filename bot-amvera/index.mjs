@@ -908,8 +908,8 @@ bot.command('setstarosta', async ctx => {
 bot.command('appointstarosta', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях боту.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу бота.');
-  const targetId = (ctx.message.text || '').replace(/^\\/appointstarosta(?:@\\S+)?/i, '').trim().split(/\\s+/)[0];
-  if (!/^\\d+$/.test(targetId || '')) return ctx.reply('Формат: /appointstarosta TELEGRAM_ID\\nНапример: /appointstarosta 123456789');
+  const targetId = (ctx.message.text || '').replace(/^\/appointstarosta(?:@\S+)?/i, '').trim().split(/\s+/)[0];
+  if (!/^\d+$/.test(targetId || '')) return ctx.reply('Формат: /appointstarosta TELEGRAM_ID\nНапример: /appointstarosta 123456789');
   const target = normalizeUser(user(Number(targetId)));
   target.role = 'starosta';
   saveDb();
@@ -965,17 +965,17 @@ bot.hears('📊 Создать опрос', ctx => {
 });
 
 // Отдельные обработчики кнопок посещаемости.
-bot.action(/^attstudent:(\\d+)$/, async ctx => {
+bot.action(/^attstudent:(\d+)$/, async ctx => {
   if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
   const u = normalizeUser(user(ctx.from.id));
   if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
   const index = Number(ctx.match[1]);
   if (!u.students[index]) return ctx.answerCbQuery('Студент не найден.');
   await ctx.answerCbQuery('Выбери статус');
-  await ctx.editMessageText('📋 <b>Отметка посещаемости</b>\\n\\n' + escapeHtml(studentName(u.students[index])), { parse_mode: 'HTML', ...attendanceStatusButtons(index) });
+  await ctx.editMessageText('📋 <b>Отметка посещаемости</b>\n\n' + escapeHtml(studentName(u.students[index])), { parse_mode: 'HTML', ...attendanceStatusButtons(index) });
 });
 
-bot.action(/^attmark:(\\d+):(present|absent|clear)$/, async ctx => {
+bot.action(/^attmark:(\d+):(present|absent|clear)$/, async ctx => {
   if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
   const u = normalizeUser(user(ctx.from.id));
   if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.answerCbQuery('Только староста.');
