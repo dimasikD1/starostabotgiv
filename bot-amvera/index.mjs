@@ -1083,7 +1083,7 @@ bot.on('text', async (ctx,next) => {
  if(!u.pendingStudentImport)return next();
  const raw=String(ctx.message.text||'').trim();
  if(!raw)return ctx.reply('Пришли ФИО текстом, по одному студенту на строку.');
- if(/^\\/cancel(?:@\\S+)?$/i.test(raw)){delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();return ctx.reply('❌ Импорт отменён.');}
+ if(raw.toLowerCase()==='/cancel'||raw.toLowerCase().startsWith('/cancel@')){delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();return ctx.reply('❌ Импорт отменён.');}
  if(raw.startsWith('/'))return ctx.reply('Сначала пришли список ФИО или отправь /cancel для отмены.');
  const g=managedGroup(ctx.from.id);
  if(!g){delete u.pendingStudentImport;saveDb();return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');}
