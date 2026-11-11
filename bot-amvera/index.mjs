@@ -377,6 +377,7 @@ function homeworkButtons() {
 }
 
 async function startHomework(ctx) {
+  if (!canManageAttendance(user(ctx.from.id), ctx.from.id)) return ctx.reply('❌ Создавать и отправлять ДЗ может староста или заместитель.');
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях с ботом.');
 
   const text = ctx.message?.text?.replace(/^\/(?:дз|homework)(?:@\S+)?/i, '').trim() || '';
@@ -409,6 +410,7 @@ async function startHomework(ctx) {
 }
 
 async function startPoll(ctx) {
+  if (!canManageAttendance(user(ctx.from.id), ctx.from.id)) return ctx.reply('❌ Создавать опросы может староста или заместитель.');
   if (!isPrivate(ctx)) {
     return ctx.reply('🔒 Создание опроса выполняется в личных сообщениях с ботом.');
   }
@@ -1264,37 +1266,31 @@ async function main() {
   // Обновляем список команд в меню Telegram.
   await bot.telegram.setMyCommands([
     { command: 'start', description: 'Запустить бота' },
-    { command: 'help', description: 'Помощь' },
-    { command: 'subscribe', description: 'Оформить подписку' },
-    { command: 'subscription', description: 'Статус подписки' },
-    { command: 'grant', description: 'Выдать подписку пользователю' },
-    { command: 'revoke', description: 'Отозвать подписку' },
-    { command: 'subinfo', description: 'Проверить подписку пользователя' },
-    { command: 'setsubgroup', description: 'Назначить группу с пожизненным доступом' },
-    { command: 'stats', description: 'Статистика владельца' },
-    { command: 'admin', description: 'Панель команд владельца' },
-    { command: 'terms', description: 'Условия использования' },
-    { command: 'paysupport', description: 'Поддержка по оплате' },
-    { command: 'group', description: 'Выбрать учебную группу' },
     { command: 'schedule', description: 'Расписание на сегодня' },
-    { command: 'tomorrow', description: 'Расписание на завтра' },
-    { command: 'week', description: 'Расписание на неделю' },
-    { command: 'role', description: 'Показать свою роль' },
-    { command: 'roles', description: 'Показать свою роль' },
-    { command: 'students', description: 'Список студентов' },
-    { command: 'student', description: 'Добавить студента' },
-    { command: 'delstudent', description: 'Удалить студента' },
-    { command: 'attendance', description: 'Посещаемость' },
-    { command: 'mark', description: 'Отметить посещаемость' },
-    { command: 'starosta', description: 'Назначить себя старостой в группе' },
-    { command: 'zam', description: 'Назначить заместителя старосты' },
-    { command: 'appointstarosta', description: 'Назначить старосту (владелец)' },
-    { command: 'poll', description: 'Создать опрос' },
-    { command: 'setgroup', description: 'Настроить автоопросы в группе' },
-    { command: 'hw', description: 'Создать домашнее задание' }
-  ]);
+    { command: 'group', description: 'Моя учебная группа' },
+    { command: 'hw', description: 'Домашние задания' },
+    { command: 'subscription', description: 'Статус подписки' }
+  ], { scope: { type: 'all_private_chats' } });
 
-  await bot.launch({ dropPendingUpdates: false });
+  await bot.telegram.setMyCommands([
+    { command: 'starosta', description: 'Назначить себя старостой' },
+    { command: 'zam', description: 'Назначить заместителя старосты' },
+    { command: 'setstarosta', description: 'Назначить старосту ответом' },
+    { command: 'setstudent', description: 'Снять роль старосты' },
+    { command: 'setgroup', description: 'Настроить расписание группы' },
+    { command: 'attach', description: 'Подключить группу' },
+    { command: 'detach', description: 'Отключить группу' }
+  ], { scope: { type: 'all_group_chats' } });
+
+  await bot.telegram.setMyCommands([
+    { command: 'admin', description: 'Панель владельца' },
+    { command: 'stats', description: 'Статистика' },
+    { command: 'grant', description: 'Выдать подписку' },
+    { command: 'revoke', description: 'Отозвать подписку' },
+    { command: 'subinfo', description: 'Проверить подписку' }
+  ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } });
+
+  await bot.launch  await bot.launch({ dropPendingUpdates: false });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
 }
