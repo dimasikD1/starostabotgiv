@@ -1249,7 +1249,7 @@ async function main() {
   console.log('Бот запущен: @' + me.username);
 
   // Уведомляем всех пользователей, назначенных старостами, после каждого запуска/перезапуска.
-  const starostas = Object.entries(db.users).filter(([, u]) => u?.role === 'starosta');
+  const starostas = Object.entries(db.users).filter(([, u]) => ['starosta', 'zam'].includes(u?.role));
   for (const [starostaId] of starostas) {
     try {
       await bot.telegram.sendMessage(
@@ -1290,7 +1290,7 @@ async function main() {
     { command: 'subinfo', description: 'Проверить подписку' }
   ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } });
 
-  await bot.launch  await bot.launch({ dropPendingUpdates: false });
+  await bot.launch({ dropPendingUpdates: false });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
 }
