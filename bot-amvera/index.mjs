@@ -1059,6 +1059,21 @@ async function main() {
   const me = await bot.telegram.getMe();
   console.log('Бот запущен: @' + me.username);
 
+  // Уведомляем всех пользователей, назначенных старостами, после каждого запуска/перезапуска.
+  const starostas = Object.entries(db.users).filter(([, u]) => u?.role === 'starosta');
+  for (const [starostaId] of starostas) {
+    try {
+      await bot.telegram.sendMessage(
+        starostaId,
+        '🔄 <b>Староста Бот перезапущен</b>\\n\\nБот снова работает и готов принимать команды.',
+        { parse_mode: 'HTML' }
+      );
+    } catch (e) {
+      console.error('[restart notification] Не удалось уведомить старосту ' + starostaId + ':', e.message || e);
+    }
+  }
+  console.log('[startup] Уведомления отправлены старостам: ' + starostas.length);
+
   // Обновляем список команд в меню Telegram.
   await bot.telegram.setMyCommands([
     { command: 'start', description: 'Запустить бота' },
