@@ -132,6 +132,8 @@ async function subscriptionMiddleware(ctx, next) {
   }
 
   const u = normalizeUser(user(ctx.from.id));
+  // Разрешаем отправить ФИО до проверки подписки, если бот его запросил.
+  if (isPrivate(ctx) && u.pendingFullName && ctx.message?.text && !ctx.message.text.startsWith('/')) return next();
   // При первом сообщении в группе просим выбрать учебную группу.
   if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.group && !String(ctx.message?.text || '').startsWith('/')) {
     await ctx.reply(
@@ -822,14 +824,37 @@ async function handleYooKassaWebhook(req, res) {
 }
 
 bot.start(async ctx => {
-  user(ctx.from.id);
+  const u = normalizeUser(user(ctx.from.id));
   saveDb();
+  if (isPrivate(ctx) && !u.fullName) {
+    u.pendingFullName = true;
+    saveDb();
+    return ctx.reply(
+      '👋 Добро пожаловать! Напиши, пожалуйста, свои фамилию и имя (при наличии — отчество) одним сообщением. Это нужно для списка студентов.'
+    );
+  }
   await ctx.reply(
     '👋 Привет! Я бот расписания.\n\n' +
-    'Укажи группу командой /group ИСП-21.\n\n' +
+    'Твоё ФИО: ' + escapeHtml(u.fullName || 'не указано') + '\n' +
+    'Учебную группу можно выбрать в общей группе или указать командой /group НАЗВАНИЕ.\n\n' +
     '📊 Опросы создаются в личке: /poll Вопрос | Да | Нет',
-    menuFor(ctx)
+    { parse_mode: 'HTML', ...menuFor(ctx) }
   );
+});
+
+bot.on('text', async (ctx, next) => {
+  if (!isPrivate(ctx)) return next();
+  const u = normalizeUser(user(ctx.from.id));
+  if (!u.pendingFullName) return next();
+  const value = (ctx.message.text || '').trim().replace(/\\s+/g, ' ');
+  if (value.startsWith('/')) return next();
+  if (value.split(' ').length < 2 || value.length < 5) {
+    return ctx.reply('Пожалуйста, напиши фамилию и имя. Например: Иванов Иван.');
+  }
+  u.fullName = value;
+  u.pendingFullName = false;
+  saveDb();
+  return ctx.reply('✅ ФИО сохранено: ' + escapeHtml(value) + '\\nСпасибо! Теперь можешь пользоваться ботом.', { parse_mode: 'HTML', ...menuFor(ctx) });
 });
 
 bot.help(ctx => ctx.reply(
