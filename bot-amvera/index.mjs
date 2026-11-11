@@ -1021,7 +1021,7 @@ bot.command('setgroup', async ctx => {
   registerGroup(ctx);
   db.groups[String(ctx.chat.id)].scheduleGroup = scheduleGroup;
   saveDb();
-  return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '». Автоопросы будут отправляться за 10 минут до каждой пары.');
+  return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '». Напоминание приходит за 30 минут, опрос посещаемости — за 10 минут до пары.');
 });
 
 bot.command('attach', async ctx => {
@@ -1359,6 +1359,9 @@ async function main() {
     { command: 'schedule', description: 'Расписание на сегодня' },
     { command: 'group', description: 'Моя учебная группа' },
     { command: 'hw', description: 'Домашние задания' },
+    { command: 'attendance', description: 'Журнал посещаемости' },
+    { command: 'students', description: 'Список студентов группы' },
+    { command: 'pollreport', description: 'Ответы на последний опрос' },
     { command: 'subscription', description: 'Статус подписки' }
   ], { scope: { type: 'all_private_chats' } });
 
