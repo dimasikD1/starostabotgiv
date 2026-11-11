@@ -1090,7 +1090,7 @@ bot.on('text', async (ctx,next) => {
  const names=parseStudentNames(raw);
  if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\\nИванов Иван Иванович\\nПетров Пётр Сергеевич');
  u.pendingStudentImportReview=names;u.pendingStudentImport=false;saveDb();
- const preview=names.map((name,i)=>(i+1)+'. '+escapeHtml(name)).join('\\n');
+ const preview=names.map(name=>escapeHtml(name)).join('\\n');
  return ctx.reply('📝 <b>Проверь список студентов</b>\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Найдено: <b>'+names.length+'</b>\\n\\n'+preview+'\\n\\nПосле подтверждения текущий список группы будет заменён этим списком.',{parse_mode:'HTML',...importPreviewKeyboard()});
 });
 
