@@ -800,7 +800,7 @@ bot.command('students', async ctx => {
 bot.command('student', async ctx => {
   const u = user(ctx.from.id);
   const target = ctx.message.reply_to_message?.from;
-  const name = target ? [target.first_name, target.last_name].filter(Boolean).join(' ') : ctx.message.text.replace(/^\\/student(?:@\\S+)?/i, '').trim();
+  const name = target ? [target.first_name, target.last_name].filter(Boolean).join(' ') : ctx.message.text.replace(/^\/student(?:@\\S+)?/i, '').trim();
   if (target && ['group','supergroup'].includes(ctx.chat.type)) {
     if (u.role !== 'starosta' && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Добавлять студентов может староста или администратор группы.');
     const record = {name: name || ('ID '+target.id), telegramId: String(target.id), username: target.username || ''};
@@ -819,7 +819,7 @@ bot.command('student', async ctx => {
 });
 bot.command('delstudent', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Удаление доступно в личных сообщениях.');
-  const n = Number(ctx.message.text.replace(/^\\/delstudent(?:@\\S+)?/i, '').trim()) - 1;
+  const n = Number(ctx.message.text.replace(/^\/delstudent(?:@\\S+)?/i, '').trim()) - 1;
   const u = user(ctx.from.id);
   if (!Number.isInteger(n) || n < 0 || n >= u.students.length) return ctx.reply('Формат: /delstudent номер из списка /students');
   const removed = u.students.splice(n,1)[0]; saveDb(); return ctx.reply('🗑 Удалён: ' + studentName(removed));
@@ -880,7 +880,7 @@ bot.command('mark', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личке.');
   const u = user(ctx.from.id);
   if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.reply('❌ Только староста.');
-  const p = ctx.message.text.replace(/^\\/mark(?:@\\S+)?/i, '').trim().split(/\\s+/);
+  const p = ctx.message.text.replace(/^\/mark(?:@\\S+)?/i, '').trim().split(/\\s+/);
   const i = Number(p[0])-1, status = p[1] === 'present' ? 'present' : p[1] === 'absent' ? 'absent' : '';
   if (!Number.isInteger(i) || !u.students[i] || !status) return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
   const key=attendanceKey(u.students[i]); u.attendance[key] ||= {}; u.attendance[key][attendanceDate()]=status; saveDb();
