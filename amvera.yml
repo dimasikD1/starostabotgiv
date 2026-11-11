@@ -1,4 +1,3 @@
-# Deploy the Telegram bot from bot-amvera/ when Amvera uses the repository root.
 meta:
   environment: node
   toolchain:
@@ -6,9 +5,8 @@ meta:
     version: 20
 
 build:
-  skip: yes
+  requirements: []
 
 run:
-  scriptName: bot-amvera/index.mjs
+  command: cd bot-amvera && npm start
   persistenceMount: /data
-  containerPort: 80
