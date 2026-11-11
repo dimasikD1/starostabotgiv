@@ -383,6 +383,35 @@ bot.command('paysupport', ctx => ctx.reply(
 ));
 
 bot.on('callback_query', async ctx => {
+  if (ctx.callbackQuery?.data === 'yookassa_check') {
+    await ctx.answerCbQuery('Проверяю платёж…');
+    const u = normalizeUser(user(ctx.from.id));
+    if (!u.pendingYooKassaPaymentId) {
+      await ctx.reply('ℹ️ Ожидаемый платёж не найден. Нажми «💳 Подписка» и создай новый платёж.');
+      return;
+    }
+    try {
+      const payment = await getYooKassaPayment(u.pendingYooKassaPaymentId);
+      console.log('[yookassa:check]', payment.id, payment.status, payment.paid);
+      if (payment.status === 'succeeded' && payment.paid) {
+        const activated = await processYooKassaPayment(payment);
+        if (activated) {
+          await ctx.reply('✅ Платёж подтверждён. Подписка активирована на 30 дней.', menu);
+        } else {
+          await ctx.reply('⚠️ Платёж найден, но не прошёл проверку суммы/назначения. Проверь настройки ЮKassa.');
+        }
+      } else if (payment.status === 'pending') {
+        await ctx.reply('⏳ Платёж ещё не завершён. Если ты уже оплатил, подожди несколько секунд и нажми «🔄 Проверить оплату» ещё раз.');
+      } else {
+        await ctx.reply('❌ Платёж имеет статус: ' + payment.status + '. Создай новый платёж.');
+      }
+    } catch (e) {
+      console.error('[yookassa:check]', e);
+      await ctx.reply('❌ Не удалось проверить платёж: ' + e.message);
+    }
+    return;
+  }
+
   if (ctx.callbackQuery?.data === 'subscribe_card') {
     if (!isPrivate(ctx)) {
       await ctx.answerCbQuery('Оплата картой доступна в личке.');
@@ -398,8 +427,11 @@ bot.on('callback_query', async ctx => {
         '💳 <b>Оплата банковской картой</b>\\n\\n' +
         'Сумма: <b>' + SUBSCRIPTION_RUB + ' ₽</b>\\n' +
         'Срок: <b>30 дней</b>\\n\\n' +
-        'После успешной оплаты подписка активируется автоматически.',
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('💳 Перейти к оплате', payment.confirmation.confirmation_url)]]) }
+        'После оплаты нажми «🔄 Проверить оплату».',
+        { parse_mode: 'HTML', ...Markup.inlineKeyboard([
+          [Markup.button.url('💳 Перейти к оплате', payment.confirmation.confirmation_url)],
+          [Markup.button.callback('🔄 Проверить оплату', 'yookassa_check')]
+        ]) }
       );
     } catch (e) {
       console.error('[yookassa:create]', e);
@@ -452,6 +484,22 @@ bot.on('successful_payment', async ctx => {
     { parse_mode: 'HTML', ...menu }
   );
 });
+
+async function getYooKassaPayment(paymentId) {
+  if (!yookassaConfigured()) throw new Error('ЮKassa не настроена.');
+  const response = await fetch('https://api.yookassa.ru/v3/payments/' + encodeURIComponent(paymentId), {
+    method: 'GET',
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(YOOKASSA_SHOP_ID + ':' + YOOKASSA_SECRET_KEY).toString('base64'),
+      'Content-Type': 'application/json'
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error('ЮKassa GET: ' + (data.description || data.message || ('HTTP ' + response.status)));
+  }
+  return data;
+}
 
 async function processYooKassaPayment(payment) {
   if (!payment || payment.status !== 'succeeded' || !payment.paid) return false;
