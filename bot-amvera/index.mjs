@@ -102,10 +102,12 @@ function subscriptionMiddleware(ctx, next) {
   const text = ctx.message?.text || '';
   const command = text.split(/\s+/)[0].replace(/^\//, '').replace(/@.*$/, '').toLowerCase();
 
-  // Служебные платежные обновления Telegram должны проходить всегда.
+  // Платёжные обновления Telegram должны проходить до paywall.
+  // successful_payment приходит как message с полем successful_payment,
+  // поэтому проверка только ctx.updateType === 'successful_payment' не срабатывает.
   if (
     ctx.updateType === 'pre_checkout_query' ||
-    ctx.updateType === 'successful_payment' ||
+    ctx.message?.successful_payment ||
     (ctx.updateType === 'callback_query' && ['subscribe', 'subscribe_card'].includes(ctx.callbackQuery?.data))
   ) return next();
 
