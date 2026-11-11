@@ -1113,8 +1113,8 @@ bot.command('zam', async ctx => {
   if (starostaId && String(starostaId) !== String(target.id)) {
     const starostaUser = normalizeUser(user(starostaId));
     const group = db.groups[String(ctx.chat.id)];
-    group.students ||= JSON.parse(JSON.stringify(starostaUser.students || []));
-    group.attendance ||= JSON.parse(JSON.stringify(starostaUser.attendance || {}));
+    if (!group.students.length) group.students = JSON.parse(JSON.stringify(starostaUser.students || []));
+    if (!Object.keys(group.attendance || {}).length) group.attendance = JSON.parse(JSON.stringify(starostaUser.attendance || {}));
   }
   saveDb();
   return ctx.reply('⭐ ' + (target.first_name || 'Пользователь') + ' назначен(а) заместителем старосты. Доступны функции старосты.', studentMenu);
@@ -1300,10 +1300,9 @@ bot.hears('👥 Группы', ctx => {
 });
 bot.hears('📋 Посещаемость', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
-  const u = normalizeUser(user(ctx.from.id));
-  if (!canManageAttendance(u, ctx.from.id)) return ctx.reply('❌ Журнал посещаемости доступен старосте.');
-  if (!u.students.length) return ctx.reply('Список пуст. Добавь студентов ответом на их сообщения в группе командой /student.');
-  return ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
+  const g = managedGroup(ctx.from.id);
+  if (!g) return ctx.reply('❌ Журнал доступен старосте или заместителю прикреплённой группы.');
+  return ctx.reply(formatAttendance(g), { parse_mode: 'HTML', ...attendanceButtons(g) });
 });
 bot.hears('💳 Подписка', ctx => {
   const u = normalizeUser(user(ctx.from.id));
