@@ -1,19 +1,11 @@
-# Пустой Telegram-бот
+# Starosta Bot
 
-Бот отвечает на любое сообщение одной фразой и больше ничего не делает. Токен берётся из `TELEGRAM_BOT_TOKEN`.
+Telegram-бот с расписанием.
 
-Если к Amvera подключён весь репозиторий, корневой `amvera.yml` запускает `bot-amvera/index.mjs`. Если загружаете только эту папку, используется локальный `amvera.yml` и команда `npm start`.
+Команды: /start, /help, /group, /schedule, /tomorrow, /week.
 
-## Локально
+Токен задаётся через TELEGRAM_BOT_TOKEN.
+Данные пользователей сохраняются в /data/users.json.
 
-```bash
-cp .env.example .env
-# впишите TELEGRAM_BOT_TOKEN
-npm start
-```
-
-## Amvera
-
-1. В переменных проекта задайте `TELEGRAM_BOT_TOKEN`.
-2. Соберите проект. Бот работает в режиме long polling.
-3. Если тип проекта — приложение, health-check отвечает на `PORT`.
+Источник расписания:
+https://new-schedule.ruc.su/schedule
