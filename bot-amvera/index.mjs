@@ -32,15 +32,44 @@ const menu = Markup.keyboard([
   ['📅 Сегодня', '📅 Завтра'],
   ['🗓 Неделя', '👥 Моя группа'],
   ['📊 Создать опрос', '📚 Создать ДЗ'],
-  ['👨‍🎓 Список студентов'],
+  ['👨‍🎓 Список студентов', '📋 Посещаемость'],
   ['👥 Группы'],
   ['🔄 Обновить', 'ℹ️ Помощь']
 ]).resize();
 
 function user(id) {
   const key = String(id);
-  db.users[key] ||= { group: '', pendingPoll: null, pendingHomework: null, students: [] };
+  db.users[key] ||= { group: '', role: 'student', pendingPoll: null, pendingHomework: null, students: [], attendance: {} };
   return db.users[key];
+}
+
+function normalizeUser(u) {
+  u.role ||= 'student';
+  u.students ||= [];
+  u.attendance ||= {};
+  return u;
+}
+
+function roleLabel(role) {
+  return role === 'starosta' ? '👑 Староста' : '👨‍🎓 Студент';
+}
+
+function formatAttendance(u) {
+  const all = [];
+  for (const [student, dates] of Object.entries(u.attendance || {})) {
+    for (const [date, status] of Object.entries(dates || {})) {
+      all.push({ student, date, status });
+    }
+  }
+  if (!all.length) return '📋 <b>Посещаемость</b>\\n\\nПока нет отметок.';
+  const present = all.filter(x => x.status === 'present').length;
+  const absent = all.filter(x => x.status === 'absent').length;
+  return '📋 <b>Посещаемость</b>\\n\\n' +
+    '👨‍🎓 Студентов: ' + u.students.length + '\\n' +
+    '✅ Присутствий: ' + present + '\\n' +
+    '❌ Отсутствий: ' + absent + '\\n' +
+    '📊 Отметок: ' + all.length + '\\n\\n' +
+    all.slice(-20).reverse().map(x => (x.status === 'present' ? '✅ ' : '❌ ') + x.date + ' — ' + escapeHtml(x.student)).join('\\n');
 }
 
 function format(items, group) {
@@ -109,6 +138,23 @@ function escapeHtml(value) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function attendanceButtons(u) {
+  const buttons = [];
+  for (let i = 0; i < u.students.length; i++) {
+    buttons.push([Markup.button.callback('👨‍🎓 ' + String(u.students[i]).slice(0, 35), 'attstudent:' + i)]);
+  }
+  return buttons;
+}
+
+function attendanceStatusButtons(index) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('✅ Был', 'attmark:' + index + ':present'),
+      Markup.button.callback('❌ Не был', 'attmark:' + index + ':absent')
+    ]
+  ]);
 }
 
 function studentButtons() {
@@ -226,7 +272,7 @@ bot.help(ctx => ctx.reply(
   '/groups — список прикреплённых групп\n' +
   '/students — список студентов\n' +
   '/student — добавить студента\n' +
-  '/delstudent — удалить студента\n\n' + +
+  '/delstudent — удалить студента\n\n' +
   'В учебной группе администратор может выполнить /attach, чтобы прикрепить её к боту для отправки опросов.',
   menu
 ));
@@ -296,6 +342,68 @@ bot.hears('👨‍🎓 Список студентов', ctx => {
   return ctx.reply('👨‍🎓 Чтобы посмотреть список, используй /students.\n\nДобавить: /student Имя Фамилия\nУдалить: /delstudent номер');
 });
 
+bot.command('role', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Роль настраивается в личных сообщениях или через администратора группы.');
+  const value = ctx.message.text.replace(/^\\/role(?:@\\S+)?/i, '').trim().toLowerCase();
+  const u = normalizeUser(user(ctx.from.id));
+  if (!value) return ctx.reply('Твоя роль: ' + roleLabel(u.role) + '\\n\\nСтатус старосты назначает администратор группы.');
+  if (value !== 'student') return ctx.reply('❌ Самостоятельно назначить себя старостой нельзя. Это делает администратор группы.');
+  u.role = 'student';
+  saveDb();
+  await ctx.reply('✅ Роль установлена: 👨‍🎓 Студент', menu);
+});
+
+bot.command('setstarosta', async ctx => {
+  if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
+  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначать старосту может только администратор группы.');
+  const target = ctx.message.reply_to_message?.from;
+  if (!target) return ctx.reply('Ответь командой /setstarosta на сообщение нужного человека.');
+  const u = normalizeUser(user(target.id));
+  u.role = 'starosta';
+  u.group = ctx.chat.title || u.group;
+  db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
+  db.groups[String(ctx.chat.id)].starostaId = target.id;
+  saveDb();
+  await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой.');
+});
+
+bot.command('setstudent', async ctx => {
+  if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
+  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Менять роль может только администратор группы.');
+  const target = ctx.message.reply_to_message?.from;
+  if (!target) return ctx.reply('Ответь командой /setstudent на сообщение нужного человека.');
+  const u = normalizeUser(user(target.id));
+  u.role = 'student';
+  saveDb();
+  await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' теперь отмечен как студент.');
+});
+
+bot.command('attendance', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
+  const u = normalizeUser(user(ctx.from.id));
+  if (u.role === 'starosta' && u.students.length) {
+    return ctx.reply('📋 Выбери студента для отметки посещаемости:', Markup.inlineKeyboard(attendanceButtons(u)));
+  }
+  await ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...menu });
+});
+
+bot.command('mark', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Отметки посещаемости делаются в личных сообщениях.');
+  const u = normalizeUser(user(ctx.from.id));
+  if (u.role !== 'starosta') return ctx.reply('❌ Только староста может отмечать посещаемость.');
+  const parts = ctx.message.text.replace(/^\\/mark(?:@\\S+)?/i, '').trim().split(/\\s+/);
+  const index = Number(parts[0]) - 1;
+  const status = parts[1] === 'absent' ? 'absent' : parts[1] === 'present' ? 'present' : '';
+  if (!Number.isInteger(index) || index < 0 || index >= u.students.length || !status) {
+    return ctx.reply('Пример: /mark 3 present\\nили: /mark 3 absent');
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  u.attendance[u.students[index]] ||= {};
+  u.attendance[u.students[index]][today] = status;
+  saveDb();
+  await ctx.reply((status === 'present' ? '✅' : '❌') + ' ' + u.students[index] + ' — отметка сохранена за ' + today);
+});
+
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
@@ -323,7 +431,33 @@ bot.hears('📊 Создать опрос', ctx => {
 
 bot.on('callback_query', async ctx => {
   const data = ctx.callbackQuery?.data || '';
-  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:')) return;
+  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:') && !data.startsWith('attstudent:') && !data.startsWith('attmark:')) return;
+
+  const isAttendanceStudent = data.startsWith('attstudent:');
+  const isAttendanceMark = data.startsWith('attmark:');
+  if (isAttendanceStudent || isAttendanceMark) {
+    if (!isPrivate(ctx)) { await ctx.answerCbQuery('Только в личке.'); return; }
+    const u = normalizeUser(user(ctx.from.id));
+    if (u.role !== 'starosta') { await ctx.answerCbQuery('Только староста.'); return; }
+    if (isAttendanceStudent) {
+      const index = Number(data.slice('attstudent:'.length));
+      if (!Number.isInteger(index) || !u.students[index]) { await ctx.answerCbQuery('Студент не найден.'); return; }
+      await ctx.answerCbQuery('Выберите статус');
+      await ctx.editMessageText('📋 Отметить посещаемость:\\n\\n👨‍🎓 ' + u.students[index], attendanceStatusButtons(index));
+      return;
+    }
+    const parts = data.slice('attmark:'.length).split(':');
+    const index = Number(parts[0]);
+    const status = parts[1];
+    if (!u.students[index] || !['present','absent'].includes(status)) { await ctx.answerCbQuery('Ошибка.'); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    u.attendance[u.students[index]] ||= {};
+    u.attendance[u.students[index]][today] = status;
+    saveDb();
+    await ctx.answerCbQuery('Сохранено');
+    await ctx.editMessageText((status === 'present' ? '✅' : '❌') + ' ' + u.students[index] + ' — ' + today);
+    return;
+  }
 
   const isStudentList = data.startsWith('students:');
   const isHomework = data.startsWith('hwsend:');
@@ -404,6 +538,12 @@ bot.hears('👥 Группы', ctx => {
     groups.length ? '👥 Прикреплено групп: ' + groups.length + '\n' + groups.map(g => '• ' + g.title).join('\n') : 'Нет прикреплённых групп.',
     menu
   );
+});
+bot.hears('📋 Посещаемость', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
+  const u = normalizeUser(user(ctx.from.id));
+  if (u.role === 'starosta' && u.students.length) return ctx.reply('📋 Выбери студента для отметки:', Markup.inlineKeyboard(attendanceButtons(u)));
+  return ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...menu });
 });
 bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
 bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются через /poll, а ДЗ — через /дз. Перед отправкой бот даст выбрать группу.', menu));
