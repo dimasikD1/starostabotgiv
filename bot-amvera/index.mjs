@@ -497,7 +497,6 @@ async function showRole(ctx) {
 bot.command('role', showRole);
 bot.command('roles', showRole);
 
-bot.hears(/^\\/?role(?:@\\S+)?(?:\\s+.*)?$/i, showRole);
 
 bot.command('setstarosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
