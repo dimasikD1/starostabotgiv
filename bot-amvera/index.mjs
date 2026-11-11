@@ -187,13 +187,13 @@ async function startHomework(ctx) {
   if (!text) {
     return ctx.reply(
       '📚 Создание домашнего задания\n\n' +
-      'Формат:\n/дз Предмет | Домашнее задание\n\n' +
-      'Пример:\n/дз Математика | Решить задачи 1–10 на странице 25'
+      'Формат:\n/hw Предмет | Домашнее задание\n\n' +
+      'Пример:\n/hw Математика | Решить задачи 1–10 на странице 25'
     );
   }
 
   const parts = text.split('|').map(x => x.trim()).filter(Boolean);
-  if (parts.length < 2) return ctx.reply('❌ Укажи предмет и задание через |\nПример: /дз Математика | Решить задачи 1–10');
+  if (parts.length < 2) return ctx.reply('❌ Укажи предмет и задание через |\nПример: /hw Математика | Решить задачи 1–10');
 
   const subject = parts.shift();
   const homework = parts.join(' | ');
@@ -268,7 +268,7 @@ bot.help(ctx => ctx.reply(
   '/tomorrow — завтра\n' +
   '/week — неделя\n' +
   '/poll — создать опрос в личке\n' +
-  '/дз — создать ДЗ и отправить в группу\n' +
+  '/hw — создать ДЗ и отправить в группу\n' +
   '/groups — список прикреплённых групп\n' +
   '/students — список студентов\n' +
   '/student — добавить студента\n' +
@@ -428,11 +428,11 @@ bot.command('students', async ctx => {
   if (!u.students?.length) return ctx.reply('👨‍🎓 Список студентов пуст. Добавить: /student Иван Иванов');
   await ctx.reply('👨‍🎓 Список студентов:\n\n' + u.students.map((s,i)=>(i+1)+'. '+s).join('\n'));
 });
-bot.command('дз', startHomework);
+bot.command('hw', startHomework);
 bot.command('homework', startHomework);
 bot.hears('📚 Создать ДЗ', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях.');
-  return ctx.reply('Напиши ДЗ командой:\n/дз Предмет | Домашнее задание');
+  return ctx.reply('Напиши ДЗ командой:\n/hw Предмет | Домашнее задание');
 });
 bot.hears('📊 Создать опрос', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание опроса выполняется в личных сообщениях.');
@@ -591,7 +591,7 @@ async function main() {
     { command: 'attendance', description: 'Посещаемость' },
     { command: 'mark', description: 'Отметить посещаемость' },
     { command: 'poll', description: 'Создать опрос' },
-    { command: 'дз', description: 'Создать домашнее задание' }
+    { command: 'hw', description: 'Создать домашнее задание' }
   ]);
 
   await bot.launch({ dropPendingUpdates: false });
