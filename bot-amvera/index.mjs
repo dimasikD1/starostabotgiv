@@ -1228,11 +1228,14 @@ async function main() {
     { command: 'attendance', description: 'Посещаемость' },
     { command: 'mark', description: 'Отметить посещаемость' },
     { command: 'appointstarosta', description: 'Назначить старосту (владелец)' },
-    { command: 'poll', description: 'Создать опрос' },\n    { command: 'setgroup', description: 'Настроить автоопросы в группе' },
+    { command: 'poll', description: 'Создать опрос' },
+    { command: 'setgroup', description: 'Настроить автоопросы в группе' },
     { command: 'hw', description: 'Создать домашнее задание' }
   ]);
 
-  await bot.launch({ dropPendingUpdates: false });\n  await checkAutomaticAttendancePolls();\n  setInterval(checkAutomaticAttendancePolls, 30000).unref();
+  await bot.launch({ dropPendingUpdates: false });
+  await checkAutomaticAttendancePolls();
+  setInterval(checkAutomaticAttendancePolls, 30000).unref();
 }
 
 function shutdown(signal) {
