@@ -1105,10 +1105,34 @@ bot.on('text', async (ctx,next) => {
  return ctx.reply('📝 <b>Проверь список студентов</b>\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Найдено: <b>'+names.length+'</b>\\n\\n'+preview+'\\n\\nПосле подтверждения текущий список группы будет заменён этим списком.',{parse_mode:'HTML',...importPreviewKeyboard()});
 });
 
+function formatStudentList(g) {
+ const students=g.students||[];
+ const lines=students.map((s,i)=>{
+  const name=typeof s==='string'?s:String(s?.name||'Без имени');
+  const username=typeof s==='object'&&s?.username?'@'+String(s.username).replace(/^@/,''):'не указан';
+  const id=typeof s==='object'&&s?.telegramId?String(s.telegramId):'';
+  const safeName=escapeHtml(name);
+  const linkedName=id&&/^\\d+$/.test(id)?'<a href="tg://user?id='+id+'">'+safeName+'</a>':safeName;
+  return '<b>'+(i+1)+'.</b> '+linkedName+'\\n   🔹 Username: '+escapeHtml(username)+(id?'\\n   🆔 ID: <code>'+escapeHtml(id)+'</code>':'');
+ });
+ return '👥 <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Всего студентов: <b>'+students.length+'</b>\\n\\n'+lines.join('\\n\\n')+'\\n\\n➖ Удалить студента: <code>/delstudent номер</code>';
+}
 bot.command('students',async ctx=>{
- if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
- if(!g.students.length)return ctx.reply('Список группы пуст. Добавь студентов ответом на сообщение в группе командой /student.');
- return ctx.reply('👨‍🎓 <b>'+escapeHtml(g.title)+' ('+g.students.length+')</b>\\n\\n'+g.students.map(x=>escapeHtml(studentName(x))).join('\\n')+'\\n\\nУдалить: /delstudent номер',{parse_mode:'HTML'});
+ if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
+ const g=managedGroup(ctx.from.id);
+ if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
+ if(!g.students.length)return ctx.reply('📋 Список группы пока пуст. Добавь студента командой /student или загрузи список через /importstudents.');
+ const result=formatStudentList(g);
+ if(result.length<=3900)return ctx.reply(result,{parse_mode:'HTML',disable_web_page_preview:true});
+ const header='👥 <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Всего студентов: <b>'+g.students.length+'</b>';
+ await ctx.reply(header,{parse_mode:'HTML'});
+ let chunk='';
+ for(const line of result.split('\\n\\n').slice(2)){
+  if((chunk+'\\n\\n'+line).length>3500&&chunk){await ctx.reply(chunk,{parse_mode:'HTML',disable_web_page_preview:true});chunk='';}
+  chunk+=(chunk?'\\n\\n':'')+line;
+ }
+ if(chunk)await ctx.reply(chunk,{parse_mode:'HTML',disable_web_page_preview:true});
+ return ctx.reply('➖ Удалить студента: <code>/delstudent номер</code>',{parse_mode:'HTML'});
 });
 bot.command('student',async ctx=>{
  const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):ctx.message.text.replace(/^\/student(?:@\S+)?/i,'').trim();
@@ -1289,7 +1313,7 @@ bot.on('callback_query', async ctx => {
     const g = db.groups[groupId];
     if (!g) { await ctx.answerCbQuery('Группа не найдена.'); return; }
     const students=g.students||[];if(!students.length){await ctx.answerCbQuery('Список группы пуст.');return;}
-    await ctx.answerCbQuery('Готово');await ctx.editMessageText('👨‍🎓 Список студентов для «'+escapeHtml(g.title)+'»:\n\n'+students.map((x,i)=>(i+1)+'. '+escapeHtml(studentName(x))).join('\n'));
+    await ctx.answerCbQuery('Готово');await ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',disable_web_page_preview:true});
     return;
   }
 
