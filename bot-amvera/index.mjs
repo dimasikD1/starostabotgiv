@@ -235,18 +235,15 @@ function studentName(s) {
 }
 function attendanceKey(s) { return typeof s === 'string' ? s : (s.telegramId || s.name); }
 function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn' }).format(new Date()); }
-function formatAttendance(u) {
-  if (!u.students?.length) return '📋 <b>Посещаемость</b>\\n\\nСписок пуст. Добавь студентов ответом на их сообщение в группе командой /student.';
-  const today = attendanceDate();
-  let present = 0, absent = 0, unmarked = 0;
-  const lines = u.students.map((s, i) => {
-    const status = u.attendance?.[attendanceKey(s)]?.[today];
-    if (status === 'present') present++; else if (status === 'absent') absent++; else unmarked++;
-    return (i + 1) + '. ' + (status === 'present' ? '✅ ' : status === 'absent' ? '❌ ' : '▫️ ') + escapeHtml(studentName(s));
-  });
-  return '📋 <b>Посещаемость за ' + today + '</b>\\n\\n👨‍🎓 Всего: <b>' + u.students.length +
-    '</b>\\n✅ Были: <b>' + present + '</b>\\n❌ Не были: <b>' + absent +
-    '</b>\\n▫️ Не отмечены: <b>' + unmarked + '</b>\\n\\n' + lines.join('\\n');
+function managedGroup(userId) {
+ const id=String(userId),u=normalizeUser(user(id));let g=Object.values(db.groups).find(x=>String(x.starostaId||'')===id||String(x.zamId||'')===id);
+ if(!g&&isManagerRole(u))g=Object.values(db.groups).find(x=>x.title===u.group||x.scheduleGroup===u.group);if(!g)return null;
+ g.students||=[];g.attendance||={};if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}return g;
+}
+function formatAttendance(g) {
+ const students=g?.students||[],attendance=g?.attendance||{};if(!students.length)return '📋 <b>Посещаемость</b>\\n\\nСписок группы пуст. Добавь студентов командой /student.';
+ const today=attendanceDate();let present=0,absent=0,unmarked=0;const lines=students.map((x,i)=>{const st=attendance[attendanceKey(x)]?.[today];if(st==='present')present++;else if(st==='absent')absent++;else unmarked++;return (i+1)+'. '+(st==='present'?'✅ ':st==='absent'?'❌ ':'▫️ ')+escapeHtml(studentName(x));});
+ return '📋 <b>Посещаемость за '+today+'</b>\\n👥 <b>'+escapeHtml(g.title)+'</b>\\n\\n👨‍🎓 Всего: <b>'+students.length+'</b>\\n✅ Были: <b>'+present+'</b>\\n❌ Не были: <b>'+absent+'</b>\\n▫️ Не отмечены: <b>'+unmarked+'</b>\\n\\n'+lines.join('\\n');
 }
 
 function format(items, group) {
@@ -358,14 +355,7 @@ async function isGroupAdmin(ctx) {
 }
 
 function registerGroup(ctx) {
-  const id = String(ctx.chat.id);
-  db.groups[id] = {
-    chatId: ctx.chat.id,
-    title: ctx.chat.title || 'Группа без названия',
-    addedBy: ctx.from.id,
-    addedAt: new Date().toISOString()
-  };
-  saveDb();
+ const id=String(ctx.chat.id),old=db.groups[id]||{};db.groups[id]={...old,chatId:ctx.chat.id,title:ctx.chat.title||old.title||'Группа без названия',addedBy:old.addedBy||ctx.from.id,addedAt:old.addedAt||new Date().toISOString(),students:old.students||[],attendance:old.attendance||{}};saveDb();
 }
 
 function removeGroup(ctx) {
@@ -380,10 +370,8 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;');
 }
 
-function attendanceButtons(u) {
-  const rows = (u.students || []).map((s, i) => [Markup.button.callback(('👨‍🎓 ' + studentName(s)).slice(0, 60), 'attstudent:' + i)]);
-  rows.push([Markup.button.callback('📊 Сводка за сегодня', 'attsummary')]);
-  return Markup.inlineKeyboard(rows);
+function attendanceButtons(g) {
+ const rows=(g.students||[]).map((x,i)=>[Markup.button.callback(('👨‍🎓 '+studentName(x)).slice(0,60),'attstudent:'+i)]);rows.push([Markup.button.callback('📊 Сводка за сегодня','attsummary')]);return Markup.inlineKeyboard(rows);
 }
 function attendanceStatusButtons(index) {
   return Markup.inlineKeyboard([
@@ -994,38 +982,25 @@ bot.command('detach', async ctx => {
   await ctx.reply('✅ Группа откреплена от рассылки опросов.');
 });
 
-bot.command('students', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
-  const u = user(ctx.from.id);
-  if (!u.students?.length) return ctx.reply('Список пуст. Чтобы добавить с username, ответь в группе на сообщение студента командой /student.');
-  await ctx.reply('👨‍🎓 <b>Студенты (' + u.students.length + ')</b>\\n\\n' + u.students.map((s,i)=>(i+1)+'. '+escapeHtml(studentName(s))).join('\\n') + '\\n\\nУдалить: /delstudent номер', {parse_mode:'HTML'});
+bot.command('students',async ctx=>{
+ if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
+ if(!g.students.length)return ctx.reply('Список группы пуст. Добавь студентов ответом на сообщение в группе командой /student.');
+ return ctx.reply('👨‍🎓 <b>'+escapeHtml(g.title)+' ('+g.students.length+')</b>\\n\\n'+g.students.map((x,i)=>(i+1)+'. '+escapeHtml(studentName(x))).join('\\n')+'\\n\\nУдалить: /delstudent номер',{parse_mode:'HTML'});
 });
-bot.command('student', async ctx => {
-  const u = user(ctx.from.id);
-  const target = ctx.message.reply_to_message?.from;
-  const name = target ? [target.first_name, target.last_name].filter(Boolean).join(' ') : ctx.message.text.replace(/^\/student(?:@\\S+)?/i, '').trim();
-  if (target && ['group','supergroup'].includes(ctx.chat.type)) {
-    if (!isManagerRole(u) && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Добавлять студентов может староста или администратор группы.');
-    const record = {name: name || ('ID '+target.id), telegramId: String(target.id), username: target.username || ''};
-    const at = u.students.findIndex(x => String(typeof x === 'object' ? x.telegramId : '') === record.telegramId);
-    if (at >= 0) u.students[at] = record;
-    else if (u.students.length < 100) u.students.push(record);
-    else return ctx.reply('❌ Максимум 100 студентов.');
-    saveDb();
-    return ctx.reply('✅ Добавлен: ' + studentName(record) + '. Полный список: /students в личке.');
-  }
-  if (!isPrivate(ctx)) return ctx.reply('Ответь в группе на сообщение студента командой /student, чтобы сохранить username.');
-  if (!name) return ctx.reply('Формат: /student Имя Фамилия');
-  if (u.students.some(x => studentName(x).toLowerCase() === name.toLowerCase())) return ctx.reply('ℹ️ Такой студент уже есть.');
-  if (u.students.length >= 100) return ctx.reply('❌ Максимум 100 студентов.');
-  u.students.push(name); saveDb(); return ctx.reply('✅ Добавлен: ' + name);
+bot.command('student',async ctx=>{
+ const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):ctx.message.text.replace(/^\/student(?:@\S+)?/i,'').trim();
+ if(target&&['group','supergroup'].includes(ctx.chat.type)){const g=db.groups[String(ctx.chat.id)];if(!g)return ctx.reply('Сначала администратор должен выполнить /attach.');
+ if(String(g.starostaId||'')!==String(ctx.from.id)&&String(g.zamId||'')!==String(ctx.from.id)&&!(await isGroupAdmin(ctx))&&!isOwner(ctx.from.id))return ctx.reply('❌ Добавлять студентов может староста или администратор.');
+ g.students||=[];g.attendance||={};const rec={name:name||('ID '+target.id),telegramId:String(target.id),username:target.username||''};const i=g.students.findIndex(x=>String(typeof x==='object'?x.telegramId:'')===rec.telegramId);
+ if(i>=0)g.students[i]=rec;else if(g.students.length<100)g.students.push(rec);else return ctx.reply('❌ Максимум 100 студентов.');saveDb();return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+studentName(rec));}
+ if(!isPrivate(ctx))return ctx.reply('Ответь в группе на сообщение студента командой /student.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Сначала назначь старосту в прикреплённой группе.');
+ if(!name)return ctx.reply('Формат: /student Имя Фамилия');if(g.students.some(x=>studentName(x).toLowerCase()===name.toLowerCase()))return ctx.reply('ℹ️ Такой студент уже есть.');
+ if(g.students.length>=100)return ctx.reply('❌ Максимум 100 студентов.');g.students.push(name);saveDb();return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+name);
 });
-bot.command('delstudent', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Удаление доступно в личных сообщениях.');
-  const n = Number(ctx.message.text.replace(/^\/delstudent(?:@\\S+)?/i, '').trim()) - 1;
-  const u = user(ctx.from.id);
-  if (!Number.isInteger(n) || n < 0 || n >= u.students.length) return ctx.reply('Формат: /delstudent номер из списка /students');
-  const removed = u.students.splice(n,1)[0]; saveDb(); return ctx.reply('🗑 Удалён: ' + studentName(removed));
+bot.command('delstudent',async ctx=>{
+ if(!isPrivate(ctx))return ctx.reply('📩 Удаление доступно в личных сообщениях.');const n=Number(ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i,'').trim())-1,g=managedGroup(ctx.from.id);
+ if(!g)return ctx.reply('❌ Не найдена твоя прикреплённая группа.');if(!Number.isInteger(n)||n<0||n>=g.students.length)return ctx.reply('Формат: /delstudent номер из списка /students');
+ const removed=g.students.splice(n,1)[0];saveDb();return ctx.reply('🗑 Удалён: '+studentName(removed));
 });
 bot.hears('👨‍🎓 Список студентов', ctx => ctx.reply('Используй /students. Добавить с username: ответь в группе на сообщение студента командой /student.'));
 
@@ -1057,7 +1032,7 @@ bot.command('starosta', async ctx => {
   u.role = 'starosta';
   u.username = ctx.from.username || u.username || '';
   u.group = ctx.chat.title || u.group;
-  db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
+  registerGroup(ctx);
   db.groups[String(ctx.chat.id)].starostaId = ctx.from.id;
   saveDb();
   return ctx.reply('👑 ' + (ctx.from.first_name || 'Пользователь') + ' назначил(а) себя старостой этой группы. Теперь доступны команды посещаемости.', studentMenu);
@@ -1071,13 +1046,14 @@ bot.command('zam', async ctx => {
   u.role = 'zam';
   u.username = target.username || u.username || '';
   u.group = ctx.chat.title || u.group;
-  db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
+  registerGroup(ctx);
   db.groups[String(ctx.chat.id)].zamId = target.id;
   const starostaId = db.groups[String(ctx.chat.id)].starostaId;
   if (starostaId && String(starostaId) !== String(target.id)) {
     const starostaUser = normalizeUser(user(starostaId));
-    u.students = JSON.parse(JSON.stringify(starostaUser.students || []));
-    u.attendance = JSON.parse(JSON.stringify(starostaUser.attendance || {}));
+    const group = db.groups[String(ctx.chat.id)];
+    group.students ||= JSON.parse(JSON.stringify(starostaUser.students || []));
+    group.attendance ||= JSON.parse(JSON.stringify(starostaUser.attendance || {}));
   }
   saveDb();
   return ctx.reply('⭐ ' + (target.first_name || 'Пользователь') + ' назначен(а) заместителем старосты. Доступны функции старосты.', studentMenu);
@@ -1092,7 +1068,7 @@ bot.command('setstarosta', async ctx => {
   u.role = 'starosta';
   u.username = target.username || u.username || '';
   u.group = ctx.chat.title || u.group;
-  db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
+  registerGroup(ctx);
   db.groups[String(ctx.chat.id)].starostaId = target.id;
   saveDb();
   await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой.');
@@ -1120,24 +1096,16 @@ bot.command('setstudent', async ctx => {
   await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' теперь отмечен как студент.');
 });
 
-bot.command('attendance', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
-  const u = user(ctx.from.id);
-  if (!canManageAttendance(u, ctx.from.id)) return ctx.reply('❌ Журнал доступен старосте.');
-  if (!u.students.length) return ctx.reply('Сначала добавь студентов ответом на их сообщения в группе: /student.');
-  return ctx.reply(formatAttendance(u), {parse_mode:'HTML', ...attendanceButtons(u)});
+bot.command('attendance',async ctx=>{
+ if(!isPrivate(ctx))return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
+ return ctx.reply(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
 });
-bot.command('mark', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личке.');
-  const u = user(ctx.from.id);
-  if (!canManageAttendance(u, ctx.from.id)) return ctx.reply('❌ Только староста.');
-  const p = ctx.message.text.replace(/^\/mark(?:@\\S+)?/i, '').trim().split(/\\s+/);
-  const i = Number(p[0])-1, status = p[1] === 'present' ? 'present' : p[1] === 'absent' ? 'absent' : '';
-  if (!Number.isInteger(i) || !u.students[i] || !status) return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
-  const key=attendanceKey(u.students[i]); u.attendance[key] ||= {}; u.attendance[key][attendanceDate()]=status; saveDb();
-  return ctx.reply('✅ Отметка сохранена: '+studentName(u.students[i]));
+bot.command('mark',async ctx=>{
+ if(!isPrivate(ctx))return ctx.reply('📩 Используй команду в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Только староста или заместитель.');
+ const p=ctx.message.text.replace(/^\/mark(?:@\S+)?/i,'').trim().split(/\s+/),i=Number(p[0])-1,status=p[1]==='present'?'present':p[1]==='absent'?'absent':'';
+ if(!Number.isInteger(i)||!g.students[i]||!status)return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
+ const k=attendanceKey(g.students[i]);g.attendance[k]||={};g.attendance[k][attendanceDate()]=status;saveDb();return ctx.reply('✅ Отметка сохранена: '+studentName(g.students[i]));
 });
-
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
@@ -1168,39 +1136,21 @@ bot.hears('📊 Создать опрос', ctx => {
 });
 
 // Отдельные обработчики кнопок посещаемости.
-bot.action(/^attstudent:(\d+)$/, async ctx => {
-  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
-  const u = normalizeUser(user(ctx.from.id));
-  if (!canManageAttendance(u, ctx.from.id)) return ctx.answerCbQuery('Только староста.');
-  const index = Number(ctx.match[1]);
-  if (!u.students[index]) return ctx.answerCbQuery('Студент не найден.');
-  await ctx.answerCbQuery('Выбери статус');
-  await ctx.editMessageText('📋 <b>Отметка посещаемости</b>\n\n' + escapeHtml(studentName(u.students[index])), { parse_mode: 'HTML', ...attendanceStatusButtons(index) });
+bot.action(/^attstudent:(\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');await ctx.answerCbQuery('Выбери статус');
+ await ctx.editMessageText('📋 <b>'+escapeHtml(g.title)+'</b>\\n\\n'+escapeHtml(studentName(g.students[i])),{parse_mode:'HTML',...attendanceStatusButtons(i)});
 });
-
-bot.action(/^attmark:(\d+):(present|absent|clear)$/, async ctx => {
-  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
-  const u = normalizeUser(user(ctx.from.id));
-  if (!canManageAttendance(u, ctx.from.id)) return ctx.answerCbQuery('Только староста.');
-  const index = Number(ctx.match[1]), status = ctx.match[2];
-  if (!u.students[index]) return ctx.answerCbQuery('Студент не найден.');
-  const key = attendanceKey(u.students[index]);
-  u.attendance[key] ||= {};
-  if (status === 'clear') delete u.attendance[key][attendanceDate()];
-  else u.attendance[key][attendanceDate()] = status;
-  saveDb();
-  await ctx.answerCbQuery(status === 'clear' ? 'Отметка снята' : 'Сохранено');
-  await ctx.editMessageText(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
+bot.action(/^attmark:(\d+):(present|absent|clear)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const i=Number(ctx.match[1]),st=ctx.match[2];if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');const k=attendanceKey(g.students[i]);g.attendance[k]||={};
+ if(st==='clear')delete g.attendance[k][attendanceDate()];else g.attendance[k][attendanceDate()]=st;saveDb();await ctx.answerCbQuery(st==='clear'?'Отметка снята':'Сохранено');
+ await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
 });
-
-bot.action(['attsummary', 'attback'], async ctx => {
-  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой журнал в личке.');
-  const u = normalizeUser(user(ctx.from.id));
-  if (!canManageAttendance(u, ctx.from.id)) return ctx.answerCbQuery('Только староста.');
-  await ctx.answerCbQuery();
-  await ctx.editMessageText(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
+bot.action(['attsummary','attback'],async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ await ctx.answerCbQuery();await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
 });
-
 bot.on('callback_query', async ctx => {
   const data = ctx.callbackQuery?.data || '';
   if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:')) return;
@@ -1212,10 +1162,8 @@ bot.on('callback_query', async ctx => {
     const groupId = data.slice('students:'.length);
     const g = db.groups[groupId];
     if (!g) { await ctx.answerCbQuery('Группа не найдена.'); return; }
-    const u = user(ctx.from.id);
-    if (!u.students?.length) { await ctx.answerCbQuery('Список пуст.'); return; }
-    await ctx.answerCbQuery('Готово');
-    await ctx.editMessageText('👨‍🎓 Список студентов для «' + g.title + '»:\n\n' + u.students.map((s,i)=>(i+1)+'. '+escapeHtml(studentName(s))).join('\n'));
+    const students=g.students||[];if(!students.length){await ctx.answerCbQuery('Список группы пуст.');return;}
+    await ctx.answerCbQuery('Готово');await ctx.editMessageText('👨‍🎓 Список студентов для «'+escapeHtml(g.title)+'»:\n\n'+students.map((x,i)=>(i+1)+'. '+escapeHtml(studentName(x))).join('\n'));
     return;
   }
 
