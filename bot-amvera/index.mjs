@@ -63,7 +63,7 @@ function subscriptionKeyboard() {
 
 function subscriptionMiddleware(ctx, next) {
   const text = ctx.message?.text || '';
-  const command = text.split(/\\s+/)[0].replace(/^\\//, '').replace(/@.*$/, '').toLowerCase();
+  const command = text.split(/\s+/)[0].replace(/^\//, '').replace(/@.*$/, '').toLowerCase();
 
   // Служебные платежные обновления Telegram должны проходить всегда.
   if (
