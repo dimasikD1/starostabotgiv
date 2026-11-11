@@ -984,7 +984,7 @@ bot.command('starosta', async ctx => {
   db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
   db.groups[String(ctx.chat.id)].starostaId = ctx.from.id;
   saveDb();
-  return ctx.reply('👑 ' + (ctx.from.first_name || 'Пользователь') + ' назначил(а) себя старостой этой группы. Теперь доступны команды посещаемости.');
+  return ctx.reply('👑 ' + (ctx.from.first_name || 'Пользователь') + ' назначил(а) себя старостой этой группы. Теперь доступны команды посещаемости.', studentMenu);
 });
 
 bot.command('zam', async ctx => {
@@ -997,8 +997,14 @@ bot.command('zam', async ctx => {
   u.group = ctx.chat.title || u.group;
   db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
   db.groups[String(ctx.chat.id)].zamId = target.id;
+  const starostaId = db.groups[String(ctx.chat.id)].starostaId;
+  if (starostaId && String(starostaId) !== String(target.id)) {
+    const starostaUser = normalizeUser(user(starostaId));
+    u.students = JSON.parse(JSON.stringify(starostaUser.students || []));
+    u.attendance = JSON.parse(JSON.stringify(starostaUser.attendance || {}));
+  }
   saveDb();
-  return ctx.reply('⭐ ' + (target.first_name || 'Пользователь') + ' назначен(а) заместителем старосты. Доступны функции старосты.');
+  return ctx.reply('⭐ ' + (target.first_name || 'Пользователь') + ' назначен(а) заместителем старосты. Доступны функции старосты.', studentMenu);
 });
 
 bot.command('setstarosta', async ctx => {
@@ -1272,15 +1278,7 @@ async function main() {
     { command: 'subscription', description: 'Статус подписки' }
   ], { scope: { type: 'all_private_chats' } });
 
-  await bot.telegram.setMyCommands([
-    { command: 'starosta', description: 'Назначить себя старостой' },
-    { command: 'zam', description: 'Назначить заместителя старосты' },
-    { command: 'setstarosta', description: 'Назначить старосту ответом' },
-    { command: 'setstudent', description: 'Снять роль старосты' },
-    { command: 'setgroup', description: 'Настроить расписание группы' },
-    { command: 'attach', description: 'Подключить группу' },
-    { command: 'detach', description: 'Отключить группу' }
-  ], { scope: { type: 'all_group_chats' } });
+  await bot.telegram.setMyCommands([], { scope: { type: 'all_group_chats' } });
 
   await bot.telegram.setMyCommands([
     { command: 'admin', description: 'Панель владельца' },
