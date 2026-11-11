@@ -195,6 +195,9 @@ function canManageAttendance(u, id) {
 function getMenu(id) {
   return canManageAttendance(user(id), id) ? managerMenu : studentMenu;
 }
+function menuFor(ctx) {
+  return isPrivate(ctx) ? getMenu(ctx.from.id) : studentMenu;
+}
 function roleLabel(role) {
   return role === 'starosta' ? '👑 Староста' : role === 'zam' ? '⭐ Заместитель старосты' : '👨‍🎓 Студент';
 }
@@ -238,15 +241,15 @@ function format(items, group) {
 
 async function show(ctx, days, offset) {
   const u = user(ctx.from.id);
-  if (!u.group) return ctx.reply('Сначала укажи группу. Пример: /group ИСП-21', getMenu(ctx.from.id));
+  if (!u.group) return ctx.reply('Сначала укажи группу. Пример: /group ИСП-21', menuFor(ctx));
   await ctx.reply('⏳ Загружаю расписание…');
   try {
     let items = await getSchedule(u.group, days);
     if (offset) items = items.filter(x => Number(x.dayOffset) === offset);
-    await ctx.reply(format(items, u.group), getMenu(ctx.from.id));
+    await ctx.reply(format(items, u.group), menuFor(ctx));
   } catch (e) {
     console.error('[schedule]', e);
-    await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь источник или SCHEDULE_API_URL.', getMenu(ctx.from.id));
+    await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь источник или SCHEDULE_API_URL.', menuFor(ctx));
   }
 }
 
@@ -450,9 +453,9 @@ async function startPoll(ctx) {
 
 bot.command('subscribe', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Оформить подписку можно только в личных сообщениях с ботом.');
-  if (isOwner(ctx.from.id)) return ctx.reply('👑 У тебя бесплатный доступ владельца. Оплата не требуется.', getMenu(ctx.from.id));
+  if (isOwner(ctx.from.id)) return ctx.reply('👑 У тебя бесплатный доступ владельца. Оплата не требуется.', menuFor(ctx));
   const u = normalizeUser(user(ctx.from.id));
-  if (hasActiveSubscription(u)) return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
+  if (hasActiveSubscription(u)) return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...menuFor(ctx) });
 
   await ctx.reply(
     '💳 <b>Подписка на бота</b>\\n\\n' +
@@ -465,7 +468,7 @@ bot.command('subscribe', async ctx => {
 
 bot.command('subscription', ctx => {
   const u = normalizeUser(user(ctx.from.id));
-  return ctx.reply(subscriptionText(u, isOwner(ctx.from.id)), { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
+  return ctx.reply(subscriptionText(u, isOwner(ctx.from.id)), { parse_mode: 'HTML', ...menuFor(ctx) });
 });
 
 // Управление подписками доступно только владельцу и только в личном чате с ботом.
@@ -610,7 +613,7 @@ bot.on('callback_query', async ctx => {
       if (payment.status === 'succeeded' && payment.paid) {
         const activated = await processYooKassaPayment(payment);
         if (activated) {
-          await ctx.reply('✅ Платёж подтверждён. Подписка активирована на 30 дней.', getMenu(ctx.from.id));
+          await ctx.reply('✅ Платёж подтверждён. Подписка активирована на 30 дней.', menuFor(ctx));
         } else {
           await ctx.reply('⚠️ Платёж найден, но не прошёл проверку суммы/назначения. Проверь настройки ЮKassa.');
         }
@@ -710,7 +713,7 @@ bot.on('successful_payment', async ctx => {
     new Date(u.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) +
     ' МСК</b>.\\n\\n' +
     'Теперь можешь пользоваться ботом.',
-    { parse_mode: 'HTML', ...getMenu(ctx.from.id) }
+    { parse_mode: 'HTML', ...menuFor(ctx) }
   );
 });
 
@@ -768,7 +771,7 @@ async function processYooKassaPayment(payment) {
       '📅 Подписка действует до: <b>' +
       new Date(u.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) +
       ' МСК</b>.',
-      { parse_mode: 'HTML', ...getMenu(ctx.from.id) }
+      { parse_mode: 'HTML', ...menuFor(ctx) }
     );
   } catch (e) {
     console.error('[yookassa:notify]', e);
@@ -803,7 +806,7 @@ bot.start(async ctx => {
     '👋 Привет! Я бот расписания.\n\n' +
     'Укажи группу командой /group ИСП-21.\n\n' +
     '📊 Опросы создаются в личке: /poll Вопрос | Да | Нет',
-    getMenu(ctx.from.id)
+    menuFor(ctx)
   );
 });
 
@@ -823,7 +826,7 @@ bot.help(ctx => ctx.reply(
   '/myid — узнать свой Telegram ID\\n' +
   (isOwner(ctx.from.id) ? '\\n👑 <b>Панель владельца</b>\\n/admin — все команды владельца\\n/stats — статистика\\n/grant ID [дней|навсегда] — выдать подписку\\n/revoke ID — отозвать подписку\\n/subinfo ID — проверить подписку\\n/setsubgroup — назначить группу с пожизненным доступом (в группе)\\n/attach и /detach — прикрепить/открепить группу (в группе)\\n' : '') +
   '\\n💳 /subscription — статус подписки\\n/subscribe — оформить подписку',
-  { parse_mode: 'HTML', ...getMenu(ctx.from.id) }
+  { parse_mode: 'HTML', ...menuFor(ctx) }
 ));
 
 bot.command(['admin', 'adminhelp', 'commands'], ctx => {
@@ -866,7 +869,7 @@ bot.command(['admin', 'adminhelp', 'commands'], ctx => {
     '/help — общая справка\n\n' +
     '<i>ID — это числовой Telegram ID пользователя. Команды с пометкой «в группе» нужно отправлять непосредственно в нужной группе.</i>';
 
-  return ctx.reply(message, { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
+  return ctx.reply(message, { parse_mode: 'HTML', ...menuFor(ctx) });
 });
 
 bot.command('group', async ctx => {
@@ -874,7 +877,7 @@ bot.command('group', async ctx => {
   if (!value) return ctx.reply('Пример: /group ИСП-21');
   user(ctx.from.id).group = value;
   saveDb();
-  await ctx.reply('✅ Группа сохранена: «' + value + '»', getMenu(ctx.from.id));
+  await ctx.reply('✅ Группа сохранена: «' + value + '»', menuFor(ctx));
 });
 
 bot.command('setsubgroup', async ctx => {
@@ -963,7 +966,7 @@ async function showRole(ctx) {
   if (value !== 'student') return ctx.reply('❌ Самостоятельно назначить себя старостой нельзя. Это делает администратор группы.');
   u.role = 'student';
   saveDb();
-  await ctx.reply('✅ Роль установлена: 👨‍🎓 Студент', getMenu(ctx.from.id));
+  await ctx.reply('✅ Роль установлена: 👨‍🎓 Студент', menuFor(ctx));
 }
 
 bot.command('role', showRole);
@@ -1079,8 +1082,8 @@ bot.hears('📚 ДЗ', async ctx => {
   const matching = Object.values(db.groups).filter(g => !groupName || g.scheduleGroup === groupName || g.title === groupName);
   const records = matching.flatMap(g => (g.homework || []).map(h => ({...h, groupTitle:g.title})));
   const latest = records.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 10);
-  if (!latest.length) return ctx.reply('📚 Пока нет опубликованных домашних заданий для твоей группы.', getMenu(ctx.from.id));
-  return ctx.reply('📚 <b>Домашние задания</b>\\n\\n' + latest.map(h => '<b>' + escapeHtml(h.subject) + '</b> — ' + escapeHtml(h.groupTitle) + '\\n' + escapeHtml(h.homework) + '\\n' + escapeHtml(h.createdAt || '')).join('\\n\\n'), {parse_mode:'HTML', ...getMenu(ctx.from.id)});
+  if (!latest.length) return ctx.reply('📚 Пока нет опубликованных домашних заданий для твоей группы.', menuFor(ctx));
+  return ctx.reply('📚 <b>Домашние задания</b>\\n\\n' + latest.map(h => '<b>' + escapeHtml(h.subject) + '</b> — ' + escapeHtml(h.groupTitle) + '\\n' + escapeHtml(h.homework) + '\\n' + escapeHtml(h.createdAt || '')).join('\\n\\n'), {parse_mode:'HTML', ...menuFor(ctx)});
 });
 bot.hears('📚 Создать ДЗ', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях.');
@@ -1204,13 +1207,13 @@ bot.hears('📅 Завтра', ctx => show(ctx, 2, 1));
 bot.hears('🗓 Неделя', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
 bot.hears('👥 Моя группа', ctx => {
   const g = user(ctx.from.id).group;
-  return ctx.reply(g ? '👥 Твоя группа: «' + g + '»' : 'Группа ещё не выбрана. Используй /group.', getMenu(ctx.from.id));
+  return ctx.reply(g ? '👥 Твоя группа: «' + g + '»' : 'Группа ещё не выбрана. Используй /group.', menuFor(ctx));
 });
 bot.hears('👥 Группы', ctx => {
   const groups = Object.values(db.groups);
   return ctx.reply(
     groups.length ? '👥 Прикреплено групп: ' + groups.length + '\n' + groups.map(g => '• ' + g.title).join('\n') : 'Нет прикреплённых групп.',
-    getMenu(ctx.from.id)
+    menuFor(ctx)
   );
 });
 bot.hears('📋 Посещаемость', async ctx => {
@@ -1222,12 +1225,12 @@ bot.hears('📋 Посещаемость', async ctx => {
 });
 bot.hears('💳 Подписка', ctx => {
   const u = normalizeUser(user(ctx.from.id));
-  if (isOwner(ctx.from.id)) return ctx.reply(subscriptionText(u, true), { parse_mode: 'HTML', ...getMenu(ctx.from.id) });
+  if (isOwner(ctx.from.id)) return ctx.reply(subscriptionText(u, true), { parse_mode: 'HTML', ...menuFor(ctx) });
   return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
 });
 
 bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
-bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются через /poll, а ДЗ — через /дз. Перед отправкой бот даст выбрать группу.', getMenu(ctx.from.id)));
+bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу через /group ИСП-21. Опросы создаются через /poll, а ДЗ — через /дз. Перед отправкой бот даст выбрать группу.', menuFor(ctx)));
 
 bot.catch(e => console.error('[bot]', e));
 
