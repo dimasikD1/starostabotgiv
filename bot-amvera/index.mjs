@@ -380,6 +380,77 @@ bot.command('subscription', ctx => {
   return ctx.reply(subscriptionText(u, isOwner(ctx.from.id)), { parse_mode: 'HTML', ...menu });
 });
 
+// Управление подписками доступно только владельцу и только в личном чате с ботом.
+bot.command('myid', ctx => {
+  return ctx.reply('Твой Telegram ID: <code>' + ctx.from.id + '</code>', { parse_mode: 'HTML' });
+});
+
+bot.command('grant', async ctx => {
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
+  if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
+  const args = ctx.message.text.replace(/^\/grant(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
+  const targetId = args[0];
+  const days = args[1] === undefined ? SUBSCRIPTION_DAYS : Number(args[1]);
+  if (!targetId || !/^\d+$/.test(targetId) || !Number.isSafeInteger(days) || days < 1 || days > 3650) {
+    return ctx.reply('Формат: /grant TELEGRAM_ID [дней]\nПример: /grant 123456789 30\nПользователь узнает свой ID командой /myid.');
+  }
+  if (isOwner(targetId)) return ctx.reply('У владельца уже есть бесплатный доступ.');
+  const target = normalizeUser(user(targetId));
+  const start = Math.max(Date.now(), subscriptionUntil(target));
+  target.subscriptionUntil = start + days * 24 * 60 * 60 * 1000;
+  target.paymentHistory.push({
+    method: 'owner_grant',
+    days,
+    grantedBy: String(ctx.from.id),
+    grantedAt: new Date().toISOString(),
+    subscriptionUntil: new Date(target.subscriptionUntil).toISOString()
+  });
+  saveDb();
+  const until = new Date(target.subscriptionUntil).toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short'
+  });
+  await ctx.reply('✅ Подписка выдана пользователю <code>' + targetId + '</code> на ' + days + ' дн.\nДействует до: <b>' + until + ' МСК</b>.', { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(Number(targetId), '🎉 Тебе выдана подписка на ' + days + ' дн.\nДействует до: ' + until + ' МСК.');
+  } catch {
+    await ctx.reply('ℹ️ Не удалось отправить уведомление. Пользователь должен сначала открыть бота и нажать /start.');
+  }
+});
+
+bot.command('revoke', async ctx => {
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
+  if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
+  const targetId = ctx.message.text.replace(/^\/revoke(?:@\S+)?/i, '').trim();
+  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /revoke TELEGRAM_ID');
+  if (isOwner(targetId)) return ctx.reply('Бесплатный доступ владельца нельзя отозвать.');
+  const target = normalizeUser(user(targetId));
+  target.subscriptionUntil = 0;
+  target.paymentHistory.push({
+    method: 'owner_revoke',
+    revokedBy: String(ctx.from.id),
+    revokedAt: new Date().toISOString()
+  });
+  saveDb();
+  await ctx.reply('🗑 Подписка пользователя <code>' + targetId + '</code> отозвана.', { parse_mode: 'HTML' });
+  try {
+    await ctx.telegram.sendMessage(Number(targetId), 'ℹ️ Твоя подписка была отключена владельцем бота.');
+  } catch {}
+});
+
+bot.command('subinfo', ctx => {
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
+  if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
+  const targetId = ctx.message.text.replace(/^\/subinfo(?:@\S+)?/i, '').trim();
+  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /subinfo TELEGRAM_ID');
+  if (isOwner(targetId)) return ctx.reply('👑 Это владелец: бесплатный доступ без срока.');
+  const target = normalizeUser(user(targetId));
+  const active = hasActiveSubscription(target);
+  const until = active ? new Date(subscriptionUntil(target)).toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short'
+  }) + ' МСК' : 'не активна';
+  return ctx.reply('Пользователь: <code>' + targetId + '</code>\nПодписка: <b>' + (active ? 'активна' : 'не активна') + '</b>\nДействует до: ' + until, { parse_mode: 'HTML' });
+});
+
 bot.command('terms', ctx => ctx.reply(
   '📄 <b>Условия использования</b>\\n\\n' +
   'Подписка предоставляет доступ к функциям бота на оплаченный период. ' +
