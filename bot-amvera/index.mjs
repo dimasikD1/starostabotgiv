@@ -169,9 +169,13 @@ async function subscriptionMiddleware(ctx, next) {
 
 bot.use(subscriptionMiddleware);
 
+const STUDY_GROUPS = Object.freeze({
+  '1': 'БИ(ЭБ)1-ОЗ/Бп/КД26',
+  '2': 'БИ(ЭБ)2-ОЗ/Бп/КД26'
+});
+
 bot.action(/^studygroup:(1|2)$/, async ctx => {
-  const groups = { '1': 'БИ(ЭБ)1-ОЗ/Бп/КД26', '2': 'БИ(ЭБ)2-ОЗ/Бп/КД26' };
-  const selected = groups[ctx.match[1]];
+  const selected = STUDY_GROUPS[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
   u.group = selected;
   saveDb();
@@ -266,7 +270,15 @@ function format(items, group) {
 async function show(ctx, days, offset) {
   const u = user(ctx.from.id);
   const selectedGroup = String(u.group || '').trim();
-  if (!selectedGroup) return ctx.reply('Сначала выбери свою учебную группу: БИ(ЭБ)1-ОЗ/Бп/КД26 или БИ(ЭБ)2-ОЗ/Бп/КД26.', menuFor(ctx));
+  if (!Object.values(STUDY_GROUPS).includes(selectedGroup)) {
+    return ctx.reply(
+      'Выбери корректную учебную группу, чтобы загрузить расписание:',
+      Markup.inlineKeyboard([
+        [Markup.button.callback(STUDY_GROUPS['2'], 'studygroup:2')],
+        [Markup.button.callback(STUDY_GROUPS['1'], 'studygroup:1')]
+      ])
+    );
+  }
   await ctx.reply('⏳ Загружаю расписание для «' + selectedGroup + '»…');
   try {
     let items = await getSchedule(selectedGroup, days);
@@ -922,10 +934,23 @@ bot.command(['admin', 'adminhelp', 'commands'], ctx => {
 
 bot.command('group', async ctx => {
   const value = ctx.message.text.replace(/^\/group(?:@\S+)?/i, '').trim();
-  if (!value) return ctx.reply('Пример: /group ИСП-21');
-  user(ctx.from.id).group = value;
+  const selected = value === STUDY_GROUPS['1'] || value === '1'
+    ? STUDY_GROUPS['1']
+    : value === STUDY_GROUPS['2'] || value === '2'
+      ? STUDY_GROUPS['2']
+      : '';
+  if (!selected) {
+    return ctx.reply(
+      'Укажи одну из двух учебных групп кнопкой ниже или командой /group 1 либо /group 2:',
+      Markup.inlineKeyboard([
+        [Markup.button.callback(STUDY_GROUPS['2'], 'studygroup:2')],
+        [Markup.button.callback(STUDY_GROUPS['1'], 'studygroup:1')]
+      ])
+    );
+  }
+  user(ctx.from.id).group = selected;
   saveDb();
-  await ctx.reply('✅ Группа сохранена: «' + value + '»', menuFor(ctx));
+  await ctx.reply('✅ Группа сохранена: «' + selected + '»', menuFor(ctx));
 });
 
 bot.command('setsubgroup', async ctx => {
