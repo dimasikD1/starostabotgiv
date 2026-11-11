@@ -1050,6 +1050,50 @@ bot.command('importstudents',async ctx=>{
  const u=normalizeUser(user(ctx.from.id));u.pendingStudentImport=true;delete u.pendingStudentImportReview;saveDb();
  return ctx.reply('Вставь список студентов текстом — по одному ФИО на строку. Я покажу результат для проверки. Для отмены: /cancel.');
 });
+// Импорт списка студентов обычным текстом в личных сообщениях.
+bot.command('cancel', async ctx => {
+ if(!isPrivate(ctx))return;
+ const u=normalizeUser(user(ctx.from.id));
+ if(!u.pendingStudentImport&&!u.pendingStudentImportReview)return ctx.reply('Нет активного действия для отмены.');
+ delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();
+ return ctx.reply('❌ Импорт списка отменён.');
+});
+bot.action('studentimport:confirm', async ctx => {
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой бота в личке.');
+ const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id);
+ if(!g){delete u.pendingStudentImportReview;saveDb();return ctx.answerCbQuery('Группа не найдена.');}
+ const list=u.pendingStudentImportReview;
+ if(!Array.isArray(list)||!list.length)return ctx.answerCbQuery('Нет списка для подтверждения.');
+ g.students=list.slice(0,100);
+ g.attendance||={};
+ u.students=JSON.parse(JSON.stringify(g.students));
+ delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();
+ await ctx.answerCbQuery('Список сохранён');
+ return ctx.editMessageText('✅ <b>Список студентов создан!</b>\\n\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Студентов: <b>'+g.students.length+'</b>\\n\\nОткрыть список: /students\\nПосещаемость: /attendance',{parse_mode:'HTML'});
+});
+bot.action('studentimport:cancel', async ctx => {
+ if(!isPrivate(ctx))return ctx.answerCbQuery();
+ const u=normalizeUser(user(ctx.from.id));delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();
+ await ctx.answerCbQuery('Импорт отменён');
+ return ctx.editMessageText('❌ Импорт списка отменён.');
+});
+bot.on('text', async (ctx,next) => {
+ if(!isPrivate(ctx))return next();
+ const u=normalizeUser(user(ctx.from.id));
+ if(!u.pendingStudentImport)return next();
+ const raw=String(ctx.message.text||'').trim();
+ if(!raw)return ctx.reply('Пришли ФИО текстом, по одному студенту на строку.');
+ if(/^\\/cancel(?:@\\S+)?$/i.test(raw)){delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();return ctx.reply('❌ Импорт отменён.');}
+ if(raw.startsWith('/'))return ctx.reply('Сначала пришли список ФИО или отправь /cancel для отмены.');
+ const g=managedGroup(ctx.from.id);
+ if(!g){delete u.pendingStudentImport;saveDb();return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');}
+ const names=parseStudentNames(raw);
+ if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\\nИванов Иван Иванович\\nПетров Пётр Сергеевич');
+ u.pendingStudentImportReview=names;u.pendingStudentImport=false;saveDb();
+ const preview=names.map((name,i)=>(i+1)+'. '+escapeHtml(name)).join('\\n');
+ return ctx.reply('📝 <b>Проверь список студентов</b>\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Найдено: <b>'+names.length+'</b>\\n\\n'+preview+'\\n\\nПосле подтверждения текущий список группы будет заменён этим списком.',{parse_mode:'HTML',...importPreviewKeyboard()});
+});
+
 bot.command('students',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
  if(!g.students.length)return ctx.reply('Список группы пуст. Добавь студентов ответом на сообщение в группе командой /student.');
