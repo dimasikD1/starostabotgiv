@@ -984,8 +984,9 @@ bot.hears('👥 Группы', ctx => {
 bot.hears('📋 Посещаемость', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
   const u = normalizeUser(user(ctx.from.id));
-  if (u.role === 'starosta' && u.students.length) return ctx.reply('📋 Выбери студента для отметки:', Markup.inlineKeyboard(attendanceButtons(u)));
-  return ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...menu });
+  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.reply('❌ Журнал посещаемости доступен старосте.');
+  if (!u.students.length) return ctx.reply('Список пуст. Добавь студентов ответом на их сообщения в группе командой /student.');
+  return ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...attendanceButtons(u) });
 });
 bot.hears('💳 Подписка', ctx => {
   const u = normalizeUser(user(ctx.from.id));
