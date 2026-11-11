@@ -875,7 +875,7 @@ bot.command('setsubgroup', async ctx => {
 bot.command('setgroup', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Команду нужно выполнить в учебной группе Telegram.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Указать учебную группу может только администратор чата.');
-  const scheduleGroup = (ctx.message.text || '').replace(/^\\/setgroup(?:@\\S+)?/i, '').trim();
+  const scheduleGroup = (ctx.message.text || '').trim().split(/\\s+/).slice(1).join(' ').trim();
   if (!scheduleGroup) return ctx.reply('Формат: /setgroup ИСП-21\\nУкажи точное название группы из расписания.');
   registerGroup(ctx);
   db.groups[String(ctx.chat.id)].scheduleGroup = scheduleGroup;
