@@ -1091,8 +1091,27 @@ bot.action('studentimport:cancel', async ctx => {
 bot.on('text', async (ctx,next) => {
  if(!isPrivate(ctx))return next();
  const u=normalizeUser(user(ctx.from.id));
- if(!u.pendingStudentImport)return next();
  const raw=String(ctx.message.text||'').trim();
+ if(u.pendingStudentField){
+  const pending=u.pendingStudentField;
+  const g=managedGroup(ctx.from.id);
+  if(!g||!g.students[pending.index]){delete u.pendingStudentField;saveDb();return ctx.reply('❌ Студент не найден. Открой /students и попробуй снова.');}
+  if(raw.toLowerCase()==='/cancel'){delete u.pendingStudentField;saveDb();return ctx.reply('Изменение отменено.');}
+  const student=g.students[pending.index];
+  const rec=typeof student==='string'?{name:student}:student;
+  if(pending.type==='username'){
+   const value=raw.replace(/^@/,'').trim();
+   if(value&&!/^[A-Za-z0-9_]{5,32}$/.test(value))return ctx.reply('❌ Неверный username. Введи @username или /cancel.');
+   rec.username=value;
+  } else {
+   const value=raw.replace(/[\\s()-]/g,'');
+   if(value&&!/^\\+?[0-9]{6,15}$/.test(value))return ctx.reply('❌ Неверный номер. Пример: +37255555555 или /cancel.');
+   rec.phone=value;
+  }
+  g.students[pending.index]=rec;delete u.pendingStudentField;saveDb();
+  return ctx.reply('✅ Данные сохранены. Открой /students, чтобы увидеть обновлённую карточку.');
+ }
+ if(!u.pendingStudentImport)return next();
  if(!raw)return ctx.reply('Пришли ФИО текстом, по одному студенту на строку.');
  if(raw.toLowerCase()==='/cancel'||raw.toLowerCase().startsWith('/cancel@')){delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();return ctx.reply('❌ Импорт отменён.');}
  if(raw.startsWith('/'))return ctx.reply('Сначала пришли список ФИО или отправь /cancel для отмены.');
@@ -1105,34 +1124,44 @@ bot.on('text', async (ctx,next) => {
  return ctx.reply('📝 <b>Проверь список студентов</b>\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Найдено: <b>'+names.length+'</b>\\n\\n'+preview+'\\n\\nПосле подтверждения текущий список группы будет заменён этим списком.',{parse_mode:'HTML',...importPreviewKeyboard()});
 });
 
-function formatStudentList(g) {
- const students=g.students||[];
- const lines=students.map((s,i)=>{
+function studentListKeyboard(g,page=0){
+ const size=10,pages=Math.max(1,Math.ceil((g.students||[]).length/size));
+ page=Math.max(0,Math.min(Number(page)||0,pages-1));
+ const rows=(g.students||[]).slice(page*size,(page+1)*size).map((s,offset)=>{
+  const i=page*size+offset;
   const name=typeof s==='string'?s:String(s?.name||'Без имени');
-  const username=typeof s==='object'&&s?.username?'@'+String(s.username).replace(/^@/,''):'не указан';
-  const id=typeof s==='object'&&s?.telegramId?String(s.telegramId):'';
-  const safeName=escapeHtml(name);
-  const linkedName=id&&/^\\d+$/.test(id)?'<a href="tg://user?id='+id+'">'+safeName+'</a>':safeName;
-  return '<b>'+(i+1)+'.</b> '+linkedName+'\\n   🔹 Username: '+escapeHtml(username)+(id?'\\n   🆔 ID: <code>'+escapeHtml(id)+'</code>':'');
+  return [Markup.button.callback('👤 '+(i+1)+'. '+name.slice(0,42),'studentcard:'+i)];
  });
- return '👥 <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Всего студентов: <b>'+students.length+'</b>\\n\\n'+lines.join('\\n\\n')+'\\n\\n➖ Удалить студента: <code>/delstudent номер</code>';
+ const nav=[];
+ if(page>0)nav.push(Markup.button.callback('⬅️','studentpage:'+(page-1)));
+ nav.push(Markup.button.callback((page+1)+'/'+pages,'studentpage:'+page));
+ if(page<pages-1)nav.push(Markup.button.callback('➡️','studentpage:'+(page+1)));
+ rows.push(nav);
+ return Markup.inlineKeyboard(rows);
+}
+function studentCardText(g,i){
+ const s=g.students[i],name=typeof s==='string'?s:String(s?.name||'Без имени');
+ const username=typeof s==='object'&&s?.username?'@'+String(s.username).replace(/^@/,''):'не указан';
+ const phone=typeof s==='object'&&s?.phone?String(s.phone):'не указан';
+ const id=typeof s==='object'&&s?.telegramId?String(s.telegramId):'не указан';
+ return '👤 <b>'+escapeHtml(name)+'</b>\\n\\n🔹 Username: '+escapeHtml(username)+'\\n📞 Телефон: <code>'+escapeHtml(phone)+'</code>\\n🆔 Telegram ID: <code>'+escapeHtml(id)+'</code>';
+}
+function studentCardKeyboard(i){
+ return Markup.inlineKeyboard([
+  [Markup.button.callback('✏️ Изменить username','studentedit:username:'+i)],
+  [Markup.button.callback('📞 Изменить телефон','studentedit:phone:'+i)],
+  [Markup.button.callback('⬅️ К списку','studentback')]
+ ]);
+}
+function formatStudentList(g) {
+ return '👥 <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Всего студентов: <b>'+(g.students||[]).length+'</b>\\n\\nНажми на студента, чтобы открыть карточку и изменить контакты.';
 }
 bot.command('students',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
  const g=managedGroup(ctx.from.id);
  if(!g)return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');
  if(!g.students.length)return ctx.reply('📋 Список группы пока пуст. Добавь студента командой /student или загрузи список через /importstudents.');
- const result=formatStudentList(g);
- if(result.length<=3900)return ctx.reply(result,{parse_mode:'HTML',disable_web_page_preview:true});
- const header='👥 <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Всего студентов: <b>'+g.students.length+'</b>';
- await ctx.reply(header,{parse_mode:'HTML'});
- let chunk='';
- for(const line of result.split('\\n\\n').slice(2)){
-  if((chunk+'\\n\\n'+line).length>3500&&chunk){await ctx.reply(chunk,{parse_mode:'HTML',disable_web_page_preview:true});chunk='';}
-  chunk+=(chunk?'\\n\\n':'')+line;
- }
- if(chunk)await ctx.reply(chunk,{parse_mode:'HTML',disable_web_page_preview:true});
- return ctx.reply('➖ Удалить студента: <code>/delstudent номер</code>',{parse_mode:'HTML'});
+ return ctx.reply(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g)});
 });
 bot.command('student',async ctx=>{
  const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):ctx.message.text.replace(/^\/student(?:@\S+)?/i,'').trim();
@@ -1283,6 +1312,30 @@ bot.hears('📊 Создать опрос', ctx => {
 });
 
 // Отдельные обработчики кнопок посещаемости.
+bot.action(/^studentcard:(\\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой список в личке.');
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
+ await ctx.answerCbQuery();return ctx.editMessageText(studentCardText(g,i),{parse_mode:'HTML',...studentCardKeyboard(i)});
+});
+bot.action(/^studentedit:(username|phone):(\\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Только в личных сообщениях.');
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const type=ctx.match[1],i=Number(ctx.match[2]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
+ const u=normalizeUser(user(ctx.from.id));u.pendingStudentField={type,index:i};saveDb();
+ await ctx.answerCbQuery();
+ return ctx.reply(type==='username'?'✏️ Отправь username студента (например, @username). Чтобы очистить — отправь прочерк.':'📞 Отправь номер телефона в международном формате (например, +37255555555). Чтобы очистить — отправь прочерк.\\nУказывай номер только если студент сам согласился его передать.\\nДля отмены: /cancel');
+});
+bot.action('studentback',async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery();
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ await ctx.answerCbQuery();return ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g)});
+});
+bot.action(/^studentpage:(\\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery();
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ await ctx.answerCbQuery();return ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g,Number(ctx.match[1]))});
+});
 bot.action(/^attstudent:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');await ctx.answerCbQuery('Выбери статус');
