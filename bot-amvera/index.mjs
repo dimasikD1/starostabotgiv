@@ -174,9 +174,20 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = groups[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
   u.group = selected;
+  if (ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type)) {
+    const chatId = String(ctx.chat.id);
+    const chatGroup = db.groups[chatId] || {
+      chatId: ctx.chat.id,
+      title: ctx.chat.title || 'Группа без названия',
+      addedBy: ctx.from.id,
+      addedAt: new Date().toISOString()
+    };
+    chatGroup.scheduleGroup = selected;
+    db.groups[chatId] = chatGroup;
+  }
   saveDb();
   await ctx.answerCbQuery('Группа сохранена');
-  await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\\nТеперь расписание и ДЗ будут подбираться для неё.');
+  await ctx.editMessageText('✅ Учебная группа сохранена: ' + selected + '\\nТеперь расписание в этом чате будет показываться для неё.');
 });
 
 const managerMenu = Markup.keyboard([
@@ -265,12 +276,16 @@ function format(items, group) {
 
 async function show(ctx, days, offset) {
   const u = user(ctx.from.id);
-  if (!u.group) return ctx.reply('Сначала укажи группу. Пример: /group ИСП-21', menuFor(ctx));
-  await ctx.reply('⏳ Загружаю расписание…');
+  const chatGroup = ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type)
+    ? String(db.groups[String(ctx.chat.id)]?.scheduleGroup || '').trim()
+    : '';
+  const selectedGroup = chatGroup || u.group;
+  if (!selectedGroup) return ctx.reply('Сначала выбери учебную группу в этом чате или укажи её командой /group.', menuFor(ctx));
+  await ctx.reply('⏳ Загружаю расписание для «' + selectedGroup + '»…');
   try {
-    let items = await getSchedule(u.group, days);
+    let items = await getSchedule(selectedGroup, days);
     if (offset) items = items.filter(x => Number(x.dayOffset) === offset);
-    await ctx.reply(format(items, u.group), menuFor(ctx));
+    await ctx.reply(format(items, selectedGroup), menuFor(ctx));
   } catch (e) {
     console.error('[schedule]', e);
     await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь источник или SCHEDULE_API_URL.', menuFor(ctx));
