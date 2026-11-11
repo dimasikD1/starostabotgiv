@@ -859,12 +859,6 @@ bot.command('groups', async ctx => {
 });
 
 bot.command('poll', startPoll);
-bot.command('students', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
-  const u = user(ctx.from.id);
-  if (!u.students?.length) return ctx.reply('👨‍🎓 Список студентов пуст. Добавить: /student Иван Иванов');
-  await ctx.reply('👨‍🎓 Список студентов:\n\n' + u.students.map((s,i)=>(i+1)+'. '+s).join('\n'));
-});
 bot.command('hw', startHomework);
 bot.command('homework', startHomework);
 bot.hears('📚 Создать ДЗ', ctx => {
@@ -917,7 +911,7 @@ const isStudentList = data.startsWith('students:');
     const u = user(ctx.from.id);
     if (!u.students?.length) { await ctx.answerCbQuery('Список пуст.'); return; }
     await ctx.answerCbQuery('Готово');
-    await ctx.editMessageText('👨‍🎓 Список студентов для «' + g.title + '»:\n\n' + u.students.map((s,i)=>(i+1)+'. '+s).join('\n'));
+    await ctx.editMessageText('👨‍🎓 Список студентов для «' + g.title + '»:\n\n' + u.students.map((s,i)=>(i+1)+'. '+escapeHtml(studentName(s))).join('\n'));
     return;
   }
 
