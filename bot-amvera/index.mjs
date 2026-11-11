@@ -110,7 +110,7 @@ async function createYooKassaPayment(userId) {
 
 async function subscriptionMiddleware(ctx, next) {
   const text = ctx.message?.text || '';
-  const command = text.split(/\\s+/)[0].replace(/^\\//, '').replace(/@.*$/, '').toLowerCase();
+  const command = text.split(/\s+/)[0].replace(/^\//, '').replace(/@.*$/, '').toLowerCase();
 
   if (
     ctx.updateType === 'pre_checkout_query' ||
@@ -407,11 +407,11 @@ bot.command('myid', ctx => {
 bot.command('grant', async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const args = ctx.message.text.replace(/^\\/grant(?:@\\S+)?/i, '').trim().split(/\\s+/).filter(Boolean);
+  const args = ctx.message.text.replace(/^\/grant(?:@\S+)?/i, '').trim().split(/\\s+/).filter(Boolean);
   const targetId = args[0];
   const forever = ['forever', 'lifetime', 'навсегда', 'пожизненно'].includes((args[1] || '').toLowerCase());
   const days = args[1] === undefined ? SUBSCRIPTION_DAYS : Number(args[1]);
-  if (!targetId || !/^\\d+$/.test(targetId) || (!forever && (!Number.isSafeInteger(days) || days < 1 || days > 3650))) {
+  if (!targetId || !/^\d+$/.test(targetId) || (!forever && (!Number.isSafeInteger(days) || days < 1 || days > 3650))) {
     return ctx.reply('Формат: /grant TELEGRAM_ID [дней|навсегда]\\nПримеры: /grant 123456789 30 или /grant 123456789 навсегда\\nID пользователь узнаёт командой /myid.');
   }
   if (isOwner(targetId)) return ctx.reply('У владельца уже есть бесплатный доступ.');
@@ -465,8 +465,8 @@ bot.command('revoke', async ctx => {
 bot.command('subinfo', ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const targetId = ctx.message.text.replace(/^\\/subinfo(?:@\\S+)?/i, '').trim();
-  if (!/^\\d+$/.test(targetId)) return ctx.reply('Формат: /subinfo TELEGRAM_ID');
+  const targetId = ctx.message.text.replace(/^\/subinfo(?:@\S+)?/i, '').trim();
+  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /subinfo TELEGRAM_ID');
   if (isOwner(targetId)) return ctx.reply('👑 Это владелец: бесплатный доступ без срока.');
   const target = normalizeUser(user(targetId));
   const active = hasActiveSubscription(target);
