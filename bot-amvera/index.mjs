@@ -237,6 +237,59 @@ async function show(ctx, days, offset) {
   }
 }
 
+function tallinnParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Tallinn', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map(p => [p.type, p.value]));
+}
+
+let attendancePollCheckRunning = false;
+async function checkAutomaticAttendancePolls() {
+  if (attendancePollCheckRunning) return;
+  attendancePollCheckRunning = true;
+  try {
+    const now = tallinnParts();
+    const today = now.year + '-' + now.month + '-' + now.day;
+    const currentMinutes = Number(now.hour) * 60 + Number(now.minute);
+    db.sentAttendancePolls ||= {};
+    for (const g of Object.values(db.groups)) {
+      const scheduleGroup = String(g.scheduleGroup || '').trim();
+      if (!scheduleGroup) continue;
+      try {
+        const lessons = await getSchedule(scheduleGroup, 2);
+        for (const lesson of lessons) {
+          if (lesson.date !== today || !lesson.timeStart) continue;
+          const match = String(lesson.timeStart).match(/^(\\d{1,2}):(\\d{2})$/);
+          if (!match) continue;
+          const startMinutes = Number(match[1]) * 60 + Number(match[2]);
+          if (currentMinutes < startMinutes - 10 || currentMinutes > startMinutes - 9) continue;
+          const key = [g.chatId, lesson.date, lesson.timeStart, lesson.subject].join('|');
+          if (db.sentAttendancePolls[key]) continue;
+          const sent = await bot.telegram.sendPoll(
+            g.chatId,
+            '📋 Посещаемость: ' + lesson.subject + '\\nПара начинается в ' + lesson.timeStart + '. Ты будешь присутствовать?',
+            ['✅ Буду', '❌ Не буду'],
+            { is_anonymous: false, allows_multiple_answers: false }
+          );
+          db.sentAttendancePolls[key] = {
+            pollId: sent.poll.id, groupId: String(g.chatId), groupName: g.title,
+            scheduleGroup, date: lesson.date, time: lesson.timeStart,
+            subject: lesson.subject, sentAt: new Date().toISOString()
+          };
+          saveDb();
+          console.log('[attendance poll] Sent to ' + g.title + ' for ' + lesson.subject + ' at ' + lesson.timeStart);
+        }
+      } catch (e) {
+        console.error('[attendance poll] ' + g.title + ':', e.message || e);
+      }
+    }
+  } finally {
+    attendancePollCheckRunning = false;
+  }
+}
+
 function isPrivate(ctx) {
   return ctx.chat?.type === 'private';
 }
@@ -819,6 +872,17 @@ bot.command('setsubgroup', async ctx => {
   return ctx.reply('♾ Эта группа назначена группой с пожизненным доступом. Участники получат его, когда напишут в группе или откроют личку с ботом.');
 });
 
+bot.command('setgroup', async ctx => {
+  if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Команду нужно выполнить в учебной группе Telegram.');
+  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Указать учебную группу может только администратор чата.');
+  const scheduleGroup = (ctx.message.text || '').replace(/^\\/setgroup(?:@\\S+)?/i, '').trim();
+  if (!scheduleGroup) return ctx.reply('Формат: /setgroup ИСП-21\\nУкажи точное название группы из расписания.');
+  registerGroup(ctx);
+  db.groups[String(ctx.chat.id)].scheduleGroup = scheduleGroup;
+  saveDb();
+  return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '». Автоопросы будут отправляться за 10 минут до каждой пары.');
+});
+
 bot.command('attach', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) {
     return ctx.reply('Эту команду нужно выполнить внутри группы, которую хочешь прикрепить.');
@@ -1164,11 +1228,11 @@ async function main() {
     { command: 'attendance', description: 'Посещаемость' },
     { command: 'mark', description: 'Отметить посещаемость' },
     { command: 'appointstarosta', description: 'Назначить старосту (владелец)' },
-    { command: 'poll', description: 'Создать опрос' },
+    { command: 'poll', description: 'Создать опрос' },\n    { command: 'setgroup', description: 'Настроить автоопросы в группе' },
     { command: 'hw', description: 'Создать домашнее задание' }
   ]);
 
-  await bot.launch({ dropPendingUpdates: false });
+  await bot.launch({ dropPendingUpdates: false });\n  await checkAutomaticAttendancePolls();\n  setInterval(checkAutomaticAttendancePolls, 30000).unref();
 }
 
 function shutdown(signal) {
