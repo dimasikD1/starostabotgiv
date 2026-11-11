@@ -1255,7 +1255,7 @@ bot.action(/^attmark:(\d+):(present|absent|clear)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const i=Number(ctx.match[1]),st=ctx.match[2];if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');const k=attendanceKey(g.students[i]);g.attendance[k]||={};
  if(st==='clear')delete g.attendance[k][attendanceDate()];else g.attendance[k][attendanceDate()]=st;saveDb();await ctx.answerCbQuery(st==='clear'?'Отметка снята':'Сохранено');
- await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
+ await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g,Math.floor(i/10))});
 });
 bot.action(/^attpage:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery();const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');await ctx.answerCbQuery();return ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g,Number(ctx.match[1]))});
