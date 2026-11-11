@@ -1,0 +1,19 @@
+{
+  "name": "starosta-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram-бот старосты с интеграцией расписания и опросов.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bot-amvera/index.mjs",
+    "dev": "node --watch bot-amvera/index.mjs",
+    "check": "node --check bot-amvera/index.mjs"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "telegraf": "^4.16.3"
+  }
+}
