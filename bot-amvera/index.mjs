@@ -482,7 +482,8 @@ bot.command('stats', ctx => {
 
   const entries = Object.entries(db.users);
   const now = Date.now();
-  const active = entries.filter(([id, u]) => !isOwner(id) && (Boolean(u.subscriptionForever) || subscriptionUntil(u) > now)).length;\n  const lifetime = entries.filter(([id, u]) => !isOwner(id) && Boolean(u.subscriptionForever)).length;
+  const active = entries.filter(([id, u]) => !isOwner(id) && (Boolean(u.subscriptionForever) || subscriptionUntil(u) > now)).length;
+  const lifetime = entries.filter(([id, u]) => !isOwner(id) && Boolean(u.subscriptionForever)).length;
   const expired = entries.filter(([id, u]) => !isOwner(id) && !u.subscriptionForever && subscriptionUntil(u) > 0 && subscriptionUntil(u) <= now).length;
   const noSubscription = entries.filter(([id, u]) => !isOwner(id) && !u.subscriptionForever && subscriptionUntil(u) <= 0).length;
   const starostas = entries.filter(([, u]) => u.role === 'starosta').length;
@@ -499,7 +500,8 @@ bot.command('stats', ctx => {
     '📊 <b>Статистика Староста Бота</b>\\n\\n' +
     '👥 Всего пользователей: <b>' + entries.length + '</b>\\n' +
     '🆕 Новых за 30 дней: <b>' + newUsers30d + '</b>\\n' +
-    '📌 Активных подписок: <b>' + active + '</b>\\n' +\n    '♾ Пожизненных подписок: <b>' + lifetime + '</b>\\n' +
+    '📌 Активных подписок: <b>' + active + '</b>\\n' +
+    '♾ Пожизненных подписок: <b>' + lifetime + '</b>\\n' +
     '⌛ Истекших подписок: <b>' + expired + '</b>\\n' +
     '🔓 Без подписки: <b>' + noSubscription + '</b>\\n\\n' +
     '👑 Старост: <b>' + starostas + '</b>\\n' +
