@@ -165,22 +165,23 @@ function roleLabel(role) {
   return role === 'starosta' ? '👑 Староста' : '👨‍🎓 Студент';
 }
 
+function studentName(s) {
+  return typeof s === 'string' ? s : String(s?.name || 'Без имени') + (s?.username ? ' (@' + s.username + ')' : '');
+}
+function attendanceKey(s) { return typeof s === 'string' ? s : (s.telegramId || s.name); }
+function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn' }).format(new Date()); }
 function formatAttendance(u) {
-  const all = [];
-  for (const [student, dates] of Object.entries(u.attendance || {})) {
-    for (const [date, status] of Object.entries(dates || {})) {
-      all.push({ student, date, status });
-    }
-  }
-  if (!all.length) return '📋 <b>Посещаемость</b>\\n\\nПока нет отметок.';
-  const present = all.filter(x => x.status === 'present').length;
-  const absent = all.filter(x => x.status === 'absent').length;
-  return '📋 <b>Посещаемость</b>\\n\\n' +
-    '👨‍🎓 Студентов: ' + u.students.length + '\\n' +
-    '✅ Присутствий: ' + present + '\\n' +
-    '❌ Отсутствий: ' + absent + '\\n' +
-    '📊 Отметок: ' + all.length + '\\n\\n' +
-    all.slice(-20).reverse().map(x => (x.status === 'present' ? '✅ ' : '❌ ') + x.date + ' — ' + escapeHtml(x.student)).join('\\n');
+  if (!u.students?.length) return '📋 <b>Посещаемость</b>\\n\\nСписок пуст. Добавь студентов ответом на их сообщение в группе командой /student.';
+  const today = attendanceDate();
+  let present = 0, absent = 0, unmarked = 0;
+  const lines = u.students.map((s, i) => {
+    const status = u.attendance?.[attendanceKey(s)]?.[today];
+    if (status === 'present') present++; else if (status === 'absent') absent++; else unmarked++;
+    return (i + 1) + '. ' + (status === 'present' ? '✅ ' : status === 'absent' ? '❌ ' : '▫️ ') + escapeHtml(studentName(s));
+  });
+  return '📋 <b>Посещаемость за ' + today + '</b>\\n\\n👨‍🎓 Всего: <b>' + u.students.length +
+    '</b>\\n✅ Были: <b>' + present + '</b>\\n❌ Не были: <b>' + absent +
+    '</b>\\n▫️ Не отмечены: <b>' + unmarked + '</b>\\n\\n' + lines.join('\\n');
 }
 
 function format(items, group) {
@@ -252,19 +253,15 @@ function escapeHtml(value) {
 }
 
 function attendanceButtons(u) {
-  const buttons = [];
-  for (let i = 0; i < u.students.length; i++) {
-    buttons.push([Markup.button.callback('👨‍🎓 ' + String(u.students[i]).slice(0, 35), 'attstudent:' + i)]);
-  }
-  return buttons;
+  const rows = (u.students || []).map((s, i) => [Markup.button.callback(('👨‍🎓 ' + studentName(s)).slice(0, 60), 'attstudent:' + i)]);
+  rows.push([Markup.button.callback('📊 Сводка за сегодня', 'attsummary')]);
+  return Markup.inlineKeyboard(rows);
 }
-
 function attendanceStatusButtons(index) {
   return Markup.inlineKeyboard([
-    [
-      Markup.button.callback('✅ Был', 'attmark:' + index + ':present'),
-      Markup.button.callback('❌ Не был', 'attmark:' + index + ':absent')
-    ]
+    [Markup.button.callback('✅ Был', 'attmark:' + index + ':present'), Markup.button.callback('❌ Не был', 'attmark:' + index + ':absent')],
+    [Markup.button.callback('↩️ Снять отметку', 'attmark:' + index + ':clear')],
+    [Markup.button.callback('⬅️ К списку', 'attback')]
   ]);
 }
 
@@ -761,40 +758,37 @@ bot.command('detach', async ctx => {
 bot.command('students', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
   const u = user(ctx.from.id);
-  if (!u.students?.length) {
-    return ctx.reply('👨‍🎓 Список студентов пока пуст.\n\nДобавь студентов командой:\n/student Иван Иванов\n\nМожно добавить несколько человек по одному.');
-  }
-  await ctx.reply('👨‍🎓 Список студентов:\n\n' + u.students.map((s, i) => (i + 1) + '. ' + s).join('\n'));
+  if (!u.students?.length) return ctx.reply('Список пуст. Чтобы добавить с username, ответь в группе на сообщение студента командой /student.');
+  await ctx.reply('👨‍🎓 <b>Студенты (' + u.students.length + ')</b>\\n\\n' + u.students.map((s,i)=>(i+1)+'. '+escapeHtml(studentName(s))).join('\\n') + '\\n\\nУдалить: /delstudent номер', {parse_mode:'HTML'});
 });
-
 bot.command('student', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Добавление студентов выполняется в личных сообщениях.');
-  const value = ctx.message.text.replace(/^\/student(?:@\S+)?/i, '').trim();
-  if (!value) return ctx.reply('Пример: /student Иван Иванов');
   const u = user(ctx.from.id);
-  u.students ||= [];
-  if (u.students.includes(value)) return ctx.reply('ℹ️ Этот студент уже есть в списке.');
+  const target = ctx.message.reply_to_message?.from;
+  const name = target ? [target.first_name, target.last_name].filter(Boolean).join(' ') : ctx.message.text.replace(/^\\/student(?:@\\S+)?/i, '').trim();
+  if (target && ['group','supergroup'].includes(ctx.chat.type)) {
+    if (u.role !== 'starosta' && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Добавлять студентов может староста или администратор группы.');
+    const record = {name: name || ('ID '+target.id), telegramId: String(target.id), username: target.username || ''};
+    const at = u.students.findIndex(x => String(typeof x === 'object' ? x.telegramId : '') === record.telegramId);
+    if (at >= 0) u.students[at] = record;
+    else if (u.students.length < 100) u.students.push(record);
+    else return ctx.reply('❌ Максимум 100 студентов.');
+    saveDb();
+    return ctx.reply('✅ Добавлен: ' + studentName(record) + '. Полный список: /students в личке.');
+  }
+  if (!isPrivate(ctx)) return ctx.reply('Ответь в группе на сообщение студента командой /student, чтобы сохранить username.');
+  if (!name) return ctx.reply('Формат: /student Имя Фамилия');
+  if (u.students.some(x => studentName(x).toLowerCase() === name.toLowerCase())) return ctx.reply('ℹ️ Такой студент уже есть.');
   if (u.students.length >= 100) return ctx.reply('❌ Максимум 100 студентов.');
-  u.students.push(value);
-  saveDb();
-  await ctx.reply('✅ Студент добавлен: ' + value);
+  u.students.push(name); saveDb(); return ctx.reply('✅ Добавлен: ' + name);
 });
-
 bot.command('delstudent', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Управление списком студентов доступно в личных сообщениях.');
-  const value = ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i, '').trim();
+  if (!isPrivate(ctx)) return ctx.reply('📩 Удаление доступно в личных сообщениях.');
+  const n = Number(ctx.message.text.replace(/^\\/delstudent(?:@\\S+)?/i, '').trim()) - 1;
   const u = user(ctx.from.id);
-  const index = Number(value) - 1;
-  if (!value || !Number.isInteger(index) || index < 0 || index >= (u.students?.length || 0)) return ctx.reply('Пример: /delstudent 3');
-  const removed = u.students.splice(index, 1)[0];
-  saveDb();
-  await ctx.reply('🗑 Удалён: ' + removed);
+  if (!Number.isInteger(n) || n < 0 || n >= u.students.length) return ctx.reply('Формат: /delstudent номер из списка /students');
+  const removed = u.students.splice(n,1)[0]; saveDb(); return ctx.reply('🗑 Удалён: ' + studentName(removed));
 });
-
-bot.hears('👨‍🎓 Список студентов', ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
-  return ctx.reply('👨‍🎓 Чтобы посмотреть список, используй /students.\n\nДобавить: /student Имя Фамилия\nУдалить: /delstudent номер');
-});
+bot.hears('👨‍🎓 Список студентов', ctx => ctx.reply('Используй /students. Добавить с username: ответь в группе на сообщение студента командой /student.'));
 
 async function showRole(ctx) {
   if (!isPrivate(ctx)) return ctx.reply('📩 Роль настраивается в личных сообщениях или через администратора группы.');
@@ -820,6 +814,7 @@ bot.command('setstarosta', async ctx => {
   if (!target) return ctx.reply('Ответь командой /setstarosta на сообщение нужного человека.');
   const u = normalizeUser(user(target.id));
   u.role = 'starosta';
+  u.username = target.username || u.username || '';
   u.group = ctx.chat.title || u.group;
   db.groups[String(ctx.chat.id)] ||= { chatId: ctx.chat.id, title: ctx.chat.title || 'Группа без названия' };
   db.groups[String(ctx.chat.id)].starostaId = target.id;
@@ -840,28 +835,20 @@ bot.command('setstudent', async ctx => {
 
 bot.command('attendance', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
-  const u = normalizeUser(user(ctx.from.id));
-  if (u.role === 'starosta' && u.students.length) {
-    return ctx.reply('📋 Выбери студента для отметки посещаемости:', Markup.inlineKeyboard(attendanceButtons(u)));
-  }
-  await ctx.reply(formatAttendance(u), { parse_mode: 'HTML', ...menu });
+  const u = user(ctx.from.id);
+  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.reply('❌ Журнал доступен старосте.');
+  if (!u.students.length) return ctx.reply('Сначала добавь студентов ответом на их сообщения в группе: /student.');
+  return ctx.reply(formatAttendance(u), {parse_mode:'HTML', ...attendanceButtons(u)});
 });
-
 bot.command('mark', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Отметки посещаемости делаются в личных сообщениях.');
-  const u = normalizeUser(user(ctx.from.id));
-  if (u.role !== 'starosta') return ctx.reply('❌ Только староста может отмечать посещаемость.');
-  const parts = ctx.message.text.replace(/^\/mark(?:@\S+)?/i, '').trim().split(/\s+/);
-  const index = Number(parts[0]) - 1;
-  const status = parts[1] === 'absent' ? 'absent' : parts[1] === 'present' ? 'present' : '';
-  if (!Number.isInteger(index) || index < 0 || index >= u.students.length || !status) {
-    return ctx.reply('Пример: /mark 3 present\\nили: /mark 3 absent');
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  u.attendance[u.students[index]] ||= {};
-  u.attendance[u.students[index]][today] = status;
-  saveDb();
-  await ctx.reply((status === 'present' ? '✅' : '❌') + ' ' + u.students[index] + ' — отметка сохранена за ' + today);
+  if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личке.');
+  const u = user(ctx.from.id);
+  if (u.role !== 'starosta' && !isOwner(ctx.from.id)) return ctx.reply('❌ Только староста.');
+  const p = ctx.message.text.replace(/^\\/mark(?:@\\S+)?/i, '').trim().split(/\\s+/);
+  const i = Number(p[0])-1, status = p[1] === 'present' ? 'present' : p[1] === 'absent' ? 'absent' : '';
+  if (!Number.isInteger(i) || !u.students[i] || !status) return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
+  const key=attendanceKey(u.students[i]); u.attendance[key] ||= {}; u.attendance[key][attendanceDate()]=status; saveDb();
+  return ctx.reply('✅ Отметка сохранена: '+studentName(u.students[i]));
 });
 
 bot.command('groups', async ctx => {
@@ -891,35 +878,36 @@ bot.hears('📊 Создать опрос', ctx => {
 
 bot.on('callback_query', async ctx => {
   const data = ctx.callbackQuery?.data || '';
-  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:') && !data.startsWith('attstudent:') && !data.startsWith('attmark:')) return;
+  if (!data.startsWith('pollsend:') && !data.startsWith('hwsend:') && !data.startsWith('students:') && !data.startsWith('attstudent:') && !data.startsWith('attmark:') && data !== 'attsummary' && data !== 'attback') return;
 
   const isAttendanceStudent = data.startsWith('attstudent:');
   const isAttendanceMark = data.startsWith('attmark:');
-  if (isAttendanceStudent || isAttendanceMark) {
+  if (isAttendanceStudent || isAttendanceMark || data === 'attsummary' || data === 'attback') {
     if (!isPrivate(ctx)) { await ctx.answerCbQuery('Только в личке.'); return; }
-    const u = normalizeUser(user(ctx.from.id));
-    if (u.role !== 'starosta') { await ctx.answerCbQuery('Только староста.'); return; }
-    if (isAttendanceStudent) {
-      const index = Number(data.slice('attstudent:'.length));
-      if (!Number.isInteger(index) || !u.students[index]) { await ctx.answerCbQuery('Студент не найден.'); return; }
-      await ctx.answerCbQuery('Выберите статус');
-      await ctx.editMessageText('📋 Отметить посещаемость:\\n\\n👨‍🎓 ' + u.students[index], attendanceStatusButtons(index));
+    const u = user(ctx.from.id);
+    if (u.role !== 'starosta' && !isOwner(ctx.from.id)) { await ctx.answerCbQuery('Только староста.'); return; }
+    if (data === 'attsummary' || data === 'attback') {
+      await ctx.answerCbQuery();
+      await ctx.editMessageText(formatAttendance(u), {parse_mode:'HTML', ...attendanceButtons(u)});
       return;
     }
-    const parts = data.slice('attmark:'.length).split(':');
-    const index = Number(parts[0]);
-    const status = parts[1];
-    if (!u.students[index] || !['present','absent'].includes(status)) { await ctx.answerCbQuery('Ошибка.'); return; }
-    const today = new Date().toISOString().slice(0, 10);
-    u.attendance[u.students[index]] ||= {};
-    u.attendance[u.students[index]][today] = status;
-    saveDb();
-    await ctx.answerCbQuery('Сохранено');
-    await ctx.editMessageText((status === 'present' ? '✅' : '❌') + ' ' + u.students[index] + ' — ' + today);
+    if (isAttendanceStudent) {
+      const index=Number(data.slice('attstudent:'.length));
+      if (!Number.isInteger(index) || !u.students[index]) { await ctx.answerCbQuery('Не найден'); return; }
+      await ctx.answerCbQuery('Выбери статус');
+      await ctx.editMessageText('📋 <b>Отметка посещаемости</b>\\n\\n'+escapeHtml(studentName(u.students[index])), {parse_mode:'HTML', ...attendanceStatusButtons(index)});
+      return;
+    }
+    const p=data.slice('attmark:'.length).split(':'), index=Number(p[0]), status=p[1];
+    if (!u.students[index] || !['present','absent','clear'].includes(status)) { await ctx.answerCbQuery('Ошибка'); return; }
+    const key=attendanceKey(u.students[index]); u.attendance[key] ||= {};
+    if (status==='clear') delete u.attendance[key][attendanceDate()]; else u.attendance[key][attendanceDate()]=status;
+    saveDb(); await ctx.answerCbQuery(status==='clear'?'Снято':'Сохранено');
+    await ctx.editMessageText(formatAttendance(u), {parse_mode:'HTML', ...attendanceButtons(u)});
     return;
   }
 
-  const isStudentList = data.startsWith('students:');
+const isStudentList = data.startsWith('students:');
   const isHomework = data.startsWith('hwsend:');
   if (isStudentList) {
     if (!isPrivate(ctx)) { await ctx.answerCbQuery('Только в личке.'); return; }
