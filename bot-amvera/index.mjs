@@ -30,11 +30,7 @@ if (!token) {
 const bot = new Telegraf(token);
 
 const SUBSCRIPTION_STARS = Math.max(1, Number(process.env.SUBSCRIPTION_STARS || 100));
-const SUBSCRIPTION_RUB = Math.max(1, Number(process.env.SUBSCRIPTION_RUB || 199));
 const SUBSCRIPTION_DAYS = 30;
-const YOOKASSA_SHOP_ID = (process.env.YOOKASSA_SHOP_ID || '').trim();
-const YOOKASSA_SECRET_KEY = (process.env.YOOKASSA_SECRET_KEY || '').trim();
-const YOOKASSA_RETURN_URL = (process.env.YOOKASSA_RETURN_URL || '').trim();
 const SUBSCRIPTION_SECONDS = SUBSCRIPTION_DAYS * 24 * 60 * 60;
 
 // Telegram user ID владельца, которому подписка не требуется.
@@ -72,40 +68,8 @@ function subscriptionText(u, owner = false) {
 
 function subscriptionKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('⭐ Оплатить Stars — ' + SUBSCRIPTION_STARS, 'subscribe')],
-    [Markup.button.callback('💳 Оплатить картой — ' + SUBSCRIPTION_RUB + ' ₽', 'subscribe_card')]
+    [Markup.button.callback('⭐ Оплатить через Telegram Stars — ' + SUBSCRIPTION_STARS, 'subscribe')]
   ]);
-}
-
-function yookassaConfigured() {
-  return Boolean(YOOKASSA_SHOP_ID && YOOKASSA_SECRET_KEY && YOOKASSA_RETURN_URL);
-}
-
-async function createYooKassaPayment(userId) {
-  if (!yookassaConfigured()) throw new Error('ЮKassa не настроена: проверь YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY и YOOKASSA_RETURN_URL.');
-
-  const idempotenceKey = crypto.randomUUID();
-  const response = await fetch('https://api.yookassa.ru/v3/payments', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(YOOKASSA_SHOP_ID + ':' + YOOKASSA_SECRET_KEY).toString('base64'),
-      'Idempotence-Key': idempotenceKey,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      amount: { value: SUBSCRIPTION_RUB.toFixed(2), currency: 'RUB' },
-      capture: true,
-      confirmation: { type: 'redirect', return_url: YOOKASSA_RETURN_URL },
-      description: 'Подписка на бота на 30 дней',
-      metadata: { telegram_user_id: String(userId), product: 'bot_subscription_30d' }
-    })
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.confirmation?.confirmation_url) {
-    throw new Error('ЮKassa: ' + (data.description || data.message || ('HTTP ' + response.status)));
-  }
-  return data;
 }
 
 async function subscriptionMiddleware(ctx, next) {
@@ -209,7 +173,6 @@ function normalizeUser(u) {
   u.attendance ||= {};
   u.subscriptionUntil ||= 0;
   u.paymentHistory ||= [];
-  u.pendingYooKassaPaymentId ||= '';
   u.createdAt ||= null;
   return u;
 }
@@ -613,10 +576,8 @@ bot.command('stats', ctx => {
   const newUsers30d = entries.filter(([, u]) => u.createdAt && (now - Date.parse(u.createdAt)) <= 30 * 24 * 60 * 60 * 1000).length;
   const history = entries.flatMap(([, u]) => Array.isArray(u.paymentHistory) ? u.paymentHistory : []);
   const starsPayments = history.filter(p => p.method === 'stars');
-  const yooPayments = history.filter(p => p.method === 'yookassa');
   const manualGrants = history.filter(p => p.method === 'owner_grant').length;
   const starsTotal = starsPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  const yooTotal = yooPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   return ctx.reply(
     '📊 <b>Статистика Староста Бота</b>\n\n' +
@@ -702,66 +663,6 @@ bot.command('pollreport', async ctx => {
 });
 
 bot.on('callback_query', async (ctx, next) => {
-  if (ctx.callbackQuery?.data === 'yookassa_check') {
-    await ctx.answerCbQuery('Проверяю платёж…');
-    const u = normalizeUser(user(ctx.from.id));
-    if (!u.pendingYooKassaPaymentId) {
-      await ctx.reply('ℹ️ Ожидаемый платёж не найден. Нажми «💳 Подписка» и создай новый платёж.');
-      return;
-    }
-    try {
-      const payment = await getYooKassaPayment(u.pendingYooKassaPaymentId);
-      console.log('[yookassa:check]', payment.id, payment.status, payment.paid);
-      if (payment.status === 'succeeded' && payment.paid) {
-        const activated = await processYooKassaPayment(payment);
-        if (activated) {
-          await ctx.reply('✅ Платёж подтверждён. Подписка активирована на 30 дней.', menuFor(ctx));
-        } else {
-          await ctx.reply('⚠️ Платёж найден, но не прошёл проверку суммы/назначения. Проверь настройки ЮKassa.');
-        }
-      } else if (payment.status === 'pending') {
-        await ctx.reply('⏳ Платёж ещё не завершён. Если ты уже оплатил, подожди несколько секунд и нажми «🔄 Проверить оплату» ещё раз.');
-      } else {
-        await ctx.reply('❌ Платёж имеет статус: ' + payment.status + '. Создай новый платёж.');
-      }
-    } catch (e) {
-      console.error('[yookassa:check]', e);
-      await ctx.reply('❌ Не удалось проверить платёж: ' + e.message);
-    }
-    return;
-  }
-
-  if (ctx.callbackQuery?.data === 'subscribe_card') {
-    if (isOwner(ctx.from.id)) {
-      await ctx.answerCbQuery('Для владельца доступ бесплатный.');
-      return;
-    }
-    if (!isPrivate(ctx)) {
-      await ctx.answerCbQuery('Оплата картой доступна в личке.');
-      return;
-    }
-    await ctx.answerCbQuery();
-    try {
-      const payment = await createYooKassaPayment(ctx.from.id);
-      const u = normalizeUser(user(ctx.from.id));
-      u.pendingYooKassaPaymentId = payment.id;
-      saveDb();
-      await ctx.reply(
-        '💳 <b>Оплата банковской картой</b>\\n\\n' +
-        'Сумма: <b>' + SUBSCRIPTION_RUB + ' ₽</b>\\n' +
-        'Срок: <b>30 дней</b>\\n\\n' +
-        'После оплаты нажми «🔄 Проверить оплату».',
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard([
-          [Markup.button.url('💳 Перейти к оплате', payment.confirmation.confirmation_url)],
-          [Markup.button.callback('🔄 Проверить оплату', 'yookassa_check')]
-        ]) }
-      );
-    } catch (e) {
-      console.error('[yookassa:create]', e);
-      await ctx.reply('❌ Не удалось создать оплату картой. Проверь настройки ЮKassa на сервере.');
-    }
-    return;
-  }
   if (ctx.callbackQuery?.data === 'subscribe') {
     if (isOwner(ctx.from.id)) {
       await ctx.answerCbQuery('Для владельца доступ бесплатный.');
@@ -818,88 +719,6 @@ bot.on('successful_payment', async ctx => {
     { parse_mode: 'HTML', ...menuFor(ctx) }
   );
 });
-
-async function getYooKassaPayment(paymentId) {
-  if (!yookassaConfigured()) throw new Error('ЮKassa не настроена.');
-  const response = await fetch('https://api.yookassa.ru/v3/payments/' + encodeURIComponent(paymentId), {
-    method: 'GET',
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(YOOKASSA_SHOP_ID + ':' + YOOKASSA_SECRET_KEY).toString('base64'),
-      'Content-Type': 'application/json'
-    }
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error('ЮKassa GET: ' + (data.description || data.message || ('HTTP ' + response.status)));
-  }
-  return data;
-}
-
-async function processYooKassaPayment(payment) {
-  if (!payment || payment.status !== 'succeeded' || !payment.paid) return false;
-  if (payment.metadata?.product !== 'bot_subscription_30d') return false;
-
-  const userId = String(payment.metadata?.telegram_user_id || '');
-  if (!userId) return false;
-  const u = normalizeUser(user(userId));
-
-  if (u.paymentHistory.some(x => x.id === payment.id)) return true;
-
-  const expected = SUBSCRIPTION_RUB.toFixed(2);
-  const actual = Number(payment.amount?.value || 0).toFixed(2);
-  if (actual !== expected || payment.amount?.currency !== 'RUB') {
-    console.error('[yookassa] Сумма платежа не совпадает:', payment.id, actual, payment.amount);
-    return false;
-  }
-
-  const base = Math.max(Date.now(), subscriptionUntil(u));
-  u.subscriptionUntil = base + SUBSCRIPTION_SECONDS * 1000;
-  u.paymentHistory.push({
-    id: payment.id,
-    method: 'yookassa',
-    amount: actual,
-    currency: 'RUB',
-    paidAt: new Date().toISOString()
-  });
-  u.pendingYooKassaPaymentId = '';
-  saveDb();
-
-  try {
-    await bot.telegram.sendMessage(
-      Number(userId),
-      '🎉 <b>Оплата получена!</b>\\n\\n' +
-      '💳 Способ: банковская карта (ЮKassa)\\n' +
-      '💰 Сумма: <b>' + actual + ' ₽</b>\\n' +
-      '📅 Подписка действует до: <b>' +
-      new Date(u.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) +
-      ' МСК</b>.',
-      { parse_mode: 'HTML', ...menuFor(ctx) }
-    );
-  } catch (e) {
-    console.error('[yookassa:notify]', e);
-  }
-  return true;
-}
-
-async function handleYooKassaWebhook(req, res) {
-  let body = '';
-  req.setEncoding('utf8');
-  req.on('data', chunk => { body += chunk; });
-  req.on('end', async () => {
-    try {
-      const event = JSON.parse(body || '{}');
-      if (event.event === 'payment.succeeded') {
-        await processYooKassaPayment(event.object);
-      }
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('OK');
-    } catch (e) {
-      console.error('[yookassa:webhook]', e);
-      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Bad Request');
-    }
-  });
-}
 
 bot.start(async ctx => {
   const u = normalizeUser(user(ctx.from.id));
@@ -1459,14 +1278,6 @@ bot.catch(e => console.error('[bot]', e));
 
 const port = Number(process.env.PORT || 80);
 const healthServer = http.createServer((req, res) => {
-  if (req.method === 'POST' && req.url === '/yookassa/webhook') {
-    return handleYooKassaWebhook(req, res);
-  }
-  if (req.method === 'GET' && req.url === '/payment-return') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end('<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Оплата</title><body style="font-family:Arial,sans-serif;text-align:center;padding:40px"><h2>✅ Спасибо за оплату</h2><p>Платёж передан в обработку.</p><p>Вернитесь в Telegram и откройте бота — подписка активируется автоматически.</p></body></html>');
-    return;
-  }
   res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('OK');
 });
