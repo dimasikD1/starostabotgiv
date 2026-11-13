@@ -1215,7 +1215,7 @@ bot.command('attendance',async ctx=>{
  const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
  if(!g.students?.length)return ctx.reply('📋 Сначала добавь студентов в группу командой /importstudents.');
  try{
-  const lessons=await getMiniAppTodayLessons(g);
+  const lessons=await getTodayLessons(g);
   if(!lessons.length)return ctx.reply('📋 На сегодня в расписании нет пар для группы '+escapeHtml(g.scheduleGroup||'')+'.');
   g.todayAttendanceLessons=lessons.map(x=>({date:x.date,timeStart:x.timeStart,timeEnd:x.timeEnd,subject:x.subject,room:x.room,teacher:x.teacher}));
   saveDb();
@@ -1531,7 +1531,7 @@ async function handleMiniAppApi(req,res,url) {
   if(!g) return sendJson(res,403,{error:'Кабинет доступен старосте или заместителю группы.'});
   if(req.method==='GET' && url.pathname==='/api/data') {
     try {
-      const lessons=await getTodayLessons(g);
+      const lessons=await getMiniAppTodayLessons(g);
       const students=g.students||[];
       const data=lessons.map(lesson=>{
         const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
@@ -1549,7 +1549,7 @@ async function handleMiniAppApi(req,res,url) {
     try {
       const body=await readJsonBody(req), index=Number(body.studentIndex), status=body.status, key=String(body.lessonKey||'');
       if(!Number.isInteger(index)||index<0||index>=(g.students||[]).length||!['present','absent','unmarked'].includes(status)) return sendJson(res,400,{error:'Некорректная отметка.'});
-      const lessons=await getTodayLessons(g);
+      const lessons=await getMiniAppTodayLessons(g);
       const lesson=lessons.find(x=>attendanceLessonKey(x)===key);
       if(!lesson) return sendJson(res,400,{error:'Эта пара отсутствует в сегодняшнем расписании. Обнови страницу.'});
       g.lessonAttendance ||= {};
