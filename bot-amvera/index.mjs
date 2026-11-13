@@ -216,9 +216,39 @@ function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 
 function attendanceLessonKey(lesson) {
  return [lesson.date||attendanceDate(),lesson.timeStart||lesson.time||'',lesson.timeEnd||'',lesson.subject||'Занятие'].join('|');
 }
+const scheduleCache = new Map();
+const scheduleInFlight = new Map();
+const SCHEDULE_CACHE_TTL = 3 * 60 * 1000;
+
+async function getCachedSchedule(group, days = 7) {
+ const cacheKey = String(group) + ':' + Number(days);
+ const cached = scheduleCache.get(cacheKey);
+ if (cached && cached.expiresAt > Date.now()) {
+  console.log('[schedule cache] hit:', cacheKey);
+  return cached.items;
+ }
+ if (scheduleInFlight.has(cacheKey)) {
+  console.log('[schedule cache] waiting for in-flight request:', cacheKey);
+  return scheduleInFlight.get(cacheKey);
+ }
+ const startedAt = Date.now();
+ console.log('[schedule cache] loading:', cacheKey);
+ const request = getSchedule(String(group), days).then(items => {
+  const safeItems = Array.isArray(items) ? items : [];
+  scheduleCache.set(cacheKey, { items: safeItems, expiresAt: Date.now() + SCHEDULE_CACHE_TTL });
+  console.log('[schedule cache] loaded:', cacheKey, 'items:', safeItems.length, 'ms:', Date.now() - startedAt);
+  return safeItems;
+ }).catch(error => {
+  console.error('[schedule cache] failed:', cacheKey, error?.message || error);
+  throw error;
+ }).finally(() => scheduleInFlight.delete(cacheKey));
+ scheduleInFlight.set(cacheKey, request);
+ return request;
+}
+
 async function getTodayLessons(g) {
  if(!g?.scheduleGroup) throw new Error('Для группы не указано расписание. Сначала настрой /setgroup.');
- const lessons=await getSchedule(String(g.scheduleGroup),7);
+ const lessons=await getCachedSchedule(String(g.scheduleGroup),7);
  return (lessons||[]).filter(x=>x.date===attendanceDate()&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
 }
 function managedGroup(userId) {
@@ -1497,8 +1527,8 @@ async function handleMiniAppApi(req,res,url) {
       });
       return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:attendanceDate(),lessons:data,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))}))});
     } catch(e) {
-      console.error('[miniapp data]',e.message||e);
-      return sendJson(res,502,{error:'Не удалось загрузить расписание. Проверь настройку группы через /setgroup.'});
+      console.error('[miniapp data] failed for group:', g.scheduleGroup, e?.stack || e?.message || e);
+      return sendJson(res,502,{error:'Не удалось получить расписание за отведённое время. Попробуй обновить кабинет через минуту.'});
     }
   }
   if(req.method==='POST' && url.pathname==='/api/attendance') {
@@ -1542,13 +1572,31 @@ const healthServer = http.createServer(async (req, res) => {
   res.end('OK');
 });
 
+
+async function telegramStartupRequest(label, operation, attempts = 5) {
+ let lastError;
+ for (let attempt = 1; attempt <= attempts; attempt++) {
+  try {
+   return await operation();
+  } catch (error) {
+   lastError = error;
+   console.error('[telegram startup] ' + label + ' failed (' + attempt + '/' + attempts + '):', error?.message || error);
+   if (attempt < attempts) {
+    const delay = Math.min(10000, 1500 * (2 ** (attempt - 1)));
+    await new Promise(resolve => setTimeout(resolve, delay));
+   }
+  }
+ }
+ throw new Error('Telegram API недоступен после ' + attempts + ' попыток (' + label + '): ' + (lastError?.message || lastError));
+}
+
 async function main() {
   healthServer.listen(port, '0.0.0.0', () => {
     console.log('[health] HTTP сервер слушает 0.0.0.0:' + port);
   });
 
-  await bot.telegram.deleteWebhook({ drop_pending_updates: false });
-  const me = await bot.telegram.getMe();
+  await telegramStartupRequest('deleteWebhook', () => bot.telegram.deleteWebhook({ drop_pending_updates: false }));
+  const me = await telegramStartupRequest('getMe', () => bot.telegram.getMe());
   console.log('Бот запущен: @' + me.username);
 
   // Уведомляем всех пользователей, назначенных старостами, после каждого запуска/перезапуска.
@@ -1567,7 +1615,7 @@ async function main() {
   console.log('[startup] Уведомления отправлены старостам: ' + starostas.length);
 
   // Обновляем список команд в меню Telegram.
-  await bot.telegram.setMyCommands([
+  await telegramStartupRequest('setMyCommands private', () => bot.telegram.setMyCommands([
     { command: 'start', description: 'Запустить бота' },
     { command: 'schedule', description: 'Расписание на сегодня' },
     { command: 'group', description: 'Моя учебная группа' },
@@ -1578,17 +1626,17 @@ async function main() {
     { command: 'importstudents', description: 'Импорт списка студентов из текста' },
     { command: 'pollreport', description: 'Ответы на последний опрос' },
     { command: 'subscription', description: 'Статус подписки' }
-  ], { scope: { type: 'all_private_chats' } });
+  ], { scope: { type: 'all_private_chats' } }));
 
-  await bot.telegram.setMyCommands([], { scope: { type: 'all_group_chats' } });
+  await telegramStartupRequest('setMyCommands groups', () => bot.telegram.setMyCommands([], { scope: { type: 'all_group_chats' } }));
 
-  await bot.telegram.setMyCommands([
+  await telegramStartupRequest('setMyCommands owner', () => bot.telegram.setMyCommands([
     { command: 'admin', description: 'Панель владельца' },
     { command: 'stats', description: 'Статистика' },
     { command: 'grant', description: 'Выдать подписку' },
     { command: 'revoke', description: 'Отозвать подписку' },
     { command: 'subinfo', description: 'Проверить подписку' }
-  ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } });
+  ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } }));
 
   await bot.launch({ dropPendingUpdates: false });
   await checkAutomaticAttendancePolls();
