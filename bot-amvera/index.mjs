@@ -226,13 +226,23 @@ function formatAttendance(g) {
 async function createAttendanceTelegraphPage(g) {
  const token = db.telegraphAccessToken || '';
  const api = async (method, params) => {
-  const response = await fetch('https://api.telegra.ph/' + method, {
-   method: 'POST',
-   headers: { 'content-type': 'application/x-www-form-urlencoded' },
-   body: new URLSearchParams(params)
-  });
-  const data = await response.json();
-  if (!data.ok) throw new Error(data.error || 'Telegraph API error');
+  let response;
+  try {
+   response = await fetch('https://api.telegra.ph/' + method, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+    body: new URLSearchParams(params),
+    signal: AbortSignal.timeout(20000)
+   });
+  } catch (error) {
+   throw new Error('NETWORK_' + (error.name || 'ERROR') + ': ' + (error.message || 'не удалось подключиться к api.telegra.ph'));
+  }
+  const raw = await response.text();
+  let data;
+  try { data = JSON.parse(raw); }
+  catch { throw new Error('HTTP_' + response.status + ': Telegraph вернул некорректный ответ'); }
+  if (!response.ok) throw new Error('HTTP_' + response.status + ': ' + (data.error || response.statusText));
+  if (!data.ok) throw new Error(data.error || 'TELEGRAPH_API_ERROR');
   return data.result;
  };
  let accessToken = token;
@@ -274,6 +284,7 @@ async function createAttendanceTelegraphPage(g) {
   content: JSON.stringify(content),
   return_content: 'false'
  });
+ if (!page?.url) throw new Error('PAGE_URL_MISSING: Telegraph не вернул ссылку на страницу');
  return page.url;
 }
 
@@ -1182,8 +1193,9 @@ bot.action('attendanceweb:confirm', async ctx => {
   const url = await createAttendanceTelegraphPage(g);
   return ctx.editMessageText('✅ <b>Журнал опубликован в Telegraph</b>\\n\\n' + url, { parse_mode: 'HTML', disable_web_page_preview: true });
  } catch (error) {
-  console.error('[attendance telegraph]', error);
-  return ctx.editMessageText('❌ Не удалось создать страницу Telegraph. Попробуй позже. Проверь доступ сервера к api.telegra.ph.');
+  const reason = String(error?.message || error || 'Неизвестная ошибка').slice(0, 220);
+  console.error('[attendance telegraph]', reason);
+  return ctx.editMessageText('❌ Не удалось создать страницу Telegraph.\\n\\n<b>Причина:</b> <code>' + escapeHtml(reason) + '</code>\\n\\nПришли мне этот текст ошибки — по нему можно определить, что именно не так.', { parse_mode: 'HTML' });
  }
 });
 bot.command('mark',async ctx=>{
