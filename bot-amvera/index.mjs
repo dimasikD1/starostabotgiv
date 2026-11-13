@@ -125,7 +125,7 @@ async function subscriptionMiddleware(ctx, next) {
     }
   }
 
-  const allowed = new Set(['start', 'help', 'admin', 'adminhelp', 'commands', 'subscribe', 'subscription', 'terms', 'paysupport', 'myid', 'grant', 'revoke', 'subinfo', 'stats', 'setgroup']);
+  const allowed = new Set(['start', 'help', 'admin', 'adminhelp', 'commands', 'subscribe', 'subscription', 'terms', 'paysupport', 'myid', 'grant', 'revoke', 'subinfo', 'stats', 'setgroup', 'app']);
   if (allowed.has(command)) return next();
   if (hasActiveSubscription(u)) return next();
 
