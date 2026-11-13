@@ -1126,7 +1126,7 @@ bot.command('attendanceweb', async ctx => {
 bot.action('attendanceweb:cancel', async ctx => {
  if (!isPrivate(ctx)) return ctx.answerCbQuery();
  const u = normalizeUser(user(ctx.from.id));
- delete u.pendingAttendanceTelegraph;
+ delete u.pendingAttendanceHtml;
  saveDb();
  await ctx.answerCbQuery('Отменено');
  return ctx.editMessageText('❌ Создание файла отменено.');
@@ -1134,9 +1134,9 @@ bot.action('attendanceweb:cancel', async ctx => {
 bot.action('attendanceweb:confirm', async ctx => {
  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой бота в личке.');
  const u = normalizeUser(user(ctx.from.id));
- if (!u.pendingAttendanceTelegraph) return ctx.answerCbQuery('Запрос устарел.');
+ if (!u.pendingAttendanceHtml) return ctx.answerCbQuery('Запрос устарел.');
  const g = managedGroup(ctx.from.id);
- delete u.pendingAttendanceTelegraph;
+ delete u.pendingAttendanceHtml;
  saveDb();
  if (!g) return ctx.answerCbQuery('Группа не найдена.');
  await ctx.answerCbQuery('Формирую файл…');
