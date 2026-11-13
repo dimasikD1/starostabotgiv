@@ -1449,6 +1449,81 @@ bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу че�
 
 bot.catch(e => console.error('[bot]', e));
 
+
+function verifyMiniAppInitData(initData) {
+  if (!initData || typeof initData !== 'string' || initData.length > 8192) throw new Error('Открой мини-приложение из Telegram.');
+  const params = new URLSearchParams(initData);
+  const receivedHash = params.get('hash');
+  if (!receivedHash || !/^[a-f0-9]{64}$/i.test(receivedHash)) throw new Error('Некорректные данные Telegram.');
+  params.delete('hash');
+  params.delete('signature');
+  const checkString = [...params.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([k,v]) => k+'='+v).join('\n');
+  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
+  const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+  const a = Buffer.from(receivedHash, 'hex'), b = Buffer.from(expectedHash, 'hex');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a,b)) throw new Error('Не удалось подтвердить аккаунт Telegram.');
+  const authDate = Number(params.get('auth_date') || 0);
+  if (!authDate || Math.abs(Date.now()/1000-authDate) > 86400) throw new Error('Сессия устарела. Закрой и снова открой мини-приложение.');
+  let tgUser;
+  try { tgUser = JSON.parse(params.get('user') || 'null'); } catch {}
+  if (!tgUser?.id) throw new Error('Telegram не передал данные пользователя.');
+  return tgUser;
+}
+function sendJson(res, status, data) {
+  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+  res.end(JSON.stringify(data));
+}
+async function readJsonBody(req) {
+  let raw='';
+  for await (const chunk of req) { raw+=chunk; if(raw.length>32768) throw new Error('Слишком большой запрос.'); }
+  return raw ? JSON.parse(raw) : {};
+}
+async function handleMiniAppApi(req,res,url) {
+  let tgUser;
+  try { tgUser=verifyMiniAppInitData(req.headers['x-telegram-init-data']); }
+  catch(e) { return sendJson(res,401,{error:e.message}); }
+  const u=normalizeUser(user(tgUser.id));
+  if (!isOwner(tgUser.id) && !hasActiveSubscription(u)) return sendJson(res,403,{error:'Для веб-кабинета нужна активная подписка.'});
+  const g=managedGroup(tgUser.id);
+  if(!g) return sendJson(res,403,{error:'Кабинет доступен старосте или заместителю группы.'});
+  if(req.method==='GET' && url.pathname==='/api/data') {
+    try {
+      const lessons=await getTodayLessons(g);
+      const students=g.students||[];
+      const data=lessons.map(lesson=>{
+        const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
+        let present=0,absent=0;
+        for(const student of students){const status=record[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
+        return {key,date:lesson.date,timeStart:lesson.timeStart||'',timeEnd:lesson.timeEnd||'',subject:lesson.subject||'Занятие',room:lesson.room||'',present,absent,unmarked:students.length-present-absent};
+      });
+      return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:attendanceDate(),lessons:data,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))}))});
+    } catch(e) {
+      console.error('[miniapp data]',e.message||e);
+      return sendJson(res,502,{error:'Не удалось загрузить расписание. Проверь настройку группы через /setgroup.'});
+    }
+  }
+  if(req.method==='POST' && url.pathname==='/api/attendance') {
+    try {
+      const body=await readJsonBody(req), index=Number(body.studentIndex), status=body.status, key=String(body.lessonKey||'');
+      if(!Number.isInteger(index)||index<0||index>=(g.students||[]).length||!['present','absent','unmarked'].includes(status)) return sendJson(res,400,{error:'Некорректная отметка.'});
+      const lessons=await getTodayLessons(g);
+      const lesson=lessons.find(x=>attendanceLessonKey(x)===key);
+      if(!lesson) return sendJson(res,400,{error:'Эта пара отсутствует в сегодняшнем расписании. Обнови страницу.'});
+      g.lessonAttendance ||= {};
+      g.lessonAttendance[key] ||= {};
+      const studentKey=attendanceKey(g.students[index]);
+      if(status==='unmarked') delete g.lessonAttendance[key][studentKey];
+      else g.lessonAttendance[key][studentKey]=status;
+      saveDb();
+      return sendJson(res,200,{ok:true});
+    } catch(e) {
+      console.error('[miniapp attendance]',e.message||e);
+      return sendJson(res,400,{error:'Не удалось сохранить отметку. Попробуй ещё раз.'});
+    }
+  }
+  return sendJson(res,404,{error:'Метод не найден.'});
+}
+
 const port = Number(process.env.PORT || 80);
 const webappFile = new URL('./webapp/index.html', import.meta.url);
 const healthServer = http.createServer(async (req, res) => {
