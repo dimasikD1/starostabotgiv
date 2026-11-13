@@ -219,7 +219,7 @@ function managedGroup(userId) {
 }
 function formatAttendance(g) {
  const students=g?.students||[],attendance=g?.attendance||{};
- if(!students.length)return '📋 <b>Посещаемость</b>\\n\\nСписок группы пуст. Добавь студентов командой /student.';
+ if(!students.length)return '📋 <b>Посещаемость</b>\n\nСписок группы пуст. Добавь студентов командой /student.';
  const today=attendanceDate(),present=[],absent=[],unmarked=[];
  for(const student of students){
   const status=attendance[attendanceKey(student)]?.[today],name=escapeHtml(studentName(student));
@@ -227,12 +227,12 @@ function formatAttendance(g) {
   else if(status==='absent')absent.push(name);
   else unmarked.push(name);
  }
- const list=(title,items)=>'<b>'+title+' ('+items.length+')</b>\\n'+(items.length?items.map((name,i)=>(i+1)+'. '+name).join('\\n'):'—');
- return '📋 <b>Посещаемость за '+today+'</b>\\n👥 <b>'+escapeHtml(g.title||'Группа')+'</b>\\n\\n'+
-  '👨‍🎓 Всего: <b>'+students.length+'</b>\\n\\n'+
-  '✅ <b>Были</b>\\n'+(present.length?present.map((name,i)=>(i+1)+'. '+name).join('\\n'):'—')+'\\n\\n'+
-  '❌ <b>Не были</b>\\n'+(absent.length?absent.map((name,i)=>(i+1)+'. '+name).join('\\n'):'—')+
-  (unmarked.length?'\\n\\n▫️ <b>Не отмечены</b>\\n'+unmarked.map((name,i)=>(i+1)+'. '+name).join('\\n'):'');
+ const list=(title,items)=>'<b>'+title+' ('+items.length+')</b>\n'+(items.length?items.map((name,i)=>(i+1)+'. '+name).join('\n'):'—');
+ return '📋 <b>Посещаемость за '+today+'</b>\n👥 <b>'+escapeHtml(g.title||'Группа')+'</b>\n\n'+
+  '👨‍🎓 Всего: <b>'+students.length+'</b>\n\n'+
+  '✅ <b>Были ('+present.length+')</b>\n'+(present.length?present.map((name,i)=>(i+1)+'. '+name).join('\n'):'—')+'\n\n'+
+  '❌ <b>Не были ('+absent.length+')</b>\n'+(absent.length?absent.map((name,i)=>(i+1)+'. '+name).join('\n'):'—')+
+  (unmarked.length?'\n\n▫️ <b>Не отмечены ('+unmarked.length+')</b>\n'+unmarked.map((name,i)=>(i+1)+'. '+name).join('\n'):'');
 }
 
 function createAttendanceHtml(g) {
