@@ -1458,7 +1458,7 @@ function verifyMiniAppInitData(initData) {
   params.delete('hash');
   params.delete('signature');
   const checkString = [...params.entries()].sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0).map(([k,v]) => k+'='+v).join('\n');
-  const secretKey = crypto.createHmac('sha256', token).update('WebAppData').digest();
+  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
   const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
   const a = Buffer.from(receivedHash, 'hex'), b = Buffer.from(expectedHash, 'hex');
   if (a.length !== b.length || !crypto.timingSafeEqual(a,b)) throw new Error('Не удалось подтвердить аккаунт Telegram.');
