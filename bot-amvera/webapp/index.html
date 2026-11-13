@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#10131d"><title>Староста Бот — Кабинет</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#10131d;--panel:#191e2b;--muted:#929bad;--text:#f4f6fb;--accent:#718cff;--green:#2cbd87;--red:#ef6675;--line:#293144}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,sans-serif;padding:18px 15px 36px}.wrap{max-width:720px;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;margin:6px 0 20px}.brand{font-weight:800;font-size:21px}.tag{color:#aab7ff;background:#242d4c;padding:6px 10px;border-radius:20px;font-size:12px}.muted{color:var(--muted)}h1{font-size:24px;margin:0 0 5px}.date{color:var(--muted);margin-bottom:18px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:16px 0}.stat,.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px}.stat b{display:block;font-size:23px;margin-top:4px}.stat span{font-size:12px;color:var(--muted)}.section-title{font-weight:750;margin:24px 0 10px}.lessons{display:flex;gap:8px;overflow:auto;padding-bottom:4px}.lesson{flex:0 0 auto;text-align:left;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:13px;padding:11px 13px;max-width:230px}.lesson.active{border-color:var(--accent);background:#242b45}.lesson small{display:block;color:var(--muted);margin-top:3px}.student{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 12px;margin:8px 0}.student-name{font-weight:600;min-width:0;overflow-wrap:anywhere}.actions{display:flex;gap:6px;flex-shrink:0}.actions button{border:1px solid var(--line);border-radius:10px;background:#242a38;color:var(--text);padding:9px 10px;font-size:14px}.actions .yes.on{background:#174b3b;border-color:var(--green)}.actions .no.on{background:#512832;border-color:var(--red)}.empty,.error{background:var(--panel);padding:18px;border-radius:14px;color:var(--muted)}.error{color:#ff9ca5}.loader{text-align:center;padding:50px 12px;color:var(--muted)}.refresh{border:0;background:#283352;color:#dce3ff;border-radius:10px;padding:9px 12px}.footer{margin-top:25px;color:var(--muted);font-size:12px;text-align:center}
+</style></head>
+<body><main class="wrap">
+<header class="top"><div class="brand">🎓 Староста Бот</div><div class="tag">MINI APP</div></header>
+<div id="app"><div class="loader">Загружаем кабинет…</div></div>
+</main>
+<script>
+const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
+let state=null,selectedKey=null;
+const root=document.getElementById('app');
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,options={}){const r=await fetch(path,{...options,headers:{'Content-Type':'application/json','X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.error||'Ошибка запроса');return d}
+function render(){
+ const lessons=state.lessons||[],students=state.students||[],lesson=lessons.find(x=>x.key===selectedKey)||lessons[0];selectedKey=lesson?.key||null;
+ const present=students.filter(s=>s.statuses[selectedKey]==='present').length,absent=students.filter(s=>s.statuses[selectedKey]==='absent').length,unmarked=students.length-present-absent;
+ root.innerHTML='<h1>Привет, '+esc(state.user.firstName||'староста')+'!</h1><div class="date">'+esc(state.group)+' · '+esc(state.date)+' <button class="refresh" onclick="load()">↻ Обновить</button></div>'+
+ '<div class="stats"><div class="stat"><span>Студентов</span><b>'+students.length+'</b></div><div class="stat"><span>Присутствуют</span><b>'+present+'</b></div><div class="stat"><span>Не отмечены</span><b>'+unmarked+'</b></div></div>'+
+ '<div class="section-title">📅 Пары на сегодня</div>'+
+ (lessons.length?'<div class="lessons">'+lessons.map(x=>'<button class="lesson '+(x.key===selectedKey?'active':'')+'" onclick="choose(\''+encodeURIComponent(x.key)+'\')">'+esc(x.timeStart||'Время не указано')+' · '+esc(x.subject)+'<small>'+esc(x.room||'Аудитория не указана')+'</small></button>').join('')+'</div>':'<div class="empty">На сегодня пар нет. Проверь группу через /setgroup в боте.</div>')+
+ (lesson?'<div class="section-title">👥 Посещаемость · '+esc(lesson.subject)+' <span class="muted">('+present+' / '+absent+' / '+unmarked+')</span></div>'+
+ (students.length?students.map(s=>'<div class="student"><div class="student-name">'+esc(s.name)+'</div><div class="actions"><button class="yes '+(s.statuses[selectedKey]==='present'?'on':'')+'" onclick="mark('+s.index+',\'present\')">✓</button><button class="no '+(s.statuses[selectedKey]==='absent'?'on':'')+'" onclick="mark('+s.index+',\'absent\')">✕</button></div></div>').join(''):'<div class="empty">Список студентов пока пуст. Добавь его через /importstudents в боте.</div>'):'')+
+ '<div class="footer">Изменения сохраняются в общей базе Telegram-бота.</div>';
+}
+window.choose=k=>{selectedKey=decodeURIComponent(k);render()};
+window.mark=async(index,status)=>{try{await api('/api/attendance',{method:'POST',body:JSON.stringify({studentIndex:index,lessonKey:selectedKey,status})});const s=state.students.find(x=>x.index===index);s.statuses[selectedKey]=status;render()}catch(e){showError(e.message)}};
+window.load=async()=>{root.innerHTML='<div class="loader">Загружаем кабинет…</div>';try{state=await api('/api/data');selectedKey=selectedKey||state.lessons[0]?.key;render()}catch(e){showError(e.message)}};
+function showError(message){root.innerHTML='<div class="error">⚠️ '+esc(message)+'</div><p><button class="refresh" onclick="load()">Попробовать снова</button></p>'}
+load();
+</script></body></html>
