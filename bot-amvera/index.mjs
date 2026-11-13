@@ -218,9 +218,21 @@ function managedGroup(userId) {
  g.students||=[];g.attendance||={};if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}return g;
 }
 function formatAttendance(g) {
- const students=g?.students||[],attendance=g?.attendance||{};if(!students.length)return '📋 <b>Посещаемость</b>\\n\\nСписок группы пуст. Добавь студентов командой /student.';
- const today=attendanceDate();let present=0,absent=0,unmarked=0;const lines=students.map((x,i)=>{const st=attendance[attendanceKey(x)]?.[today];if(st==='present')present++;else if(st==='absent')absent++;else unmarked++;return (i+1)+'. '+(st==='present'?'✅ ':st==='absent'?'❌ ':'▫️ ')+escapeHtml(studentName(x));});
- return '📋 <b>Посещаемость за '+today+'</b>\\n👥 <b>'+escapeHtml(g.title)+'</b>\\n\\n👨‍🎓 Всего: <b>'+students.length+'</b>\\n✅ Были: <b>'+present+'</b>\\n❌ Не были: <b>'+absent+'</b>\\n▫️ Не отмечены: <b>'+unmarked+'</b>\\n\\n'+lines.join('\\n');
+ const students=g?.students||[],attendance=g?.attendance||{};
+ if(!students.length)return '📋 <b>Посещаемость</b>\\n\\nСписок группы пуст. Добавь студентов командой /student.';
+ const today=attendanceDate(),present=[],absent=[],unmarked=[];
+ for(const student of students){
+  const status=attendance[attendanceKey(student)]?.[today],name=escapeHtml(studentName(student));
+  if(status==='present')present.push(name);
+  else if(status==='absent')absent.push(name);
+  else unmarked.push(name);
+ }
+ const list=(title,items)=>'<b>'+title+' ('+items.length+')</b>\\n'+(items.length?items.map((name,i)=>(i+1)+'. '+name).join('\\n'):'—');
+ return '📋 <b>Посещаемость за '+today+'</b>\\n👥 <b>'+escapeHtml(g.title||'Группа')+'</b>\\n\\n'+
+  '👨‍🎓 Всего: <b>'+students.length+'</b>\\n\\n'+
+  '✅ <b>Были</b>\\n'+(present.length?present.map((name,i)=>(i+1)+'. '+name).join('\\n'):'—')+'\\n\\n'+
+  '❌ <b>Не были</b>\\n'+(absent.length?absent.map((name,i)=>(i+1)+'. '+name).join('\\n'):'—')+
+  (unmarked.length?'\\n\\n▫️ <b>Не отмечены</b>\\n'+unmarked.map((name,i)=>(i+1)+'. '+name).join('\\n'):'');
 }
 
 function createAttendanceHtml(g) {
