@@ -13,25 +13,60 @@
 <div id="app"><div class="loader">Загружаем кабинет…</div></div>
 </main>
 <script>
-const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
-let state=null,selectedKey=null;
+let tg=null,state=null,selectedKey=null,loading=false;
 const root=document.getElementById('app');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(path,options={}){const r=await fetch(path,{...options,headers:{'Content-Type':'application/json','X-Telegram-Init-Data':tg?.initData||'',...(options.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.error||'Ошибка запроса');return d}
+function initTelegram(){
+  tg=window.Telegram?.WebApp||null;
+  if(tg){tg.ready();tg.expand();return true;}
+  return false;
+}
+async function waitForTelegram(){
+  for(let i=0;i<30;i++){if(initTelegram())return true;await new Promise(r=>setTimeout(r,100));}
+  return initTelegram();
+}
+async function api(path,options={}){
+  if(!tg?.initData)throw new Error('Telegram не передал данные авторизации. Закрой мини-приложение и открой его кнопкой «Открыть кабинет» в чате с ботом. Если ошибка повторится, проверь запуск Mini App через Telegram.');
+  const headers={'Content-Type':'application/json','X-Telegram-Init-Data':tg.initData,...(options.headers||{})};
+  const r=await fetch(path,{...options,headers,cache:'no-store'});
+  let d={};try{d=await r.json()}catch{}
+  if(!r.ok)throw new Error(d.error||('Ошибка сервера ('+r.status+')'));
+  return d;
+}
 function render(){
- const lessons=state.lessons||[],students=state.students||[],lesson=lessons.find(x=>x.key===selectedKey)||lessons[0];selectedKey=lesson?.key||null;
- const present=students.filter(s=>s.statuses[selectedKey]==='present').length,absent=students.filter(s=>s.statuses[selectedKey]==='absent').length,unmarked=students.length-present-absent;
- root.innerHTML='<h1>Привет, '+esc(state.user.firstName||'староста')+'!</h1><div class="date">'+esc(state.group)+' · '+esc(state.date)+' <button class="refresh" onclick="load()">↻ Обновить</button></div>'+
+ const lessons=state.lessons||[],students=state.students||[],lesson=lessons.find(x=>x.key===selectedKey)||lessons[0];
+ selectedKey=lesson?.key||null;
+ const statuses=s=>s.statuses?.[selectedKey]||'unmarked';
+ const present=students.filter(s=>statuses(s)==='present').length;
+ const absent=students.filter(s=>statuses(s)==='absent').length;
+ const unmarked=students.length-present-absent;
+ root.innerHTML='<h1>Привет, '+esc(state.user?.firstName||'староста')+'!</h1><div class="date">'+esc(state.group)+' · '+esc(state.date)+' <button class="refresh" onclick="load()">↻ Обновить</button></div>'+
  '<div class="stats"><div class="stat"><span>Студентов</span><b>'+students.length+'</b></div><div class="stat"><span>Присутствуют</span><b>'+present+'</b></div><div class="stat"><span>Не отмечены</span><b>'+unmarked+'</b></div></div>'+
  '<div class="section-title">📅 Пары на сегодня</div>'+
  (lessons.length?'<div class="lessons">'+lessons.map(x=>'<button class="lesson '+(x.key===selectedKey?'active':'')+'" onclick="choose(\''+encodeURIComponent(x.key)+'\')">'+esc(x.timeStart||'Время не указано')+' · '+esc(x.subject)+'<small>'+esc(x.room||'Аудитория не указана')+'</small></button>').join('')+'</div>':'<div class="empty">На сегодня пар нет. Проверь группу через /setgroup в боте.</div>')+
  (lesson?'<div class="section-title">👥 Посещаемость · '+esc(lesson.subject)+' <span class="muted">('+present+' / '+absent+' / '+unmarked+')</span></div>'+
- (students.length?students.map(s=>'<div class="student"><div class="student-name">'+esc(s.name)+'</div><div class="actions"><button class="yes '+(s.statuses[selectedKey]==='present'?'on':'')+'" onclick="mark('+s.index+',\'present\')">✓</button><button class="no '+(s.statuses[selectedKey]==='absent'?'on':'')+'" onclick="mark('+s.index+',\'absent\')">✕</button></div></div>').join(''):'<div class="empty">Список студентов пока пуст. Добавь его через /importstudents в боте.</div>'):'')+
+ (students.length?students.map(s=>'<div class="student"><div class="student-name">'+esc(s.name)+'</div><div class="actions"><button class="yes '+(statuses(s)==='present'?'on':'')+'" onclick="mark('+s.index+',\'present\')">✓</button><button class="no '+(statuses(s)==='absent'?'on':'')+'" onclick="mark('+s.index+',\'absent\')">✕</button>'+(statuses(s)!=='unmarked'?'<button onclick="mark('+s.index+',\'unmarked\')">↶</button>':'')+'</div></div>').join(''):'<div class="empty">Список студентов пока пуст. Добавь его через /importstudents в боте.</div>'):'')+
  '<div class="footer">Изменения сохраняются в общей базе Telegram-бота.</div>';
 }
-window.choose=i=>{selectedKey=state.lessons[Number(i)]?.key||null;render()};
-window.mark=async(index,status)=>{try{await api('/api/attendance',{method:'POST',body:JSON.stringify({studentIndex:index,lessonKey:selectedKey,status})});const s=state.students.find(x=>x.index===index);s.statuses[selectedKey]=status;render()}catch(e){showError(e.message)}};
-window.load=async()=>{root.innerHTML='<div class="loader">Загружаем кабинет…</div>';try{state=await api('/api/data');selectedKey=selectedKey||state.lessons[0]?.key;render()}catch(e){showError(e.message)}};
-function showError(message){root.innerHTML='<div class="error">⚠️ '+esc(message)+'</div><p><button class="refresh" onclick="load()">Попробовать снова</button></p>'}
+window.choose=encoded=>{try{selectedKey=decodeURIComponent(encoded)}catch{selectedKey=encoded}render()};
+window.mark=async(index,status)=>{
+ if(loading)return;loading=true;
+ try{await api('/api/attendance',{method:'POST',body:JSON.stringify({studentIndex:index,lessonKey:selectedKey,status})});const s=state.students.find(x=>x.index===index);if(s){s.statuses[selectedKey]=status;render()}}
+ catch(e){showError(e.message)}
+ finally{loading=false}
+};
+window.load=async()=>{
+ if(loading)return;
+ root.innerHTML='<div class="loader">Загружаем кабинет…</div>';
+ try{
+   if(!await waitForTelegram())throw new Error('Не удалось подключить Telegram WebApp. Открой кабинет через кнопку в боте, а не по прямой ссылке.');
+   state=await api('/api/data');selectedKey=selectedKey||state.lessons?.[0]?.key;render();
+ }catch(e){showError(e.message)}
+};
+function showError(message){
+ const sdk=Boolean(window.Telegram?.WebApp),hasData=Boolean(window.Telegram?.WebApp?.initData);
+ root.innerHTML='<div class="error">⚠️ '+esc(message)+'</div><div class="empty" style="margin-top:10px">Диагностика: Telegram SDK — '+(sdk?'подключён':'не найден')+'; данные авторизации — '+(hasData?'получены':'не получены')+'. Сами данные авторизации не отображаются.</div><p><button class="refresh" onclick="load()">Попробовать снова</button></p>';
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!state)load()});
 load();
 </script></body></html>
