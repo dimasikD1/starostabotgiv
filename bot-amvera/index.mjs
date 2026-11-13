@@ -1213,10 +1213,14 @@ bot.action('attendanceweb:confirm', async ctx => {
  }
 });
 bot.command('mark',async ctx=>{
- if(!isPrivate(ctx))return ctx.reply('📩 Используй команду в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Только староста или заместитель.');
+ if(!isPrivate(ctx))return ctx.reply('📩 Используй команду в личке.');
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Только староста или заместитель.');
+ const lesson=g.activeAttendanceLessons?.[String(ctx.from.id)];
  const p=ctx.message.text.replace(/^\/mark(?:@\S+)?/i,'').trim().split(/\s+/),i=Number(p[0])-1,status=p[1]==='present'?'present':p[1]==='absent'?'absent':'';
+ if(!lesson)return ctx.reply('Сначала выбери пару через /attendance, затем используй /mark 2 present или /mark 2 absent.');
  if(!Number.isInteger(i)||!g.students[i]||!status)return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
- const k=attendanceKey(g.students[i]);g.attendance[k]||={};g.attendance[k][attendanceDate()]=status;saveDb();return ctx.reply('✅ Отметка сохранена: '+studentName(g.students[i]));
+ const key=attendanceLessonKey(lesson);g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][attendanceKey(g.students[i])]=status;saveDb();
+ return ctx.reply('✅ Отметка сохранена для пары «'+lesson.subject+'»: '+studentName(g.students[i]));
 });
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
@@ -1400,7 +1404,16 @@ bot.hears('📋 Посещаемость', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
   const g = managedGroup(ctx.from.id);
   if (!g) return ctx.reply('❌ Журнал доступен старосте или заместителю прикреплённой группы.');
-  return ctx.reply(formatAttendance(g), { parse_mode: 'HTML', ...attendanceButtons(g) });
+  try {
+    const lessons = await getTodayLessons(g);
+    if (!lessons.length) return ctx.reply('📋 На сегодня в расписании нет пар.');
+    g.todayAttendanceLessons = lessons.map(x => ({date:x.date,timeStart:x.timeStart,timeEnd:x.timeEnd,subject:x.subject,room:x.room,teacher:x.teacher}));
+    saveDb();
+    return ctx.reply('📋 <b>Посещаемость за '+attendanceDate()+'</b>\\n👥 '+escapeHtml(g.title||'Группа')+'\\n\\nВыбери пару:', {parse_mode:'HTML', ...attendanceLessonsKeyboard(lessons)});
+  } catch (e) {
+    console.error('[attendance] schedule error:', e.message || e);
+    return ctx.reply('❌ Не удалось загрузить пары из расписания. Проверь /setgroup.');
+  }
 });
 bot.hears('💳 Подписка', ctx => {
   const u = normalizeUser(user(ctx.from.id));
