@@ -36,6 +36,7 @@ const SUBSCRIPTION_SECONDS = SUBSCRIPTION_DAYS * 24 * 60 * 60;
 // Telegram user ID владельца, которому подписка не требуется.
 // Значение задаётся в переменных окружения сервера.
 const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
+const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
 function isOwner(userId) {
   return Boolean(OWNER_TELEGRAM_ID) && String(userId) === OWNER_TELEGRAM_ID;
@@ -1169,6 +1170,16 @@ bot.command('setstudent', async ctx => {
   await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' теперь отмечен как студент.');
 });
 
+
+bot.command('app', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Открой личный чат с ботом и отправь /app.');
+  if (!WEBAPP_URL) return ctx.reply('⚙️ Веб-кабинет почти готов. Владельцу нужно указать публичный HTTPS-адрес в переменной WEBAPP_URL в настройках Amvera.');
+  return ctx.reply('🖥️ <b>Кабинет старосты</b>\\nОткрой мини-приложение, чтобы управлять посещаемостью и смотреть группу.', {
+    parse_mode:'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.webApp('🚀 Открыть кабинет', WEBAPP_URL)]])
+  });
+});
+
 bot.command('attendance',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
  const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
@@ -1439,7 +1450,20 @@ bot.hears('ℹ️ Помощь', ctx => ctx.reply('Укажи группу че�
 bot.catch(e => console.error('[bot]', e));
 
 const port = Number(process.env.PORT || 80);
-const healthServer = http.createServer((req, res) => {
+const webappFile = new URL('./webapp/index.html', import.meta.url);
+const healthServer = http.createServer(async (req, res) => {
+  const url = new URL(req.url || '/', 'http://localhost');
+  if (url.pathname.startsWith('/api/')) return handleMiniAppApi(req,res,url);
+  if (url.pathname === '/app' || url.pathname === '/app/') {
+    try {
+      const html=fs.readFileSync(webappFile,'utf8');
+      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
+      return res.end(html);
+    } catch {
+      res.writeHead(500,{'Content-Type':'text/plain; charset=utf-8'});
+      return res.end('Mini App не найден.');
+    }
+  }
   res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
   res.end('OK');
 });
@@ -1475,6 +1499,7 @@ async function main() {
     { command: 'group', description: 'Моя учебная группа' },
     { command: 'hw', description: 'Домашние задания' },
     { command: 'attendance', description: 'Журнал посещаемости' },
+    { command: 'app', description: 'Открыть веб-кабинет' },
     { command: 'students', description: 'Список студентов группы' },
     { command: 'importstudents', description: 'Импорт списка студентов из текста' },
     { command: 'pollreport', description: 'Ответы на последний опрос' },
