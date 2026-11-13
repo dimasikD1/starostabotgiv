@@ -274,20 +274,32 @@ function attendancePairButtons(g,lesson,userId,page=0) {
 }
 
 function createAttendanceHtml(g) {
- const attendance=g.attendance||{};
- const dates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].sort();
- if(!dates.includes(attendanceDate()))dates.push(attendanceDate());
+ const attendance=g.attendance||{},lessonAttendance=g.lessonAttendance||{},students=g.students||[];
  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
- const sections=dates.sort().map(date=>{
+ const list=(title,items,icon)=>'<h3>'+title+' ('+items.length+')</h3>'+(items.length?'<ul>'+items.map(name=>'<li>'+icon+' '+esc(name)+'</li>').join('')+'</ul>':'<p>Нет записей</p>');
+ const lessonEntries=Object.entries(lessonAttendance).map(([key,record])=>{
+  const [date='',timeStart='',timeEnd='',subject='Занятие']=key.split('|');
   const present=[],absent=[],unmarked=[];
-  for(const student of(g.students||[])){
-   const name=studentName(student),status=attendance[attendanceKey(student)]?.[date];
+  for(const student of students){
+   const name=studentName(student),status=record?.[attendanceKey(student)];
    if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name);
   }
-  const list=(title,items,icon)=>'<h3>'+title+' ('+items.length+')</h3>'+(items.length?'<ul>'+items.map(name=>'<li>'+icon+' '+esc(name)+'</li>').join('')+'</ul>':'<p>Нет записей</p>');
-  return '<section><h2>'+esc(date)+'</h2>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>';
- }).join('');
- return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:850px;margin:32px auto;padding:0 16px;color:#222}h1{font-size:26px}section{border-top:1px solid #ddd;padding:12px 0}h2{color:#245}h3{margin-bottom:4px}ul{margin-top:4px}@media print{body{margin:0;max-width:none}}</style></head><body><h1>Журнал посещаемости</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:'Europe/Tallinn'}))+'</p>'+sections+'</body></html>';
+  return {date,timeStart,timeEnd,subject,html:'<section><h2>'+esc(date)+'</h2><h3>📚 '+esc(subject)+'</h3><p>🕒 '+esc(timeStart||'Время не указано')+(timeEnd?'–'+esc(timeEnd):'')+'</p>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'};
+ }).sort((a,b)=>(a.date+' '+a.timeStart).localeCompare(b.date+' '+b.timeStart));
+ let sections=lessonEntries.map(x=>x.html).join('');
+ const legacyDates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].sort();
+ if(legacyDates.length){
+  sections+='<h2>Старые записи (без привязки к паре)</h2>'+legacyDates.map(date=>{
+   const present=[],absent=[],unmarked=[];
+   for(const student of students){
+    const name=studentName(student),status=attendance[attendanceKey(student)]?.[date];
+    if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name);
+   }
+   return '<section><h2>'+esc(date)+'</h2>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>';
+  }).join('');
+ }
+ if(!sections)sections='<p>Пока нет сохранённых отметок по парам.</p>';
+ return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:850px;margin:32px auto;padding:0 16px;color:#222}h1{font-size:26px}section{border-top:1px solid #ddd;padding:12px 0}h2{color:#245}h3{margin-bottom:4px}ul{margin-top:4px}@media print{body{margin:0;max-width:none}}</style></head><body><h1>Журнал посещаемости по парам</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:'Europe/Tallinn'}))+'</p>'+sections+'</body></html>';
 }
 function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
