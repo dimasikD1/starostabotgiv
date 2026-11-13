@@ -304,7 +304,7 @@ function normalizeJson(data, days) {
 }
 
 export async function getSchedule(group, days = 7) {
-  const timeout = Number(process.env.SCHEDULE_TIMEOUT || 20000);
+  const timeout = Number(process.env.SCHEDULE_TIMEOUT || 7000);
   const api = (process.env.SCHEDULE_API_URL || '').trim();
 
   if (api) {
