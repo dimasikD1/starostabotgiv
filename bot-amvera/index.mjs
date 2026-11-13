@@ -1215,7 +1215,7 @@ bot.command('attendance',async ctx=>{
  const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
  if(!g.students?.length)return ctx.reply('📋 Сначала добавь студентов в группу командой /importstudents.');
  try{
-  const lessons=await getTodayLessons(g);
+  const lessons=await getMiniAppTodayLessons(g);
   if(!lessons.length)return ctx.reply('📋 На сегодня в расписании нет пар для группы '+escapeHtml(g.scheduleGroup||'')+'.');
   g.todayAttendanceLessons=lessons.map(x=>({date:x.date,timeStart:x.timeStart,timeEnd:x.timeEnd,subject:x.subject,room:x.room,teacher:x.teacher}));
   saveDb();
@@ -1507,6 +1507,20 @@ async function readJsonBody(req) {
   for await (const chunk of req) { raw+=chunk; if(raw.length>32768) throw new Error('Слишком большой запрос.'); }
   return raw ? JSON.parse(raw) : {};
 }
+async function getMiniAppTodayLessons(g) {
+ let timer;
+ try {
+  return await Promise.race([
+   getTodayLessons(g),
+   new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Расписание не ответило за 10 секунд.')), 10000);
+   })
+  ]);
+ } finally {
+  clearTimeout(timer);
+ }
+}
+
 async function handleMiniAppApi(req,res,url) {
   let tgUser;
   try { tgUser=verifyMiniAppInitData(req.headers['x-telegram-init-data']); }
