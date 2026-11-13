@@ -273,7 +273,7 @@ function attendancePairButtons(g,lesson,userId,page=0) {
  return Markup.inlineKeyboard(rows);
 }
 
-function createAttendanceHtmlfunction createAttendanceHtml(g) {
+function createAttendanceHtml(g) {
  const attendance=g.attendance||{};
  const dates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].sort();
  if(!dates.includes(attendanceDate()))dates.push(attendanceDate());
