@@ -1409,7 +1409,7 @@ bot.hears('📋 Посещаемость', async ctx => {
     if (!lessons.length) return ctx.reply('📋 На сегодня в расписании нет пар.');
     g.todayAttendanceLessons = lessons.map(x => ({date:x.date,timeStart:x.timeStart,timeEnd:x.timeEnd,subject:x.subject,room:x.room,teacher:x.teacher}));
     saveDb();
-    return ctx.reply('📋 <b>Посещаемость за '+attendanceDate()+'</b>\\n👥 '+escapeHtml(g.title||'Группа')+'\\n\\nВыбери пару:', {parse_mode:'HTML', ...attendanceLessonsKeyboard(lessons)});
+    return ctx.reply('📋 <b>Посещаемость за '+attendanceDate()+'</b>\n👥 '+escapeHtml(g.title||'Группа')+'\n\nВыбери пару:', {parse_mode:'HTML', ...attendanceLessonsKeyboard(lessons)});
   } catch (e) {
     console.error('[attendance] schedule error:', e.message || e);
     return ctx.reply('❌ Не удалось загрузить пары из расписания. Проверь /setgroup.');
