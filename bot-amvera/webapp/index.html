@@ -29,7 +29,7 @@ function render(){
  (students.length?students.map(s=>'<div class="student"><div class="student-name">'+esc(s.name)+'</div><div class="actions"><button class="yes '+(s.statuses[selectedKey]==='present'?'on':'')+'" onclick="mark('+s.index+',\'present\')">✓</button><button class="no '+(s.statuses[selectedKey]==='absent'?'on':'')+'" onclick="mark('+s.index+',\'absent\')">✕</button></div></div>').join(''):'<div class="empty">Список студентов пока пуст. Добавь его через /importstudents в боте.</div>'):'')+
  '<div class="footer">Изменения сохраняются в общей базе Telegram-бота.</div>';
 }
-window.choose=k=>{selectedKey=decodeURIComponent(k);render()};
+window.choose=i=>{selectedKey=state.lessons[Number(i)]?.key||null;render()};
 window.mark=async(index,status)=>{try{await api('/api/attendance',{method:'POST',body:JSON.stringify({studentIndex:index,lessonKey:selectedKey,status})});const s=state.students.find(x=>x.index===index);s.statuses[selectedKey]=status;render()}catch(e){showError(e.message)}};
 window.load=async()=>{root.innerHTML='<div class="loader">Загружаем кабинет…</div>';try{state=await api('/api/data');selectedKey=selectedKey||state.lessons[0]?.key;render()}catch(e){showError(e.message)}};
 function showError(message){root.innerHTML='<div class="error">⚠️ '+esc(message)+'</div><p><button class="refresh" onclick="load()">Попробовать снова</button></p>'}
