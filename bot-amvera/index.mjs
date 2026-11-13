@@ -223,6 +223,60 @@ function formatAttendance(g) {
  return '📋 <b>Посещаемость за '+today+'</b>\\n👥 <b>'+escapeHtml(g.title)+'</b>\\n\\n👨‍🎓 Всего: <b>'+students.length+'</b>\\n✅ Были: <b>'+present+'</b>\\n❌ Не были: <b>'+absent+'</b>\\n▫️ Не отмечены: <b>'+unmarked+'</b>\\n\\n'+lines.join('\\n');
 }
 
+async function createAttendanceTelegraphPage(g) {
+ const token = db.telegraphAccessToken || '';
+ const api = async (method, params) => {
+  const response = await fetch('https://api.telegra.ph/' + method, {
+   method: 'POST',
+   headers: { 'content-type': 'application/x-www-form-urlencoded' },
+   body: new URLSearchParams(params)
+  });
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.error || 'Telegraph API error');
+  return data.result;
+ };
+ let accessToken = token;
+ if (!accessToken) {
+  const account = await api('createAccount', { short_name: 'StarostaBot', author_name: 'Староста Бот' });
+  accessToken = account.access_token;
+  db.telegraphAccessToken = accessToken;
+  saveDb();
+ }
+ const attendance = g.attendance || {};
+ const dates = [...new Set(Object.values(attendance).flatMap(v => Object.keys(v || {})))].sort();
+ if (!dates.includes(attendanceDate())) dates.push(attendanceDate());
+ const content = [
+  { tag: 'h3', children: ['Группа: ' + String(g.title || 'Без названия')] },
+  { tag: 'p', children: ['Журнал посещаемости. Отметки сгруппированы по датам.'] }
+ ];
+ for (const date of dates.sort()) {
+  const present = [], absent = [], unmarked = [];
+  for (const student of (g.students || [])) {
+   const status = attendance[attendanceKey(student)]?.[date];
+   const name = studentName(student);
+   if (status === 'present') present.push(name);
+   else if (status === 'absent') absent.push(name);
+   else unmarked.push(name);
+  }
+  content.push({ tag: 'h4', children: [date] });
+  content.push({ tag: 'p', children: ['Были: ' + present.length + ' · Не были: ' + absent.length + ' · Не отмечены: ' + unmarked.length] });
+  const rows = [
+   ...present.map(name => ({ tag: 'li', children: ['✅ ' + name] })),
+   ...absent.map(name => ({ tag: 'li', children: ['❌ ' + name] })),
+   ...unmarked.map(name => ({ tag: 'li', children: ['▫️ ' + name] }))
+  ];
+  if (rows.length) content.push({ tag: 'ul', children: rows });
+ }
+ const page = await api('createPage', {
+  access_token: accessToken,
+  title: 'Посещаемость — ' + String(g.title || 'Учебная группа'),
+  author_name: 'Староста Бот',
+  content: JSON.stringify(content),
+  return_content: 'false'
+ });
+ return page.url;
+}
+
 function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
   const out = [];
@@ -783,7 +837,7 @@ bot.command(['admin', 'adminhelp', 'commands'], ctx => {
     '/students — список студентов\n' +
     '/student ИМЯ — добавить студента вручную\n' +
     '/delstudent НОМЕР — удалить студента\n' +
-    '/attendance — открыть журнал посещаемости\n' +
+    '/attendance — открыть журнал посещаемости\n/attendanceweb — опубликовать журнал в Telegraph\n' +
     '/mark НОМЕР present|absent — отметить посещаемость\n' +
     '/starosta — назначить себя старостой <i>(в группе, владелец или администратор)</i>\n' +
     '/setstarosta — назначить старосту <i>(ответом на сообщение)</i>\n' +
@@ -1094,6 +1148,43 @@ bot.command('setstudent', async ctx => {
 bot.command('attendance',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
  return ctx.reply(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
+});
+bot.command('attendanceweb', async ctx => {
+ if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях.');
+ const g = managedGroup(ctx.from.id);
+ if (!g) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
+ const u = normalizeUser(user(ctx.from.id));
+ u.pendingAttendanceTelegraph = true;
+ saveDb();
+ return ctx.reply(
+  '🌐 <b>Опубликовать журнал в Telegraph?</b>\\n\\nСтраница будет доступна всем, у кого есть ссылка. В ней будут указаны имена студентов и их отметки посещаемости за все сохранённые даты. Убедись, что у тебя есть разрешение на публикацию этих данных.',
+  { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('✅ Опубликовать страницу', 'attendanceweb:confirm')], [Markup.button.callback('❌ Отмена', 'attendanceweb:cancel')]]) }
+ );
+});
+bot.action('attendanceweb:cancel', async ctx => {
+ if (!isPrivate(ctx)) return ctx.answerCbQuery();
+ const u = normalizeUser(user(ctx.from.id));
+ delete u.pendingAttendanceTelegraph;
+ saveDb();
+ await ctx.answerCbQuery('Отменено');
+ return ctx.editMessageText('❌ Публикация отменена.');
+});
+bot.action('attendanceweb:confirm', async ctx => {
+ if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой бота в личке.');
+ const u = normalizeUser(user(ctx.from.id));
+ if (!u.pendingAttendanceTelegraph) return ctx.answerCbQuery('Запрос устарел.');
+ const g = managedGroup(ctx.from.id);
+ delete u.pendingAttendanceTelegraph;
+ saveDb();
+ if (!g) return ctx.answerCbQuery('Группа не найдена.');
+ await ctx.answerCbQuery('Создаю страницу…');
+ try {
+  const url = await createAttendanceTelegraphPage(g);
+  return ctx.editMessageText('✅ <b>Журнал опубликован в Telegraph</b>\\n\\n' + url, { parse_mode: 'HTML', disable_web_page_preview: true });
+ } catch (error) {
+  console.error('[attendance telegraph]', error);
+  return ctx.editMessageText('❌ Не удалось создать страницу Telegraph. Попробуй позже. Проверь доступ сервера к api.telegra.ph.');
+ }
 });
 bot.command('mark',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Используй команду в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Только староста или заместитель.');
