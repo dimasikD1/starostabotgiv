@@ -1456,7 +1456,6 @@ function verifyMiniAppInitData(initData) {
   const receivedHash = params.get('hash');
   if (!receivedHash || !/^[a-f0-9]{64}$/i.test(receivedHash)) throw new Error('Некорректные данные Telegram.');
   params.delete('hash');
-  params.delete('signature');
   const checkString = [...params.entries()].sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0).map(([k,v]) => k+'='+v).join('\n');
   const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
   const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
