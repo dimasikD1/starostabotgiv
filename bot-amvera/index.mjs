@@ -231,6 +231,7 @@ async function getCachedSchedule(group, days = 7) {
   console.log('[schedule cache] waiting for in-flight request:', cacheKey);
   return scheduleInFlight.get(cacheKey);
  }
+ const stale = cached && Array.isArray(cached.items) ? cached.items : null;
  const startedAt = Date.now();
  console.log('[schedule cache] loading:', cacheKey);
  const request = getSchedule(String(group), days).then(items => {
@@ -240,6 +241,10 @@ async function getCachedSchedule(group, days = 7) {
   return safeItems;
  }).catch(error => {
   console.error('[schedule cache] failed:', cacheKey, error?.message || error);
+  if (stale) {
+   console.warn('[schedule cache] serving expired cache after source failure:', cacheKey);
+   return stale;
+  }
   throw error;
  }).finally(() => scheduleInFlight.delete(cacheKey));
  scheduleInFlight.set(cacheKey, request);
@@ -1513,7 +1518,7 @@ async function getMiniAppTodayLessons(g) {
   return await Promise.race([
    getTodayLessons(g),
    new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Расписание не ответило за 10 секунд.')), 10000);
+    timer = setTimeout(() => reject(new Error('Источник расписания не ответил за 25 секунд. Предыдущие отметки сохранены — попробуй обновить кабинет позже.')), 25000);
    })
   ]);
  } finally {
