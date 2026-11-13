@@ -212,10 +212,20 @@ function parseStudentNames(raw){
 function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.callback('✅ Подтвердить','studentimport:confirm')],[Markup.button.callback('❌ Отменить','studentimport:cancel')]]);}
 
 function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn' }).format(new Date()); }
+function attendanceLessonKey(lesson) {
+ return [lesson.date||attendanceDate(),lesson.timeStart||lesson.time||'',lesson.timeEnd||'',lesson.subject||'Занятие'].join('|');
+}
+async function getTodayLessons(g) {
+ if(!g?.scheduleGroup) throw new Error('Для группы не указано расписание. Сначала настрой /setgroup.');
+ const lessons=await getSchedule(String(g.scheduleGroup),7);
+ return (lessons||[]).filter(x=>x.date===attendanceDate()&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
+}
 function managedGroup(userId) {
  const id=String(userId),u=normalizeUser(user(id));let g=Object.values(db.groups).find(x=>String(x.starostaId||'')===id||String(x.zamId||'')===id);
  if(!g&&isManagerRole(u))g=Object.values(db.groups).find(x=>x.title===u.group||x.scheduleGroup===u.group);if(!g)return null;
- g.students||=[];g.attendance||={};if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}return g;
+ g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};
+ if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}
+ return g;
 }
 function formatAttendance(g) {
  const students=g?.students||[],attendance=g?.attendance||{};
@@ -223,19 +233,47 @@ function formatAttendance(g) {
  const today=attendanceDate(),present=[],absent=[],unmarked=[];
  for(const student of students){
   const status=attendance[attendanceKey(student)]?.[today],name=escapeHtml(studentName(student));
-  if(status==='present')present.push(name);
-  else if(status==='absent')absent.push(name);
-  else unmarked.push(name);
+  if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name);
  }
- const list=(title,items)=>'<b>'+title+' ('+items.length+')</b>\n'+(items.length?items.map((name,i)=>(i+1)+'. '+name).join('\n'):'—');
- return '📋 <b>Посещаемость за '+today+'</b>\n👥 <b>'+escapeHtml(g.title||'Группа')+'</b>\n\n'+
-  '👨‍🎓 Всего: <b>'+students.length+'</b>\n\n'+
-  '✅ <b>Были ('+present.length+')</b>\n'+(present.length?present.map((name,i)=>(i+1)+'. '+name).join('\n'):'—')+'\n\n'+
-  '❌ <b>Не были ('+absent.length+')</b>\n'+(absent.length?absent.map((name,i)=>(i+1)+'. '+name).join('\n'):'—')+
-  (unmarked.length?'\n\n▫️ <b>Не отмечены ('+unmarked.length+')</b>\n'+unmarked.map((name,i)=>(i+1)+'. '+name).join('\n'):'');
+ return '📋 <b>Посещаемость за '+today+'</b>\n👥 <b>'+escapeHtml(g.title||'Группа')+'</b>\n\n'+'👨‍🎓 Всего: <b>'+students.length+'</b>\n\n'+'✅ <b>Были ('+present.length+')</b>\n'+(present.length?present.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+'\n\n'+'❌ <b>Не были ('+absent.length+')</b>\n'+(absent.length?absent.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+(unmarked.length?'\n\n▫️ <b>Не отмечены ('+unmarked.length+')</b>\n'+unmarked.map((n,i)=>(i+1)+'. '+n).join('\n'):'');
+}
+function attendanceLessonsKeyboard(lessons) {
+ const rows=lessons.map((lesson,i)=>{
+  const time=lesson.timeStart?(lesson.timeStart+(lesson.timeEnd?'–'+lesson.timeEnd:'')):'Время не указано';
+  return [Markup.button.callback((i+1)+'. '+time+' — '+String(lesson.subject||'Пара').slice(0,35),'attlesson:'+i)];
+ });
+ return Markup.inlineKeyboard(rows);
+}
+function formatLessonAttendance(g,lesson) {
+ const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{},students=g.students||[];
+ const present=[],absent=[],unmarked=[];
+ for(const student of students){
+  const status=record[attendanceKey(student)],name=escapeHtml(studentName(student));
+  if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name);
+ }
+ const time=lesson.timeStart?(lesson.timeStart+(lesson.timeEnd?'–'+lesson.timeEnd:'')):'Время не указано';
+ return '📋 <b>Посещаемость пары</b>\n📅 '+lesson.date+' · '+time+'\n📚 <b>'+escapeHtml(lesson.subject||'Занятие')+'</b>'+
+  (lesson.room?'\n🚪 Аудитория: '+escapeHtml(lesson.room):'')+
+  '\n\n👨‍🎓 Всего: <b>'+students.length+'</b>\n\n✅ <b>Были ('+present.length+')</b>\n'+(present.length?present.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+
+  '\n\n❌ <b>Не были ('+absent.length+')</b>\n'+(absent.length?absent.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+
+  (unmarked.length?'\n\n▫️ <b>Не отмечены ('+unmarked.length+')</b>\n'+unmarked.map((n,i)=>(i+1)+'. '+n).join('\n'):'');
+}
+function attendancePairButtons(g,lesson,userId,page=0) {
+ const students=g.students||[],size=10,pages=Math.max(1,Math.ceil(students.length/size));
+ page=Math.max(0,Math.min(Number(page)||0,pages-1));
+ const record=g.lessonAttendance?.[attendanceLessonKey(lesson)]||{};
+ const rows=students.slice(page*size,(page+1)*size).map((student,offset)=>{
+  const i=page*size+offset,status=record[attendanceKey(student)];
+  return [Markup.button.callback((status==='present'?'✅ Был':'▫️ Был')+' '+(i+1),'attpairmark:'+i+':present'),Markup.button.callback((status==='absent'?'❌ Нет':'▫️ Нет')+' '+(i+1),'attpairmark:'+i+':absent')];
+ });
+ const nav=[];if(page>0)nav.push(Markup.button.callback('⬅️','attpairpage:'+(page-1)));
+ nav.push(Markup.button.callback((page+1)+'/'+pages,'attpairpage:'+page));
+ if(page<pages-1)nav.push(Markup.button.callback('➡️','attpairpage:'+(page+1)));
+ rows.push(nav,[Markup.button.callback('↩️ К списку пар','attpairback')]);
+ return Markup.inlineKeyboard(rows);
 }
 
-function createAttendanceHtml(g) {
+function createAttendanceHtmlfunction createAttendanceHtml(g) {
  const attendance=g.attendance||{};
  const dates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].sort();
  if(!dates.includes(attendanceDate()))dates.push(attendanceDate());
@@ -341,7 +379,7 @@ async function checkAutomaticAttendancePolls() {
           db.sentAttendancePolls[key] = {
             pollId: sent.poll.id, groupId: String(g.chatId), groupName: g.title,
             scheduleGroup, date: lesson.date, time: lesson.timeStart,
-            subject: lesson.subject, sentAt: new Date().toISOString()
+            subject: lesson.subject, lessonKey: attendanceLessonKey(lesson), sentAt: new Date().toISOString()
           };
           saveDb();
           console.log('[attendance poll] Sent to ' + g.title + ' for ' + lesson.subject + ' at ' + lesson.timeStart);
@@ -657,11 +695,11 @@ bot.on('poll_answer', async ctx => {
   };
   const group = db.groups[String(record.groupId)];
   const student = group?.students?.find(x => String(typeof x === 'object' ? x.telegramId : '') === userId);
-  if (student) {
-    group.attendance ||= {};
-    const key = attendanceKey(student);
-    group.attendance[key] ||= {};
-    group.attendance[key][record.date] = option === 0 ? 'present' : option === 1 ? 'absent' : 'unmarked';
+  if (student && record.lessonKey) {
+    group.lessonAttendance ||= {};
+    group.lessonAttendance[record.lessonKey] ||= {};
+    group.lessonAttendance[record.lessonKey][attendanceKey(student)] =
+      option === 0 ? 'present' : option === 1 ? 'absent' : 'unmarked';
   }
   saveDb();
   console.log('[attendance poll] Answer recorded for ' + userId + ' in ' + record.groupName);
@@ -1120,8 +1158,19 @@ bot.command('setstudent', async ctx => {
 });
 
 bot.command('attendance',async ctx=>{
- if(!isPrivate(ctx))return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
- return ctx.reply(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
+ if(!isPrivate(ctx))return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
+ if(!g.students?.length)return ctx.reply('📋 Сначала добавь студентов в группу командой /importstudents.');
+ try{
+  const lessons=await getTodayLessons(g);
+  if(!lessons.length)return ctx.reply('📋 На сегодня в расписании нет пар для группы '+escapeHtml(g.scheduleGroup||'')+'.');
+  g.todayAttendanceLessons=lessons.map(x=>({date:x.date,timeStart:x.timeStart,timeEnd:x.timeEnd,subject:x.subject,room:x.room,teacher:x.teacher}));
+  saveDb();
+  return ctx.reply('📋 <b>Посещаемость за '+attendanceDate()+'</b>\n👥 '+escapeHtml(g.title||'Группа')+'\n\nВыбери пару:',{parse_mode:'HTML',...attendanceLessonsKeyboard(lessons)});
+ }catch(e){
+  console.error('[attendance] schedule error:',e.message||e);
+  return ctx.reply('❌ Не удалось загрузить пары из расписания. Проверь название группы через /setgroup и попробуй ещё раз.');
+ }
 });
 bot.command('attendanceweb', async ctx => {
  if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях.');
@@ -1228,18 +1277,38 @@ bot.action(/^attstudent:(\d+)$/,async ctx=>{
  const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');await ctx.answerCbQuery('Выбери статус');
  await ctx.editMessageText('📋 <b>'+escapeHtml(g.title)+'</b>\\n\\n'+escapeHtml(studentName(g.students[i])),{parse_mode:'HTML',...attendanceStatusButtons(i)});
 });
-bot.action(/^attmark:(\d+):(present|absent|clear)$/,async ctx=>{
- if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
- const i=Number(ctx.match[1]),st=ctx.match[2];if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');const k=attendanceKey(g.students[i]);g.attendance[k]||={};
- if(st==='clear')delete g.attendance[k][attendanceDate()];else g.attendance[k][attendanceDate()]=st;saveDb();await ctx.answerCbQuery(st==='clear'?'Отметка снята':'Сохранено');
- await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g,Math.floor(i/10))});
+bot.action(/^attlesson:(\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const lesson=g.todayAttendanceLessons?.[Number(ctx.match[1])];if(!lesson)return ctx.answerCbQuery('Список пар устарел. Отправь /attendance ещё раз.');
+ g.activeAttendanceLessons[String(ctx.from.id)]=lesson;g.lessonAttendance||={};saveDb();
+ await ctx.answerCbQuery();
+ return ctx.editMessageText(formatLessonAttendance(g,lesson),{parse_mode:'HTML',...attendancePairButtons(g,lesson,ctx.from.id)});
 });
-bot.action(/^attpage:(\d+)$/,async ctx=>{
- if(!isPrivate(ctx))return ctx.answerCbQuery();const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');await ctx.answerCbQuery();return ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g,Number(ctx.match[1]))});
+bot.action(/^attpairmark:(\d+):(present|absent)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const lesson=g.activeAttendanceLessons?.[String(ctx.from.id)],i=Number(ctx.match[1]),student=g.students?.[i];
+ if(!lesson||!student)return ctx.answerCbQuery('Пара или студент не найдены. Открой /attendance заново.');
+ const key=attendanceLessonKey(lesson),studentKey=attendanceKey(student);
+ g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][studentKey]=ctx.match[2];saveDb();
+ await ctx.answerCbQuery('Отметка сохранена');
+ return ctx.editMessageText(formatLessonAttendance(g,lesson),{parse_mode:'HTML',...attendancePairButtons(g,lesson,ctx.from.id,Math.floor(i/10))});
 });
-bot.action(['attsummary','attback'],async ctx=>{
- if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
- await ctx.answerCbQuery();await ctx.editMessageText(formatAttendance(g),{parse_mode:'HTML',...attendanceButtons(g)});
+bot.action(/^attpairpage:(\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery();
+ const g=managedGroup(ctx.from.id),lesson=g?.activeAttendanceLessons?.[String(ctx.from.id)];
+ if(!g||!lesson)return ctx.answerCbQuery('Открой /attendance заново.');
+ await ctx.answerCbQuery();
+ return ctx.editMessageText(formatLessonAttendance(g,lesson),{parse_mode:'HTML',...attendancePairButtons(g,lesson,ctx.from.id,Number(ctx.match[1]))});
+});
+bot.action('attpairback',async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery();
+ const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const lessons=g.todayAttendanceLessons||[];
+ await ctx.answerCbQuery();
+ if(!lessons.length)return ctx.editMessageText('Список пар устарел. Отправь /attendance ещё раз.');
+ return ctx.editMessageText('📋 <b>Посещаемость за '+attendanceDate()+'</b>\n👥 '+escapeHtml(g.title||'Группа')+'\n\nВыбери пару:',{parse_mode:'HTML',...attendanceLessonsKeyboard(lessons)});
 });
 bot.on('callback_query', async ctx => {
   const data = ctx.callbackQuery?.data || '';
