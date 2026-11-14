@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.9';
+const BOT_RELEASE_VERSION = '2026.11.14.10';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -51,7 +51,8 @@ const BOT_RELEASE_NOTES = [
   'В Mini App расписание теперь доступно на сегодня, завтра и всю неделю с указанием времени, аудитории и преподавателя.',
   'Подписка временно отключена: бот и Mini App доступны бесплатно. Добавлена добровольная поддержка нового хостинга через Telegram Stars.',
   'Владелец может видеть количество и сумму пожертвований на хостинг в /stats.',
-  'Проверка ФИО теперь повторно запускается при повторном вступлении пользователя в группу.'
+  'Проверка ФИО теперь повторно запускается при повторном вступлении пользователя в группу.',
+  'Добавлена команда /publishweek для ручной отправки и закрепления расписания в первой и второй учебных группах.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -1668,6 +1669,69 @@ bot.on('callback_query', async ctx => {
 bot.command('schedule', ctx => show(ctx, 1, 0));
 bot.command('tomorrow', ctx => show(ctx, 2, 1));
 bot.command('week', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
+
+// Владелец может вручную опубликовать расписание следующей недели в обе учебные группы.
+bot.command('publishweek', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Команду /publishweek используй в личных сообщениях с ботом.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу бота.');
+
+  const today = attendanceDate();
+  const base = new Date(today + 'T12:00:00Z');
+  const weekday = base.getUTCDay();
+  const daysUntilMonday = (8 - weekday) % 7 || 7;
+  const start = new Date(base);
+  start.setUTCDate(start.getUTCDate() + daysUntilMonday);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const iso = d => d.toISOString().slice(0, 10);
+  const range = { start: iso(start), end: iso(end) };
+
+  const targetGroups = Object.values(db.groups).filter(g =>
+    g.chatId && Object.values(STUDY_GROUPS).includes(String(g.scheduleGroup || '').trim())
+  );
+  const foundStudyGroups = new Set(targetGroups.map(g => String(g.scheduleGroup || '').trim()));
+  const missing = Object.values(STUDY_GROUPS).filter(name => !foundStudyGroups.has(name));
+  if (!targetGroups.length) {
+    return ctx.reply('❌ Не нашёл прикреплённые чаты первой и второй учебных групп. В каждой группе добавь бота и настрой расписание через /setgroup.');
+  }
+
+  await ctx.reply('⏳ Формирую расписание на ' + range.start + ' — ' + range.end + ' и отправляю его в обе группы…');
+  let sent = 0;
+  let pinned = 0;
+  const details = [];
+
+  for (const g of targetGroups) {
+    const scheduleGroup = String(g.scheduleGroup || '').trim();
+    try {
+      const lessons = await getSchedule(scheduleGroup, 14);
+      const weekLessons = (lessons || [])
+        .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
+      const message =
+        '🗓 РАСПИСАНИЕ НА СЛЕДУЮЩУЮ НЕДЕЛЮ\n' +
+        '👥 ' + (g.title || scheduleGroup) + '\n' +
+        '📅 ' + range.start + ' — ' + range.end + '\n\n' +
+        format(weekLessons, scheduleGroup) +
+        '\n\n📌 Сообщение закреплено автоматически.';
+      const safeMessage = message.length > 3900 ? message.slice(0, 3850) + '\n\n… расписание сокращено.' : message;
+      const sentMessage = await ctx.telegram.sendMessage(g.chatId, safeMessage);
+      sent++;
+      try {
+        await ctx.telegram.pinChatMessage(g.chatId, sentMessage.message_id, { disable_notification: true });
+        pinned++;
+        details.push('✅ ' + (g.title || scheduleGroup) + ' — отправлено и закреплено');
+      } catch (pinError) {
+        console.error('[publishweek] pin failed for ' + (g.title || g.chatId) + ':', pinError?.message || pinError);
+        details.push('⚠️ ' + (g.title || scheduleGroup) + ' — отправлено, но не удалось закрепить (проверь права бота)');
+      }
+    } catch (error) {
+      console.error('[publishweek] failed for ' + (g.title || g.chatId) + ':', error?.message || error);
+      details.push('❌ ' + (g.title || scheduleGroup) + ' — ошибка отправки расписания');
+    }
+  }
+  if (missing.length) details.push('⚠️ Не настроены чаты: ' + missing.join('; '));
+  return ctx.reply('📊 Публикация расписания завершена.\nОтправлено: ' + sent + '\nЗакреплено: ' + pinned + '\n\n' + details.join('\n'));
+});
 // /menu принудительно обновляет устаревшую клавиатуру Telegram в чате.
 bot.command('menu', ctx => ctx.reply('⌨️ Меню обновлено.', menuFor(ctx)));
 bot.hears('📅 Сегодня', ctx => show(ctx, 1, 0));
