@@ -215,7 +215,7 @@ const managerMenu = Markup.keyboard([
   ['🔄 Обновить', 'ℹ️ Помощь']
 ]).resize();
 const studentMenu = Markup.keyboard([
-  ['📅 Расписание', '👥 Моя группа'],
+  ['👥 Моя группа'],
   ['📚 ДЗ'],
   ['💛 Поддержать хостинг']
 ]).resize();
