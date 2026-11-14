@@ -591,6 +591,61 @@ async function checkAutomaticAttendancePolls() {
   }
 }
 
+
+let weeklyScheduleCheckRunning = false;
+
+function nextWeekDateRange() {
+  const today = attendanceDate();
+  const base = new Date(today + 'T12:00:00Z');
+  const start = new Date(base);
+  start.setUTCDate(start.getUTCDate() + 1); // понедельник после текущего воскресенья
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const iso = d => d.toISOString().slice(0, 10);
+  return { start: iso(start), end: iso(end) };
+}
+
+async function checkWeeklySchedules() {
+  if (weeklyScheduleCheckRunning) return;
+  const now = tallinnParts();
+  // Публикуем расписание по воскресеньям начиная с 18:00 по Таллину.
+  if (new Date(now.year + '-' + now.month + '-' + now.day + 'T12:00:00Z').getUTCDay() !== 0 ||
+      Number(now.hour) < 18) return;
+
+  weeklyScheduleCheckRunning = true;
+  try {
+    const range = nextWeekDateRange();
+    db.sentWeeklySchedules ||= {};
+    for (const g of Object.values(db.groups)) {
+      const chatId = g.chatId;
+      const scheduleGroup = String(g.scheduleGroup || '').trim();
+      if (!chatId || !scheduleGroup) continue;
+      const key = String(chatId) + ':' + range.start;
+      if (db.sentWeeklySchedules[key]) continue;
+      try {
+        const lessons = await getSchedule(scheduleGroup, 8);
+        const weekLessons = (lessons || [])
+          .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)) ||
+            String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
+        const heading = '🗓 <b>Расписание на следующую неделю</b>\\n' +
+          '👥 ' + escapeHtml(g.title || scheduleGroup) + '\\n' +
+          '📅 ' + range.start + ' — ' + range.end + '\\n\\n';
+        let message = heading + escapeHtml(format(weekLessons, scheduleGroup));
+        if (message.length > 3900) message = message.slice(0, 3850) + '\\n\\n… расписание сокращено.';
+        await bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
+        db.sentWeeklySchedules[key] = new Date().toISOString();
+        saveDb();
+        console.log('[weekly schedule] sent:', g.title, range.start, range.end, 'lessons:', weekLessons.length);
+      } catch (error) {
+        console.error('[weekly schedule] failed for ' + (g.title || chatId) + ':', error?.message || error);
+      }
+    }
+  } finally {
+    weeklyScheduleCheckRunning = false;
+  }
+}
+
 function isPrivate(ctx) {
   return ctx.chat?.type === 'private';
 }
@@ -1103,7 +1158,7 @@ bot.command('setgroup', async ctx => {
   registerGroup(ctx);
   db.groups[String(ctx.chat.id)].scheduleGroup = scheduleGroup;
   saveDb();
-  return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '». Напоминание приходит за 30 минут, опрос посещаемости — за 10 минут до пары.');
+  return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '».\n\n🗓 Каждое воскресенье после 18:00 бот будет автоматически отправлять сюда расписание на следующую неделю (понедельник–воскресенье).\n⏰ Напоминание приходит за 30 минут, опрос посещаемости — за 10 минут до пары.');
 });
 
 bot.command('attach', async ctx => {
@@ -1884,6 +1939,8 @@ async function main() {
   await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member'] });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
+  await checkWeeklySchedules();
+  setInterval(checkWeeklySchedules, 60000).unref();
 }
 
 function shutdown(signal) {
