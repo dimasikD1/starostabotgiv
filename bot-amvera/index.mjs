@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.7';
+const BOT_RELEASE_VERSION = '2026.11.14.8';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -49,7 +49,8 @@ const BOT_RELEASE_NOTES = [
   'Добавлена проверка новых участников группы: ввод ФИО в личке бота перед отправкой сообщений.',
   'После ввода ФИО новый участник сразу выбирает учебную группу; доступ открывается после выбора.',
   'В Mini App расписание теперь доступно на сегодня, завтра и всю неделю с указанием времени, аудитории и преподавателя.',
-  'Подписка временно отключена: бот и Mini App доступны бесплатно. Добавлена добровольная поддержка нового хостинга через Telegram Stars.'
+  'Подписка временно отключена: бот и Mini App доступны бесплатно. Добавлена добровольная поддержка нового хостинга через Telegram Stars.',
+  'Владелец может видеть количество и сумму пожертвований на хостинг в /stats.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -59,6 +60,11 @@ function isOwner(userId) {
 
 function subscriptionUntil(u) {
   return Number(u.subscriptionUntil || 0);
+}
+
+// Только для просмотра исторических записей подписок владельцем.
+function hasActiveSubscription(u) {
+  return Boolean(u.subscriptionForever) || subscriptionUntil(u) > Date.now();
 }
 
 function donationKeyboard() {
@@ -722,8 +728,10 @@ bot.command('stats', ctx => {
   const newUsers30d = entries.filter(([, u]) => u.createdAt && (now - Date.parse(u.createdAt)) <= 30 * 24 * 60 * 60 * 1000).length;
   const history = entries.flatMap(([, u]) => Array.isArray(u.paymentHistory) ? u.paymentHistory : []);
   const starsPayments = history.filter(p => p.method === 'stars');
+  const donations = history.filter(p => p.method === 'hosting_donation_stars');
   const manualGrants = history.filter(p => p.method === 'owner_grant').length;
   const starsTotal = starsPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  const donationTotal = donations.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   return ctx.reply(
     '📊 <b>Статистика Староста Бота</b>\n\n' +
@@ -736,9 +744,10 @@ bot.command('stats', ctx => {
     '👑 Старост: <b>' + starostas + '</b>\n' +
     '🎓 Студентов: <b>' + students + '</b>\n' +
     '🏫 Прикреплённых групп: <b>' + Object.keys(db.groups).length + '</b>\n\n' +
-    '💳 Оплаты Telegram Stars: <b>' + starsPayments.length + '</b> (' + starsTotal + ' ⭐)\n' +
-    '🎁 Выдано вручную подписок: <b>' + manualGrants + '</b>\n\n' +
-    '<i>Учитываются оплаты Telegram Stars, записанные в истории пользователя. Старые оплаты до включения истории могут отсутствовать.</i>',
+    '💳 Старые оплаты подписок: <b>' + starsPayments.length + '</b> (' + starsTotal + ' ⭐)\n' +
+    '💛 Пожертвований на хостинг: <b>' + donations.length + '</b> (' + donationTotal + ' ⭐)\n' +
+    '🎁 Старых ручных выдач: <b>' + manualGrants + '</b>\n\n' +
+    '<i>Подписки отключены. Пожертвования учитываются отдельно по истории Telegram Stars.</i>',
     { parse_mode: 'HTML' }
   );
 });
