@@ -503,10 +503,7 @@ function format(items, group) {
     if (x.lessonType) line += ' (' + x.lessonType + ')';
     if (x.teacher) line += '\n   👨‍🏫 ' + x.teacher;
     const room = String(x.room || '').trim();
-    if (room && !shownRooms.has(room.toLowerCase())) {
-      line += '\n   🚪 Аудитория: ' + room;
-      shownRooms.add(room.toLowerCase());
-    }
+    if (room) line += '\n   🚪 Аудитория: ' + room;
     out.push(line);
   }
   return out.join('\n').trim();
