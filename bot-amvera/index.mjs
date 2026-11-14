@@ -493,7 +493,6 @@ function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
   const out = [];
   let current = '';
-  const shownRooms = new Set();
   for (const x of items) {
     if (x.date !== current) {
       current = x.date;
