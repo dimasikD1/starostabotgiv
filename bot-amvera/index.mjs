@@ -91,7 +91,9 @@ async function registrationMiddleware(ctx, next) {
   const u = normalizeUser(user(ctx.from.id));
 
   // Новый участник должен подтвердить ФИО в личке, прежде чем писать в группе.
-  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && (!u.fullName || String(u.pendingVerificationChatId || '') === String(ctx.chat.id))) {
+  // Повторное вступление тоже запускает проверку, даже если ФИО уже сохранено.
+  const isRejoiningMember = ctx.updateType === 'message' && Array.isArray(ctx.message?.new_chat_members) && ctx.message.new_chat_members.some(member => String(member.id) === String(ctx.from.id));
+  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && (isRejoiningMember || !u.fullName || String(u.pendingVerificationChatId || '') === String(ctx.chat.id))) {
     const chatId = String(ctx.chat.id);
     if (!u.pendingVerificationChatId) {
       u.pendingVerificationChatId = chatId;
