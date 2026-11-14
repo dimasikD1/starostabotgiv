@@ -22,8 +22,10 @@
 <button class="navitem" data-tab="profile"><span class="ni">☻</span>Профиль</button>
 </div></nav>
 <script>
-let tg=null,state=null,selectedKey=null,loading=false,currentTab='home',studentQuery='';
+let tg=null,state=null,selectedKey=null,loading=false,saving=false,currentTab='home',studentQuery='',attendanceFilter='all';
 const root=document.getElementById('app');
+function toast(message,type='ok'){let el=document.getElementById('toast');if(!el){el=document.createElement('div');el.id='toast';el.className='toast';document.body.appendChild(el)}el.textContent=message;el.className='toast show '+type;clearTimeout(window.__toastTimer);window.__toastTimer=setTimeout(()=>el.classList.remove('show'),2400)}
+function haptic(kind='light'){try{tg?.HapticFeedback?.impactOccurred(kind)}catch{}}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function initTelegram(){tg=window.Telegram?.WebApp||null;if(tg){tg.ready();tg.expand();return true}return false}
 async function waitForTelegram(){for(let i=0;i<30;i++){if(initTelegram())return true;await new Promise(r=>setTimeout(r,100))}return initTelegram()}
@@ -47,8 +49,8 @@ window.setTab=tab=>{currentTab=tab;document.querySelectorAll('.navitem').forEach
 window.choose=encoded=>{try{selectedKey=decodeURIComponent(encoded)}catch{selectedKey=encoded}render()};
 window.searchStudents=value=>{studentQuery=value;const pos=document.querySelector('.search')?.selectionStart;render();const el=document.querySelector('.search');if(el){el.focus();el.setSelectionRange(pos??value.length,pos??value.length)}};
 window.setAttendanceFilter=value=>{attendanceFilter=value;render()};
-window.mark=async(index,status)=>{if(loading)return;loading=true;try{await api('/api/attendance',{method:'POST',body:JSON.stringify({studentIndex:index,lessonKey:selectedKey,status})});const s=state.students.find(x=>x.index===index);if(s){s.statuses=s.statuses||{};s.statuses[selectedKey]=status;render()}}catch(e){showError(e.message)}finally{loading=false}};
-window.load=async()=>{if(loading)return;root.innerHTML='<div class="loader">Загружаем кабинет…</div>';try{if(!await waitForTelegram())throw new Error('Не удалось подключить Telegram WebApp. Открой кабинет через кнопку в боте.');state=await api('/api/data');selectedKey=selectedKey||state.lessons?.[0]?.key;render()}catch(e){showError(e.message)}};
+window.mark=async(index,status)=>{if(saving)return;saving=true;haptic('light');try{await api('/api/attendance',{method:'POST',body:JSON.stringify({studentIndex:index,lessonKey:selectedKey,status})});const s=state.students.find(x=>x.index===index);if(s){s.statuses=s.statuses||{};s.statuses[selectedKey]=status;render();toast(status==='present'?'Отмечено присутствие':status==='absent'?'Отмечено отсутствие':'Отметка сброшена')}}catch(e){toast(e.message,'error')}finally{saving=false}};
+window.load=async()=>{if(loading||saving)return;loading=true;root.innerHTML='<div class="loader"><div class="spinner"></div>Загружаем кабинет…</div>';try{if(!await waitForTelegram())throw new Error('Не удалось подключить Telegram WebApp. Открой кабинет через кнопку в боте.');state=await api('/api/data');if(!selectedKey||!(state.lessons||[]).some(x=>x.key===selectedKey))selectedKey=state.lessons?.[0]?.key;render();toast('Данные обновлены')}catch(e){showError(e.message)}finally{loading=false}};
 function showError(message){const sdk=Boolean(window.Telegram?.WebApp),hasData=Boolean(window.Telegram?.WebApp?.initData);root.innerHTML='<div class="error">⚠️ '+esc(message)+'</div><div class="card muted">Диагностика: Telegram SDK — '+(sdk?'подключён':'не найден')+'; данные авторизации — '+(hasData?'получены':'не получены')+'. Сами данные авторизации не отображаются.</div><p><button class="refresh" onclick="load()">Попробовать снова</button></p>'}
 document.querySelectorAll('.navitem').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!state)load()});
