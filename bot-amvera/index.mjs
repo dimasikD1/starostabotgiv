@@ -1520,7 +1520,8 @@ bot.on('callback_query', async ctx => {
 bot.command('schedule', ctx => show(ctx, 1, 0));
 bot.command('tomorrow', ctx => show(ctx, 2, 1));
 bot.command('week', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
-bot.hears('📅 Расписание', ctx => show(ctx, 1, 0));
+// /menu принудительно обновляет устаревшую клавиатуру Telegram в чате.
+bot.command('menu', ctx => ctx.reply('⌨️ Меню обновлено.', menuFor(ctx)));
 bot.hears('📅 Сегодня', ctx => show(ctx, 1, 0));
 bot.hears('📅 Завтра', ctx => show(ctx, 2, 1));
 bot.hears('🗓 Неделя', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
