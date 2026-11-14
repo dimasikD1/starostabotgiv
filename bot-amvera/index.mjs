@@ -29,7 +29,6 @@ if (!token) {
 
 const bot = new Telegraf(token);
 
-const SUBSCRIPTION_STARS = Math.max(1, Number(process.env.SUBSCRIPTION_STARS || 100));
 const SUBSCRIPTION_DAYS = 30;
 const SUBSCRIPTION_SECONDS = SUBSCRIPTION_DAYS * 24 * 60 * 60;
 
@@ -39,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.6';
+const BOT_RELEASE_VERSION = '2026.11.14.7';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -49,7 +48,8 @@ const BOT_RELEASE_NOTES = [
   'Исправлена команда /stats: убрана ссылка на удалённые переменные ЮKassa, из-за которых статистика не отправлялась.',
   'Добавлена проверка новых участников группы: ввод ФИО в личке бота перед отправкой сообщений.',
   'После ввода ФИО новый участник сразу выбирает учебную группу; доступ открывается после выбора.',
-  'В Mini App расписание теперь доступно на сегодня, завтра и всю неделю с указанием времени, аудитории и преподавателя.'
+  'В Mini App расписание теперь доступно на сегодня, завтра и всю неделю с указанием времени, аудитории и преподавателя.',
+  'Подписка временно отключена: бот и Mini App доступны бесплатно. Добавлена добровольная поддержка нового хостинга через Telegram Stars.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -61,55 +61,25 @@ function subscriptionUntil(u) {
   return Number(u.subscriptionUntil || 0);
 }
 
-function hasActiveSubscription(u) {
-  return Boolean(u.subscriptionForever) || subscriptionUntil(u) > Date.now();
-}
-
-function subscriptionText(u, owner = false) {
-  if (owner) return '👑 <b>Бесплатный доступ владельца</b>\\n\\nПодписка для твоего аккаунта не требуется.';
-  if (u.subscriptionForever) return '♾ <b>Пожизненная подписка активна</b>\\n\\nДоступ без ограничения по сроку.';
-  if (!hasActiveSubscription(u)) {
-    return '🔒 <b>Подписка не активна</b>\\n\\n' +
-      'Для использования бота нужна подписка на 30 дней.\\n' +
-      'Стоимость: <b>' + SUBSCRIPTION_STARS + ' ⭐</b>.\\n\\n' +
-      'Нажми «💳 Подписка», чтобы оформить её.';
-  }
-  const date = new Date(subscriptionUntil(u)).toLocaleString('ru-RU', {
-    timeZone: 'Europe/Moscow',
-    dateStyle: 'medium',
-    timeStyle: 'short'
-  });
-  return '✅ <b>Подписка активна</b>\\n\\nДействует до: <b>' + date + ' МСК</b>';
-}
-
-function subscriptionKeyboard() {
+function donationKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('⭐ Оплатить через Telegram Stars — ' + SUBSCRIPTION_STARS, 'subscribe')]
+    [Markup.button.callback('⭐ 50 Stars', 'donate:50'), Markup.button.callback('⭐ 100 Stars', 'donate:100')],
+    [Markup.button.callback('⭐ 250 Stars', 'donate:250'), Markup.button.callback('⭐ 500 Stars', 'donate:500')]
   ]);
 }
 
-async function subscriptionMiddleware(ctx, next) {
+async function registrationMiddleware(ctx, next) {
   const text = ctx.message?.text || '';
   const command = text.split(/\s+/)[0].replace(/^\//, '').replace(/@.*$/, '').toLowerCase();
 
   if (
     ctx.updateType === 'pre_checkout_query' ||
     ctx.message?.successful_payment ||
-    (ctx.updateType === 'callback_query' && (['subscribe', 'subscribe_card'].includes(ctx.callbackQuery?.data) || String(ctx.callbackQuery?.data || '').startsWith('studygroup:') || String(ctx.callbackQuery?.data || '').startsWith('studentimport:')))
+    (ctx.updateType === 'callback_query' && (String(ctx.callbackQuery?.data || '').startsWith('studygroup:') || String(ctx.callbackQuery?.data || '').startsWith('studentimport:') || String(ctx.callbackQuery?.data || '').startsWith('donate:')))
   ) return next();
 
   if (!ctx.from) return next();
   if (isOwner(ctx.from.id)) return next();
-
-  // Любой пользователь, написавший в назначенной группе, получает пожизненный доступ.
-  if (ctx.chat && String(ctx.chat.id) === String(db.subscriptionGroupId || '') && ctx.chat.type !== 'private') {
-    const memberUser = normalizeUser(user(ctx.from.id));
-    if (!memberUser.subscriptionForever) {
-      memberUser.subscriptionForever = true;
-      memberUser.paymentHistory.push({ method: 'group_lifetime', groupId: String(ctx.chat.id), grantedAt: new Date().toISOString() });
-      saveDb();
-    }
-  }
 
   const u = normalizeUser(user(ctx.from.id));
 
@@ -176,28 +146,10 @@ async function subscriptionMiddleware(ctx, next) {
     );
     return;
   }
-  // При открытии лички бот проверяет членство в назначенной группе.
-  if (isPrivate(ctx) && !u.subscriptionForever && db.subscriptionGroupId) {
-    try {
-      const member = await ctx.telegram.getChatMember(db.subscriptionGroupId, ctx.from.id);
-      if (member.status === 'creator' || member.status === 'administrator' || member.status === 'member' || (member.status === 'restricted' && member.is_member)) {
-        u.subscriptionForever = true;
-        u.paymentHistory.push({ method: 'group_lifetime', groupId: String(db.subscriptionGroupId), grantedAt: new Date().toISOString() });
-        saveDb();
-      }
-    } catch (e) {
-      console.error('[group subscription check]', e.message || e);
-    }
-  }
-
-  const allowed = new Set(['start', 'help', 'admin', 'adminhelp', 'commands', 'subscribe', 'subscription', 'terms', 'paysupport', 'myid', 'grant', 'revoke', 'subinfo', 'stats', 'setgroup', 'app']);
-  if (allowed.has(command)) return next();
-  if (hasActiveSubscription(u)) return next();
-
-  return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
+  return next();
 }
 
-bot.use(subscriptionMiddleware);
+bot.use(registrationMiddleware);
 
 const STUDY_GROUPS = Object.freeze({
   '1': 'БИ(ЭБ)1-ОЗ/Бп/КД26',
@@ -253,12 +205,13 @@ const managerMenu = Markup.keyboard([
   ['📊 Создать опрос', '📚 Создать ДЗ'],
   ['👨‍🎓 Список студентов', '📋 Посещаемость'],
   ['👥 Группы'],
-  ['💳 Подписка'],
+  ['💛 Поддержать хостинг'],
   ['🔄 Обновить', 'ℹ️ Помощь']
 ]).resize();
 const studentMenu = Markup.keyboard([
   ['📅 Расписание', '👥 Моя группа'],
-  ['📚 ДЗ']
+  ['📚 ДЗ'],
+  ['💛 Поддержать хостинг']
 ]).resize();
 
 function user(id) {
@@ -678,26 +631,6 @@ async function startPoll(ctx) {
   await ctx.reply('📊 Опрос создан. Выбери, куда его отправить:', Markup.inlineKeyboard(groupButtons()));
 }
 
-bot.command('subscribe', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Оформить подписку можно только в личных сообщениях с ботом.');
-  if (isOwner(ctx.from.id)) return ctx.reply('👑 У тебя бесплатный доступ владельца. Оплата не требуется.', menuFor(ctx));
-  const u = normalizeUser(user(ctx.from.id));
-  if (hasActiveSubscription(u)) return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...menuFor(ctx) });
-
-  await ctx.reply(
-    '💳 <b>Подписка на бота</b>\\n\\n' +
-    'Доступ ко всем функциям на 30 дней.\\n' +
-    'Стоимость: <b>' + SUBSCRIPTION_STARS + ' ⭐</b>.\\n\\n' +
-    'Оплата проходит прямо через Telegram Stars.',
-    { parse_mode: 'HTML', ...subscriptionKeyboard() }
-  );
-});
-
-bot.command('subscription', ctx => {
-  const u = normalizeUser(user(ctx.from.id));
-  return ctx.reply(subscriptionText(u, isOwner(ctx.from.id)), { parse_mode: 'HTML', ...menuFor(ctx) });
-});
-
 // Управление подписками доступно только владельцу и только в личном чате с ботом.
 bot.command('myid', ctx => {
   return ctx.reply('Твой Telegram ID: <code>' + ctx.from.id + '</code>', { parse_mode: 'HTML' });
@@ -875,25 +808,22 @@ bot.command('pollreport', async ctx => {
 });
 
 bot.on('callback_query', async (ctx, next) => {
-  if (ctx.callbackQuery?.data === 'subscribe') {
-    if (isOwner(ctx.from.id)) {
-      await ctx.answerCbQuery('Для владельца доступ бесплатный.');
-      return;
-    }
+  const data = String(ctx.callbackQuery?.data || '');
+  const match = data.match(/^donate:(50|100|250|500)$/);
+  if (match) {
     if (!isPrivate(ctx)) {
-      await ctx.answerCbQuery('Оформление подписки доступно в личке.');
+      await ctx.answerCbQuery('Пожертвование можно отправить в личке с ботом.');
       return;
     }
+    const amount = Number(match[1]);
     await ctx.answerCbQuery();
     await ctx.telegram.sendInvoice(ctx.from.id, {
-      title: 'Подписка на бота',
-      description: 'Доступ ко всем функциям бота на 30 дней',
-      payload: 'bot_subscription_30d',
+      title: 'Поддержка хостинга Староста Бота',
+      description: 'Добровольное пожертвование на оплату нового хостинга. Не даёт дополнительных функций или преимуществ.',
+      payload: 'hosting_donation_' + amount,
       provider_token: '',
       currency: 'XTR',
-      prices: [{ label: 'Подписка на 30 дней', amount: SUBSCRIPTION_STARS }],
-      subscription_period: SUBSCRIPTION_SECONDS,
-      start_parameter: 'bot-subscription'
+      prices: [{ label: 'Добровольное пожертвование', amount }]
     });
     return;
   }
@@ -906,6 +836,14 @@ bot.on('pre_checkout_query', async ctx => {
 
 bot.on('successful_payment', async ctx => {
   const payment = ctx.message.successful_payment;
+  const donationMatch = String(payment.invoice_payload || '').match(/^hosting_donation_(50|100|250|500)$/);
+  if (donationMatch) {
+    const u = normalizeUser(user(ctx.from.id));
+    const amount = Number(payment.total_amount || donationMatch[1]);
+    u.paymentHistory.push({ method: 'hosting_donation_stars', amount, currency: payment.currency || 'XTR', paidAt: new Date().toISOString(), chargeId: payment.telegram_payment_charge_id || '' });
+    saveDb();
+    return ctx.reply('💛 Спасибо за поддержку Староста Бота!\n\nПожертвование пойдёт на оплату нового хостинга. Благодаря тебе бот сможет продолжать работать.', menuFor(ctx));
+  }
   if (payment.invoice_payload !== 'bot_subscription_30d') return;
 
   const u = normalizeUser(user(ctx.from.id));
@@ -977,7 +915,7 @@ bot.help(ctx => ctx.reply(
   '/groups — прикреплённые группы\\n' +
   '/myid — узнать свой Telegram ID\\n' +
   (isOwner(ctx.from.id) ? '\\n👑 <b>Панель владельца</b>\\n/admin — все команды владельца\\n/stats — статистика\\n/grant ID [дней|навсегда] — выдать подписку\\n/revoke ID — отозвать подписку\\n/subinfo ID — проверить подписку\\n/setsubgroup — назначить группу с пожизненным доступом (в группе)\\n/attach и /detach — прикрепить/открепить группу (в группе)\\n' : '') +
-  '\\n💳 /subscription — статус подписки\\n/subscribe — оформить подписку',
+  '\\n💛 /donate — добровольно поддержать оплату нового хостинга',
   { parse_mode: 'HTML', ...menuFor(ctx) }
 ));
 
@@ -1603,10 +1541,13 @@ bot.hears('📋 Посещаемость', async ctx => {
     return ctx.reply('❌ Не удалось загрузить пары из расписания. Проверь /setgroup.');
   }
 });
-bot.hears('💳 Подписка', ctx => {
-  const u = normalizeUser(user(ctx.from.id));
-  if (isOwner(ctx.from.id)) return ctx.reply(subscriptionText(u, true), { parse_mode: 'HTML', ...menuFor(ctx) });
-  return ctx.reply(subscriptionText(u), { parse_mode: 'HTML', ...subscriptionKeyboard() });
+bot.command('donate', ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Пожертвование можно отправить в личных сообщениях с ботом.');
+  return ctx.reply('💛 <b>Поддержать Староста Бот</b>\n\nСейчас я собираю средства на новый хостинг, чтобы бот и мини-приложение продолжали стабильно работать.\n\nПожертвование полностью добровольное и не открывает платные функции — сейчас бот доступен бесплатно. Выбери сумму:', { parse_mode: 'HTML', ...donationKeyboard() });
+});
+bot.hears('💛 Поддержать хостинг', ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Пожертвование можно отправить в личных сообщениях с ботом.');
+  return ctx.reply('💛 <b>Поддержать Староста Бот</b>\n\nСобираю средства на новый хостинг. Пожертвование добровольное и не даёт дополнительных функций. Выбери сумму:', { parse_mode: 'HTML', ...donationKeyboard() });
 });
 
 bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
@@ -1661,7 +1602,7 @@ async function handleMiniAppApi(req,res,url) {
   try { tgUser=verifyMiniAppInitData(req.headers['x-telegram-init-data']); }
   catch(e) { return sendJson(res,401,{error:e.message}); }
   const u=normalizeUser(user(tgUser.id));
-  if (!isOwner(tgUser.id) && !hasActiveSubscription(u)) return sendJson(res,403,{error:'Для веб-кабинета нужна активная подписка.'});
+  // Подписка временно отключена: Mini App доступен без оплаты.
   const g=managedGroup(tgUser.id);
   if(!g) return sendJson(res,403,{error:'Кабинет доступен старосте или заместителю группы.'});
   if(req.method==='GET' && url.pathname==='/api/data') {
