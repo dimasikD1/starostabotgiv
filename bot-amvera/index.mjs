@@ -259,7 +259,7 @@ async function getTodayLessons(g) {
 function managedGroup(userId) {
  const id=String(userId),u=normalizeUser(user(id));let g=Object.values(db.groups).find(x=>String(x.starostaId||'')===id||String(x.zamId||'')===id);
  if(!g&&isManagerRole(u))g=Object.values(db.groups).find(x=>x.title===u.group||x.scheduleGroup===u.group);if(!g)return null;
- g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};
+ g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};g.announcements||=[];
  if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}
  return g;
 }
@@ -1544,10 +1544,29 @@ async function handleMiniAppApi(req,res,url) {
         for(const student of students){const status=record[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
         return {key,date:lesson.date,timeStart:lesson.timeStart||'',timeEnd:lesson.timeEnd||'',subject:lesson.subject||'Занятие',room:lesson.room||'',present,absent,unmarked:students.length-present-absent};
       });
-      return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:attendanceDate(),lessons:data,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))}))});
+      return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:attendanceDate(),lessons:data,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse()});
     } catch(e) {
       console.error('[miniapp data] failed for group:', g.scheduleGroup, e?.stack || e?.message || e);
       return sendJson(res,502,{error:'Не удалось получить расписание за отведённое время. Попробуй обновить кабинет через минуту.'});
+    }
+  }
+  if(req.method==='POST' && url.pathname==='/api/announcements') {
+    try {
+      const body=await readJsonBody(req);
+      const message=String(body.text||'').trim();
+      if(!message) return sendJson(res,400,{error:'Напиши текст объявления.'});
+      if(message.length>3000) return sendJson(res,400,{error:'Объявление слишком длинное. Максимум 3000 символов.'});
+      if(!g.chatId) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
+      await bot.telegram.sendMessage(g.chatId,'📢 <b>Объявление группы</b>\\n\\n'+escapeHtml(message),{parse_mode:'HTML'});
+      g.announcements ||= [];
+      const item={id:crypto.randomUUID(),text:message,authorId:String(tgUser.id),authorName:String(tgUser.first_name||'Староста'),createdAt:new Date().toISOString()};
+      g.announcements.push(item);
+      if(g.announcements.length>100) g.announcements=g.announcements.slice(-100);
+      saveDb();
+      return sendJson(res,200,{ok:true,announcement:item});
+    } catch(e) {
+      console.error('[miniapp announcement]',e?.message||e);
+      return sendJson(res,502,{error:'Не удалось отправить объявление в группу. Проверь, что бот добавлен в чат и может отправлять сообщения.'});
     }
   }
   if(req.method==='POST' && url.pathname==='/api/attendance') {
