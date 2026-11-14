@@ -1557,7 +1557,7 @@ async function handleMiniAppApi(req,res,url) {
       if(!message) return sendJson(res,400,{error:'Напиши текст объявления.'});
       if(message.length>3000) return sendJson(res,400,{error:'Объявление слишком длинное. Максимум 3000 символов.'});
       if(!g.chatId) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
-      await bot.telegram.sendMessage(g.chatId,'📢 <b>Объявление группы</b>\\n\\n'+escapeHtml(message),{parse_mode:'HTML'});
+      await bot.telegram.sendMessage(g.chatId,'📢 <b>Объявление группы</b>\n\n'+escapeHtml(message),{parse_mode:'HTML'});
       g.announcements ||= [];
       const item={id:crypto.randomUUID(),text:message,authorId:String(tgUser.id),authorName:String(tgUser.first_name||'Староста'),createdAt:new Date().toISOString()};
       g.announcements.push(item);
