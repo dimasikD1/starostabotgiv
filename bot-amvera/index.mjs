@@ -1765,8 +1765,7 @@ async function main() {
     { command: 'app', description: 'Открыть веб-кабинет' },
     { command: 'students', description: 'Список студентов группы' },
     { command: 'importstudents', description: 'Импорт списка студентов из текста' },
-    { command: 'pollreport', description: 'Ответы на последний опрос' },
-    { command: 'subscription', description: 'Статус подписки' }
+    { command: 'pollreport', description: 'Ответы на последний опрос' }
   ], { scope: { type: 'all_private_chats' } }));
 
   await telegramStartupRequest('setMyCommands groups', () => bot.telegram.setMyCommands([], { scope: { type: 'all_group_chats' } }));
