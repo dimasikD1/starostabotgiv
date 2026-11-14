@@ -1466,7 +1466,7 @@ bot.hears('📚 ДЗ', async ctx => {
   const matching = Object.values(db.groups).filter(g => !groupName || g.scheduleGroup === groupName || g.title === groupName);
   const records = matching.flatMap(g => (g.homework || []).map(h => ({...h, groupTitle:g.title})));
   const latest = records.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 10);
-  if (!latest.length) return ctx.reply('📚 Пока нет опубликованных домашних заданий для твоей группы.', menuFor(ctx));
+  if (!latest.length) return ctx.reply('Пока не готово, либо ничего не задано, лучше напишите вашему старосте', menuFor(ctx));
   return ctx.reply('📚 <b>Домашние задания</b>\\n\\n' + latest.map(h => '<b>' + escapeHtml(h.subject) + '</b> — ' + escapeHtml(h.groupTitle) + '\\n' + escapeHtml(h.homework) + '\\n' + escapeHtml(h.createdAt || '')).join('\\n\\n'), {parse_mode:'HTML', ...menuFor(ctx)});
 });
 bot.hears('📚 Создать ДЗ', ctx => {
