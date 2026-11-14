@@ -39,7 +39,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.4';
+const BOT_RELEASE_VERSION = '2026.11.14.5';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -47,7 +47,8 @@ const BOT_RELEASE_NOTES = [
   'Mini App продолжает открываться, даже если источник расписания временно недоступен.',
   'При возвращении в приложение данные автоматически обновляются, а при ошибке старые данные остаются на экране.',
   'Исправлена команда /stats: убрана ссылка на удалённые переменные ЮKassa, из-за которых статистика не отправлялась.',
-  'Добавлена проверка новых участников группы: ввод ФИО в личке бота перед отправкой сообщений.'
+  'Добавлена проверка новых участников группы: ввод ФИО в личке бота перед отправкой сообщений.',
+  'После ввода ФИО новый участник сразу выбирает учебную группу; доступ открывается после выбора.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -112,7 +113,7 @@ async function subscriptionMiddleware(ctx, next) {
   const u = normalizeUser(user(ctx.from.id));
 
   // Новый участник должен подтвердить ФИО в личке, прежде чем писать в группе.
-  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.fullName) {
+  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && (!u.fullName || String(u.pendingVerificationChatId || '') === String(ctx.chat.id))) {
     const chatId = String(ctx.chat.id);
     if (!u.pendingVerificationChatId) {
       u.pendingVerificationChatId = chatId;
@@ -206,6 +207,40 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = STUDY_GROUPS[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
   u.group = selected;
+  const verificationChatId = String(u.pendingVerificationChatId || '');
+  if (verificationChatId) {
+    try {
+      await ctx.telegram.restrictChatMember(verificationChatId, ctx.from.id, {
+        can_send_messages: true,
+        can_send_audios: true,
+        can_send_documents: true,
+        can_send_photos: true,
+        can_send_videos: true,
+        can_send_video_notes: true,
+        can_send_voice_notes: true,
+        can_send_polls: true,
+        can_send_other_messages: true,
+        can_add_web_page_previews: true,
+        can_change_info: true,
+        can_invite_users: true,
+        can_pin_messages: true,
+        can_manage_topics: true
+      });
+      await ctx.telegram.sendMessage(verificationChatId, '✅ <b>' + escapeHtml(u.fullName || 'Участник') + '</b> прошёл(ла) проверку, выбрал(а) группу «' + escapeHtml(selected) + '» и теперь может писать.', { parse_mode: 'HTML' });
+      delete u.pendingVerificationChatId;
+      delete u.pendingVerificationChatTitle;
+      delete u.pendingVerificationAt;
+      delete u.verificationRestrictionApplied;
+      saveDb();
+      await ctx.answerCbQuery('Проверка пройдена!');
+      return ctx.editMessageText('✅ ФИО сохранено. Учебная группа: <b>' + escapeHtml(selected) + '</b>.\n\nПроверка пройдена, доступ к группе открыт.', { parse_mode: 'HTML' });
+    } catch (e) {
+      console.error('[registration] Не удалось открыть доступ после выбора группы:', e.message || e);
+      saveDb();
+      await ctx.answerCbQuery('Не удалось открыть доступ', { show_alert: true });
+      return ctx.reply('❌ Группа сохранена, но не удалось снять ограничение в исходной группе. Попроси администратора проверить права бота.', { parse_mode: 'HTML' });
+    }
+  }
   saveDb();
   await ctx.answerCbQuery('Группа сохранена');
   await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.');
@@ -1107,37 +1142,17 @@ bot.on('text', async (ctx,next) => {
   u.fullName = fullName;
   u.pendingFullName = false;
   const verificationChatId = String(u.pendingVerificationChatId || '');
-  delete u.pendingVerificationChatId;
-  delete u.pendingVerificationChatTitle;
-  delete u.pendingVerificationAt;
-  delete u.verificationRestrictionApplied;
   saveDb();
   if (verificationChatId) {
-   try {
-    await ctx.telegram.restrictChatMember(verificationChatId, ctx.from.id, {
-      can_send_messages: true,
-      can_send_audios: true,
-      can_send_documents: true,
-      can_send_photos: true,
-      can_send_videos: true,
-      can_send_video_notes: true,
-      can_send_voice_notes: true,
-      can_send_polls: true,
-      can_send_other_messages: true,
-      can_add_web_page_previews: true,
-      can_change_info: true,
-      can_invite_users: true,
-      can_pin_messages: true,
-      can_manage_topics: true
-    });
-    await ctx.telegram.sendMessage(verificationChatId, '✅ <b>' + escapeHtml(fullName) + '</b> прошёл(ла) проверку и теперь может писать в группе.', { parse_mode: 'HTML' });
-   } catch (e) {
-    console.error('[registration] Не удалось снять ограничение после ввода ФИО:', e.message || e);
-    await ctx.reply('✅ ФИО сохранено, но автоматически снять ограничение в группе не получилось. Попроси администратора проверить права бота и снять ограничение вручную.');
-    return;
-   }
+   return ctx.reply(
+    '✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>\\n\\nТеперь выбери свою учебную группу:',
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard([
+      [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
+      [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')]
+    ]) }
+   );
   }
-  return ctx.reply('✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>. Проверка пройдена, доступ к группе открыт.', { parse_mode: 'HTML', ...menuFor(ctx) });
+  return ctx.reply('✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>.', { parse_mode: 'HTML', ...menuFor(ctx) });
  }
  if(u.pendingStudentField){
   const pending=u.pendingStudentField;
