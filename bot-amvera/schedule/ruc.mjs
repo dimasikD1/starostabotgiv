@@ -47,6 +47,8 @@ function parseCards(html, requestedGroup) {
       const timeRange = combined.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
       const singleTime = combined.match(/\b(\d{1,2}:\d{2})\b/);
       const timeLabel = timeRange ? timeRange[0].replace(/\s+/g, '') : (singleTime ? singleTime[1] : '');
+      const lessonNumberMatch = title.match(/^\s*(\d+)\s*[.)-]?\s*/);
+      const lessonNumber = lessonNumberMatch ? lessonNumberMatch[1] : '';
       const subject = title.replace(/\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/, '').replace(/^\d+\s*[.]?\s*/, '').trim();
 
       const groupMatch = text.match(/Группа\s*[:\-]?\s*([^,;]+)/i);
@@ -77,6 +79,7 @@ function parseCards(html, requestedGroup) {
         timeStart: timeRange ? timeRange[1] : '',
         timeEnd: timeRange ? timeRange[2] : '',
         subject,
+        lessonNumber,
         lessonType,
         teacher,
         room,
@@ -305,6 +308,7 @@ function normalizeJson(data, days, startDate = isoToday(0)) {
       timeStart: item.startTime || item.start_time || item.beginTime || item.timeStart || extractClock(item.start),
       timeEnd: item.endTime || item.end_time || item.finishTime || item.timeEnd || extractClock(item.end),
       subject: item.subject || item.name || item.discipline || item.title || '',
+      lessonNumber: item.lessonNumber || item.lesson_number || item.number || item.pairNumber || item.pair_number || '',
       lessonType: normalizeLessonType(item.lessonType || item.lesson_type || item.type || item.typeName || item.kind || item.classType || ''),
       teacher: item.teacher || item.teacherName || item.lecturer || '',
       room: item.room || item.auditory || item.classroom || '',
