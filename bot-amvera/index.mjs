@@ -1459,16 +1459,17 @@ bot.command('groups', async ctx => {
 bot.command('poll', startPoll);
 bot.command('hw', startHomework);
 bot.command('homework', startHomework);
-bot.hears('📚 ДЗ', async ctx => {
-  if (!isPrivate(ctx)) return;
-  const u = user(ctx.from.id);
-  const groupName = u.group || '';
-  const matching = Object.values(db.groups).filter(g => !groupName || g.scheduleGroup === groupName || g.title === groupName);
+async function showHomework(ctx) {
+  const u = normalizeUser(user(ctx.from.id));
+  const groupName = String(u.group || '').trim();
+  const matching = Object.values(db.groups).filter(g => !groupName || String(g.scheduleGroup || '').trim() === groupName || String(g.title || '').trim() === groupName);
   const records = matching.flatMap(g => (g.homework || []).map(h => ({...h, groupTitle:g.title})));
-  const latest = records.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 10);
+  const latest = records.sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 10);
   if (!latest.length) return ctx.reply('Пока не готово, либо ничего не задано, лучше напишите вашему старосте', menuFor(ctx));
   return ctx.reply('📚 <b>Домашние задания</b>\\n\\n' + latest.map(h => '<b>' + escapeHtml(h.subject) + '</b> — ' + escapeHtml(h.groupTitle) + '\\n' + escapeHtml(h.homework) + '\\n' + escapeHtml(h.createdAt || '')).join('\\n\\n'), {parse_mode:'HTML', ...menuFor(ctx)});
-});
+}
+bot.hears(/^📚\\s*ДЗ$/u, showHomework);
+bot.command('dz', showHomework);
 bot.hears('📚 Создать ДЗ', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях.');
   return ctx.reply('Напиши ДЗ командой:\n/hw Предмет | Домашнее задание');
