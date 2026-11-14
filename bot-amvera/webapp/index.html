@@ -23,6 +23,7 @@
 <button class="navitem" data-tab="profile"><span class="ni">☻</span>Профиль</button>
 </div></nav>
 <script>
+console.log('[miniapp] JavaScript started');
 let tg=null,state=null,selectedKey=null,loading=false,saving=false,currentTab='home',studentQuery='',attendanceFilter='all';
 let scheduleRange='today';
 const root=document.getElementById('app');
@@ -30,7 +31,8 @@ function toast(message,type='ok'){let el=document.getElementById('toast');if(!el
 function haptic(kind='light'){try{tg?.HapticFeedback?.impactOccurred(kind)}catch{}}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function initTelegram(){tg=window.Telegram?.WebApp||null;if(tg){tg.ready();tg.expand();return true}return false}
-function setDiagnostic(stage){window.__miniAppStage=stage;console.log('[miniapp]',stage);const el=document.getElementById('load-stage');if(el)el.textContent=stage}\nasync function waitForTelegram(){setDiagnostic('Подключаем Telegram WebApp…');for(let i=0;i<30;i++){if(initTelegram()){setDiagnostic(tg?.initData?'Telegram подключён, авторизация получена':'Telegram подключён, initData отсутствует');return true}await new Promise(r=>setTimeout(r,100))}setDiagnostic('Telegram SDK не найден');return initTelegram()}
+function setDiagnostic(stage){window.__miniAppStage=stage;console.log('[miniapp]',stage);const el=document.getElementById('load-stage');if(el)el.textContent=stage}
+async function waitForTelegram(){setDiagnostic('Подключаем Telegram WebApp…');for(let i=0;i<30;i++){if(initTelegram()){setDiagnostic(tg?.initData?'Telegram подключён, авторизация получена':'Telegram подключён, initData отсутствует');return true}await new Promise(r=>setTimeout(r,100))}setDiagnostic('Telegram SDK не найден');return initTelegram()}
 async function api(path,options={}){if(!tg?.initData)throw new Error('Telegram не передал данные авторизации. Закрой мини-приложение и открой его кнопкой «Открыть кабинет» в чате с ботом.');const method=options.method||'GET',started=Date.now();setDiagnostic('Отправляем запрос '+method+' '+path+'…');console.log('[miniapp] request start',method,path);const headers={'Content-Type':'application/json','X-Telegram-Init-Data':tg.initData,...(options.headers||{})};const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30000);let r;try{r=await fetch(path,{...options,headers,cache:'no-store',signal:controller.signal});console.log('[miniapp] response',method,path,r.status,Date.now()-started+'ms');setDiagnostic('Ответ сервера: '+r.status+' ('+(Date.now()-started)+' мс)')}catch(e){console.error('[miniapp] request failed',method,path,e?.message||e);setDiagnostic('Ошибка запроса: '+(e?.name||'network'));if(e.name==='AbortError')throw new Error('Сервер не ответил за 30 секунд. Источник расписания может быть временно недоступен.');throw new Error('Не удалось связаться с сервером: '+(e.message||'сетевая ошибка'))}finally{clearTimeout(timer)}let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||('Ошибка сервера ('+r.status+')'));return d}
 function getLesson(){return (state?.lessons||[]).find(x=>x.key===selectedKey)||(state?.lessons||[])[0]||null}
 function statusOf(s,key){return s.statuses?.[key]||'unmarked'}
