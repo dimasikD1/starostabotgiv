@@ -6,9 +6,16 @@ const DEFAULT_NEW_URL = 'https://new-schedule.ruc.su/schedule';
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 function isoToday(offset = 0) {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + offset);
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  const d = new Date(values.year + '-' + values.month + '-' + values.day + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(date, amount) {
+  const d = new Date(String(date).slice(0, 10) + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + amount);
   return d.toISOString().slice(0, 10);
 }
 
@@ -114,7 +121,7 @@ async function requestHtml(url, method = 'GET', data = {}, timeout = 20000) {
   }
 }
 
-async function getLegacySchedule(group, days, timeout) {
+async function getLegacySchedule(group, days, timeout, startDate = isoToday(0)) {
   const baseUrl =
     (process.env.SCHEDULE_SITE_URL || DEFAULT_URL).trim().replace(/\/$/, '') + '/';
 
@@ -194,7 +201,7 @@ async function getLegacySchedule(group, days, timeout) {
 
       if (!match) continue;
 
-      const today = isoToday(0);
+      const requestedDate = startDate || isoToday(0);
       const html = await requestHtml(
         baseUrl,
         'POST',
@@ -203,17 +210,16 @@ async function getLegacySchedule(group, days, timeout) {
           year: kit.value,
           group: match.value,
           'search-date': 'search-date',
-          'scheduler-date': today,
-          'date-search': today
+          'scheduler-date': requestedDate,
+          'date-search': requestedDate
         },
         timeout
       );
 
       const items = parseCards(html, group);
 
-      return items.filter(
-        x => x.dayOffset >= 0 && x.dayOffset < days
-      );
+      const endDate = addDays(requestedDate, days);
+      return items.filter(x => x.date >= requestedDate && x.date < endDate);
     }
   }
 
@@ -222,7 +228,7 @@ async function getLegacySchedule(group, days, timeout) {
   );
 }
 
-async function getNewSite(group, days, timeout) {
+async function getNewSite(group, days, timeout, startDate = isoToday(0)) {
   const url = (process.env.SCHEDULE_SITE_URL || DEFAULT_NEW_URL).trim();
   const response = await requestHtml(url, 'GET', {}, timeout);
   const $ = cheerio.load(response);
@@ -261,7 +267,8 @@ async function getNewSite(group, days, timeout) {
     });
   });
 
-  return items.filter(x => x.dayOffset >= 0 && x.dayOffset < days);
+  const endDate = addDays(startDate || isoToday(0), days);
+  return items.filter(x => x.date >= (startDate || isoToday(0)) && x.date < endDate);
 }
 
 function extractClock(value) {
@@ -269,15 +276,14 @@ function extractClock(value) {
   return match ? match[1] : '';
 }
 
-function normalizeJson(data, days) {
+function normalizeJson(data, days, startDate = isoToday(0)) {
   const raw = Array.isArray(data)
     ? data
     : (data?.items || data?.schedule || data?.data || []);
 
   if (!Array.isArray(raw)) return [];
 
-  const base = new Date();
-  base.setHours(0, 0, 0, 0);
+  const base = new Date((startDate || isoToday(0)) + 'T00:00:00Z');
 
   return raw.map(item => {
     const date = String(
@@ -298,12 +304,10 @@ function normalizeJson(data, days) {
       room: item.room || item.auditory || item.classroom || '',
       group: item.group || item.groupName || ''
     };
-  }).filter(
-    x => x.date && x.subject && x.dayOffset >= 0 && x.dayOffset < days
-  );
+  }).filter(x => x.date && x.subject && x.date >= (startDate || isoToday(0)) && x.date < addDays(startDate || isoToday(0), days));
 }
 
-export async function getSchedule(group, days = 7) {
+export async function getSchedule(group, days = 7, startDate = isoToday(0)) {
   const timeout = Number(process.env.SCHEDULE_TIMEOUT || 7000);
   const api = (process.env.SCHEDULE_API_URL || '').trim();
 
@@ -342,16 +346,16 @@ export async function getSchedule(group, days = 7) {
       throw new Error('Schedule API HTTP ' + response.status + ' from ' + url);
     }
 
-    return normalizeJson(await response.json(), days);
+    return normalizeJson(await response.json(), days, startDate);
   }
 
   try {
-    return await getLegacySchedule(group, days, timeout);
+    return await getLegacySchedule(group, days, timeout, startDate);
   } catch (legacyError) {
     console.error('[schedule] legacy source failed:', legacyError.message);
 
     if ((process.env.SCHEDULE_FALLBACK_NEW || 'true').toLowerCase() === 'true') {
-      return await getNewSite(group, days, timeout);
+      return await getNewSite(group, days, timeout, startDate);
     }
 
     throw legacyError;
