@@ -39,7 +39,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.5';
+const BOT_RELEASE_VERSION = '2026.11.14.6';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -48,7 +48,8 @@ const BOT_RELEASE_NOTES = [
   'При возвращении в приложение данные автоматически обновляются, а при ошибке старые данные остаются на экране.',
   'Исправлена команда /stats: убрана ссылка на удалённые переменные ЮKassa, из-за которых статистика не отправлялась.',
   'Добавлена проверка новых участников группы: ввод ФИО в личке бота перед отправкой сообщений.',
-  'После ввода ФИО новый участник сразу выбирает учебную группу; доступ открывается после выбора.'
+  'После ввода ФИО новый участник сразу выбирает учебную группу; доступ открывается после выбора.',
+  'В Mini App расписание теперь доступно на сегодня, завтра и всю неделю с указанием времени, аудитории и преподавателя.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -1664,21 +1665,26 @@ async function handleMiniAppApi(req,res,url) {
   const g=managedGroup(tgUser.id);
   if(!g) return sendJson(res,403,{error:'Кабинет доступен старосте или заместителю группы.'});
   if(req.method==='GET' && url.pathname==='/api/data') {
-    let lessons=[],scheduleError='';
+    let scheduleItems=[],scheduleError='';
     try {
-      lessons=await getMiniAppTodayLessons(g);
+      if(!g.scheduleGroup) throw new Error('Для группы не указано расписание. Сначала настрой /setgroup.');
+      scheduleItems=await getCachedSchedule(String(g.scheduleGroup),7);
     } catch(e) {
       scheduleError='Расписание временно недоступно. Остальные данные кабинета загружены; попробуй обновить позже.';
       console.error('[miniapp data] schedule unavailable for group:', g.scheduleGroup, e?.stack || e?.message || e);
     }
+    const today=attendanceDate();
+    const lessons=scheduleItems.filter(x=>x.date===today&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
     const students=g.students||[];
-    const data=lessons.map(lesson=>{
+    const mapLesson=lesson=>{
       const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
       let present=0,absent=0;
       for(const student of students){const status=record[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
-      return {key,date:lesson.date,timeStart:lesson.timeStart||'',timeEnd:lesson.timeEnd||'',subject:lesson.subject||'Занятие',room:lesson.room||'',present,absent,unmarked:students.length-present-absent};
-    });
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:attendanceDate(),lessons:data,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse()});
+      return {key,date:lesson.date,timeStart:lesson.timeStart||'',timeEnd:lesson.timeEnd||'',subject:lesson.subject||'Занятие',room:lesson.room||'',teacher:lesson.teacher||'',present,absent,unmarked:students.length-present-absent};
+    };
+    const data=lessons.map(mapLesson);
+    const scheduleData=scheduleItems.filter(x=>x.date&&x.subject).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.timeStart||'').localeCompare(String(b.timeStart||'')))).map(mapLesson);
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse()});
   }
   if(req.method==='POST' && url.pathname==='/api/announcements') {
     try {
