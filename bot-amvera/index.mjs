@@ -309,6 +309,28 @@ async function getCachedSchedule(group, days = 7) {
  return request;
 }
 
+// Для Mini App не ждём внешний сайт расписания: отдаём кэш сразу,
+// а при холодном старте загружаем расписание в фоне.
+function getMiniAppSchedule(group, days = 7) {
+ const cacheKey = String(group) + ':' + Number(days);
+ const cached = scheduleCache.get(cacheKey);
+ const fresh = cached && cached.expiresAt > Date.now();
+ if (fresh) return { items: cached.items, loading: false };
+ if (!scheduleInFlight.has(cacheKey)) {
+  const request = getSchedule(String(group), days).then(items => {
+   const safeItems = Array.isArray(items) ? items : [];
+   scheduleCache.set(cacheKey, { items: safeItems, expiresAt: Date.now() + SCHEDULE_CACHE_TTL });
+   console.log('[schedule cache] background refresh complete:', cacheKey, 'items:', safeItems.length);
+   return safeItems;
+  }).catch(error => {
+   console.error('[schedule cache] background refresh failed:', cacheKey, error?.message || error);
+   return cached?.items || [];
+  }).finally(() => scheduleInFlight.delete(cacheKey));
+  scheduleInFlight.set(cacheKey, request);
+ }
+ return { items: cached?.items || [], loading: !cached };
+}
+
 async function getTodayLessons(g) {
  if(!g?.scheduleGroup) throw new Error('Для группы не указано расписание. Сначала настрой /setgroup.');
  const lessons=await getCachedSchedule(String(g.scheduleGroup),7);
@@ -1616,10 +1638,12 @@ async function handleMiniAppApi(req,res,url) {
   const g=managedGroup(tgUser.id);
   if(!g) return sendJson(res,403,{error:'Кабинет доступен старосте или заместителю группы.'});
   if(req.method==='GET' && url.pathname==='/api/data') {
-    let scheduleItems=[],scheduleError='';
+    let scheduleItems=[],scheduleError='',scheduleLoading=false;
     try {
       if(!g.scheduleGroup) throw new Error('Для группы не указано расписание. Сначала настрой /setgroup.');
-      scheduleItems=await getCachedSchedule(String(g.scheduleGroup),7);
+      const scheduleResult=getMiniAppSchedule(String(g.scheduleGroup),7);
+      scheduleItems=scheduleResult.items;
+      scheduleLoading=scheduleResult.loading;
     } catch(e) {
       scheduleError='Расписание временно недоступно. Остальные данные кабинета загружены; попробуй обновить позже.';
       console.error('[miniapp data] schedule unavailable for group:', g.scheduleGroup, e?.stack || e?.message || e);
@@ -1635,7 +1659,7 @@ async function handleMiniAppApi(req,res,url) {
     };
     const data=lessons.map(mapLesson);
     const scheduleData=scheduleItems.filter(x=>x.date&&x.subject).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.timeStart||'').localeCompare(String(b.timeStart||'')))).map(mapLesson);
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse()});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),scheduleLoading});
   }
   if(req.method==='POST' && url.pathname==='/api/announcements') {
     try {
