@@ -1705,7 +1705,14 @@ async function handleMiniAppApi(req,res,url) {
 const port = Number(process.env.PORT || 80);
 const webappFile = new URL('./webapp/index.html', import.meta.url);
 const healthServer = http.createServer(async (req, res) => {
+  const startedAt = Date.now();
   const url = new URL(req.url || '/', 'http://localhost');
+  // Логируем только метод, путь, статус и длительность — без query-параметров и пользовательских данных.
+  res.on('finish', () => {
+    if (url.pathname.startsWith('/api/') || url.pathname === '/app' || url.pathname === '/app/') {
+      console.log('[http timing]', req.method, url.pathname, res.statusCode, Date.now() - startedAt + 'ms');
+    }
+  });
   if (url.pathname.startsWith('/api/')) return handleMiniAppApi(req,res,url);
   if (url.pathname === '/app' || url.pathname === '/app/') {
     try {
