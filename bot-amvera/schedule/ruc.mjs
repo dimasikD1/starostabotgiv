@@ -314,6 +314,7 @@ function normalizeJson(data, days, startDate = isoToday(0)) {
       timeStart: item.startTime || item.start_time || item.beginTime || item.timeStart || extractClock(item.start),
       timeEnd: item.endTime || item.end_time || item.finishTime || item.timeEnd || extractClock(item.end),
       subject: item.subject || item.name || item.discipline || item.title || '',
+      lessonType: normalizeLessonType(item.lessonType || item.lesson_type || item.type || item.typeName || item.kind || item.classType || ''),
       teacher: item.teacher || item.teacherName || item.lecturer || '',
       room: item.room || item.auditory || item.classroom || '',
       group: item.group || item.groupName || ''
