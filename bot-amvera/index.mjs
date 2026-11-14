@@ -497,20 +497,20 @@ function format(items, group) {
   for (const x of items) {
     if (x.date !== current) {
       current = x.date;
-      out.push('\\n📅 ' + (x.date || 'Дата не указана'));
+      out.push('\n📅 ' + (x.date || 'Дата не указана'));
     }
     const lessonTime = x.timeStart && x.timeEnd ? x.timeStart + '–' + x.timeEnd : (x.time || '');
     let line = '• ' + (lessonTime ? lessonTime + ' — ' : '') + (x.subject || 'Занятие');
     if (x.lessonType) line += ' (' + x.lessonType + ')';
-    if (x.teacher) line += '\\n   👨‍🏫 ' + x.teacher;
+    if (x.teacher) line += '\n   👨‍🏫 ' + x.teacher;
     const room = String(x.room || '').trim();
     if (room && !shownRooms.has(room.toLowerCase())) {
-      line += '\\n   🚪 Аудитория: ' + room;
+      line += '\n   🚪 Аудитория: ' + room;
       shownRooms.add(room.toLowerCase());
     }
     out.push(line);
   }
-  return out.join('\\n').trim();
+  return out.join('\n').trim();
 }
 
 async function show(ctx, days, offset) {
