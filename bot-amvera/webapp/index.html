@@ -23,6 +23,17 @@
 <button class="navitem" data-tab="profile"><span class="ni">☻</span>Профиль</button>
 </div></nav>
 <script>
+(function(){
+  var app=document.getElementById('app');
+  function show(message){if(app){var box=document.getElementById('early-diagnostic');if(!box){box=document.createElement('div');box.id='early-diagnostic';box.style.cssText='margin-top:12px;padding:10px;border:1px solid #52658e;border-radius:10px;color:#dce5ff;font-size:13px;white-space:pre-wrap';app.appendChild(box)}box.textContent=message}}
+  window.addEventListener('error',function(e){show('Ошибка JavaScript: '+(e.message||'неизвестная ошибка')+(e.lineno?' (строка '+e.lineno+')':''));console.error('[miniapp early error]',e.message,e.filename,e.lineno)});
+  window.addEventListener('unhandledrejection',function(e){show('Ошибка выполнения: '+String(e.reason&&e.reason.message||e.reason));console.error('[miniapp early rejection]',e.reason)});
+  setTimeout(function(){if(!window.__miniAppStage)show('Основной скрипт не запустился. Проверьте подключение Telegram SDK и ошибки JavaScript.')},1500);
+  var sdk=document.querySelector('script[src*="telegram-web-app.js"]');
+  if(sdk)sdk.addEventListener('error',function(){show('Не удалось загрузить Telegram WebApp SDK')});
+})();
+</script>
+<script>
 console.log('[miniapp] JavaScript started');
 let tg=null,state=null,selectedKey=null,loading=false,saving=false,currentTab='home',studentQuery='',attendanceFilter='all';
 let scheduleRange='today';
