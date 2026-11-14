@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.10';
+const BOT_RELEASE_VERSION = '2026.11.14.11';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -52,7 +52,8 @@ const BOT_RELEASE_NOTES = [
   'Подписка временно отключена: бот и Mini App доступны бесплатно. Добавлена добровольная поддержка нового хостинга через Telegram Stars.',
   'Владелец может видеть количество и сумму пожертвований на хостинг в /stats.',
   'Проверка ФИО теперь повторно запускается при повторном вступлении пользователя в группу.',
-  'Добавлена команда /publishweek для ручной отправки и закрепления расписания в первой и второй учебных группах.'
+  'Добавлена команда /publishweek для ручной отправки и закрепления расписания в первой и второй учебных группах.',
+  'Исправлена загрузка расписания на следующую неделю: источник теперь запрашивается с даты ближайшего понедельника.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -624,7 +625,7 @@ async function checkWeeklySchedules() {
       const key = String(chatId) + ':' + range.start;
       if (db.sentWeeklySchedules[key]) continue;
       try {
-        const lessons = await getSchedule(scheduleGroup, 8);
+        const lessons = await getSchedule(scheduleGroup, 7, range.start);
         const weekLessons = (lessons || [])
           .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
           .sort((a, b) => String(a.date).localeCompare(String(b.date)) ||
@@ -1703,7 +1704,7 @@ bot.command('publishweek', async ctx => {
   for (const g of targetGroups) {
     const scheduleGroup = String(g.scheduleGroup || '').trim();
     try {
-      const lessons = await getSchedule(scheduleGroup, 14);
+      const lessons = await getSchedule(scheduleGroup, 7, range.start);
       const weekLessons = (lessons || [])
         .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
         .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
