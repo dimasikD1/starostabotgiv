@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.12';
+const BOT_RELEASE_VERSION = '2026.11.14.13';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -53,7 +53,7 @@ const BOT_RELEASE_NOTES = [
   'Владелец может видеть количество и сумму пожертвований на хостинг в /stats.',
   'Проверка ФИО теперь повторно запускается при повторном вступлении пользователя в группу.',
   'Добавлена команда /publishweek для ручной отправки и закрепления расписания в первой и второй учебных группах.',
-  'Исправлена загрузка расписания на следующую неделю: источник теперь запрашивается с даты ближайшего понедельника.'
+  'Исправлена загрузка расписания на следующую неделю: источник теперь запрашивается с даты ближайшего понедельника. Аудитория больше не дублируется, добавлен тип занятия.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -493,18 +493,24 @@ function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
   const out = [];
   let current = '';
+  const shownRooms = new Set();
   for (const x of items) {
     if (x.date !== current) {
       current = x.date;
-      out.push('\n📅 ' + (x.date || 'Дата не указана'));
+      out.push('\\n📅 ' + (x.date || 'Дата не указана'));
     }
     const lessonTime = x.timeStart && x.timeEnd ? x.timeStart + '–' + x.timeEnd : (x.time || '');
     let line = '• ' + (lessonTime ? lessonTime + ' — ' : '') + (x.subject || 'Занятие');
-    if (x.teacher) line += '\n   👨‍🏫 ' + x.teacher;
-    if (x.room) line += '\n   🚪 ' + x.room;
+    if (x.lessonType) line += ' (' + x.lessonType + ')';
+    if (x.teacher) line += '\\n   👨‍🏫 ' + x.teacher;
+    const room = String(x.room || '').trim();
+    if (room && !shownRooms.has(room.toLowerCase())) {
+      line += '\\n   🚪 Аудитория: ' + room;
+      shownRooms.add(room.toLowerCase());
+    }
     out.push(line);
   }
-  return out.join('\n').trim();
+  return out.join('\\n').trim();
 }
 
 async function show(ctx, days, offset) {
