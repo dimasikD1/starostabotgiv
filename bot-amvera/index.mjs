@@ -36,6 +36,15 @@ const SUBSCRIPTION_SECONDS = SUBSCRIPTION_DAYS * 24 * 60 * 60;
 // Telegram user ID владельца, которому подписка не требуется.
 // Значение задаётся в переменных окружения сервера.
 const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
+
+// Версия и список изменений для уведомления владельца после обновления.
+// При каждом следующем обновлении меняй версию и дополняй список.
+const BOT_RELEASE_VERSION = '2026.11.14.1';
+const BOT_RELEASE_NOTES = [
+  'Добавлен раздел «Объявления» в Mini App.',
+  'Староста может отправлять объявления прямо в Telegram-группу.',
+  'Добавлена история объявлений с датой, временем и автором.'
+];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
 function isOwner(userId) {
@@ -1636,6 +1645,23 @@ async function main() {
   await telegramStartupRequest('deleteWebhook', () => bot.telegram.deleteWebhook({ drop_pending_updates: false }));
   const me = await telegramStartupRequest('getMe', () => bot.telegram.getMe());
   console.log('Бот запущен: @' + me.username);
+
+  // Отправляем владельцу список изменений один раз для каждой версии.
+  if (OWNER_TELEGRAM_ID && db.lastNotifiedRelease !== BOT_RELEASE_VERSION) {
+    const releaseMessage =
+      '🚀 <b>Староста Бот обновлён</b>\\n' +
+      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\\n\\n' +
+      '<b>Что нового:</b>\\n' +
+      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\\n');
+    try {
+      await bot.telegram.sendMessage(OWNER_TELEGRAM_ID, releaseMessage, { parse_mode: 'HTML' });
+      db.lastNotifiedRelease = BOT_RELEASE_VERSION;
+      saveDb();
+      console.log('[startup] Уведомление об обновлении отправлено владельцу: ' + BOT_RELEASE_VERSION);
+    } catch (e) {
+      console.error('[release notification] Не удалось уведомить владельца:', e.message || e);
+    }
+  }
 
   // Уведомляем всех пользователей, назначенных старостами, после каждого запуска/перезапуска.
   const starostas = Object.entries(db.users).filter(([, u]) => ['starosta', 'zam'].includes(u?.role));
