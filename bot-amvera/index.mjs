@@ -39,11 +39,13 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.1';
+const BOT_RELEASE_VERSION = '2026.11.14.2';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
-  'Добавлена история объявлений с датой, временем и автором.'
+  'Добавлена история объявлений с датой, временем и автором.',
+  'Mini App продолжает открываться, даже если источник расписания временно недоступен.',
+  'При возвращении в приложение данные автоматически обновляются, а при ошибке старые данные остаются на экране.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -1544,20 +1546,21 @@ async function handleMiniAppApi(req,res,url) {
   const g=managedGroup(tgUser.id);
   if(!g) return sendJson(res,403,{error:'Кабинет доступен старосте или заместителю группы.'});
   if(req.method==='GET' && url.pathname==='/api/data') {
+    let lessons=[],scheduleError='';
     try {
-      const lessons=await getMiniAppTodayLessons(g);
-      const students=g.students||[];
-      const data=lessons.map(lesson=>{
-        const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
-        let present=0,absent=0;
-        for(const student of students){const status=record[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
-        return {key,date:lesson.date,timeStart:lesson.timeStart||'',timeEnd:lesson.timeEnd||'',subject:lesson.subject||'Занятие',room:lesson.room||'',present,absent,unmarked:students.length-present-absent};
-      });
-      return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:attendanceDate(),lessons:data,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse()});
+      lessons=await getMiniAppTodayLessons(g);
     } catch(e) {
-      console.error('[miniapp data] failed for group:', g.scheduleGroup, e?.stack || e?.message || e);
-      return sendJson(res,502,{error:'Не удалось получить расписание за отведённое время. Попробуй обновить кабинет через минуту.'});
+      scheduleError='Расписание временно недоступно. Остальные данные кабинета загружены; попробуй обновить позже.';
+      console.error('[miniapp data] schedule unavailable for group:', g.scheduleGroup, e?.stack || e?.message || e);
     }
+    const students=g.students||[];
+    const data=lessons.map(lesson=>{
+      const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
+      let present=0,absent=0;
+      for(const student of students){const status=record[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
+      return {key,date:lesson.date,timeStart:lesson.timeStart||'',timeEnd:lesson.timeEnd||'',subject:lesson.subject||'Занятие',room:lesson.room||'',present,absent,unmarked:students.length-present-absent};
+    });
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:attendanceDate(),lessons:data,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse()});
   }
   if(req.method==='POST' && url.pathname==='/api/announcements') {
     try {
