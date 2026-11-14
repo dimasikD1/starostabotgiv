@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.8';
+const BOT_RELEASE_VERSION = '2026.11.14.9';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -50,7 +50,8 @@ const BOT_RELEASE_NOTES = [
   'После ввода ФИО новый участник сразу выбирает учебную группу; доступ открывается после выбора.',
   'В Mini App расписание теперь доступно на сегодня, завтра и всю неделю с указанием времени, аудитории и преподавателя.',
   'Подписка временно отключена: бот и Mini App доступны бесплатно. Добавлена добровольная поддержка нового хостинга через Telegram Stars.',
-  'Владелец может видеть количество и сумму пожертвований на хостинг в /stats.'
+  'Владелец может видеть количество и сумму пожертвований на хостинг в /stats.',
+  'Проверка ФИО теперь повторно запускается при повторном вступлении пользователя в группу.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -154,6 +155,73 @@ async function registrationMiddleware(ctx, next) {
   }
   return next();
 }
+
+
+/*
+ * Повторная проверка при повторном вступлении.
+ * Telegram присылает chat_member только если этот тип обновлений
+ * явно включён в allowedUpdates при запуске бота.
+ */
+bot.on('chat_member', async ctx => {
+  const update = ctx.update.chat_member;
+  const oldStatus = update?.old_chat_member?.status;
+  const newMember = update?.new_chat_member;
+  const newStatus = newMember?.status;
+  const member = newMember?.user;
+  const chat = update?.chat;
+  if (!member?.id || !chat?.id || !['group', 'supergroup'].includes(chat.type)) return;
+  if (Number(member.id) === Number(ctx.botInfo?.id)) return;
+
+  const joinedAgain = ['left', 'kicked'].includes(oldStatus) &&
+    ['member', 'restricted', 'administrator', 'creator'].includes(newStatus);
+  if (!joinedAgain) return;
+
+  const u = normalizeUser(user(member.id));
+  u.pendingVerificationChatId = String(chat.id);
+  u.pendingVerificationChatTitle = chat.title || 'группа';
+  u.pendingVerificationAt = new Date().toISOString();
+  u.pendingFullName = false;
+  saveDb();
+
+  let restricted = false;
+  try {
+    await ctx.telegram.restrictChatMember(chat.id, member.id, {
+      can_send_messages: false,
+      can_send_audios: false,
+      can_send_documents: false,
+      can_send_photos: false,
+      can_send_videos: false,
+      can_send_video_notes: false,
+      can_send_voice_notes: false,
+      can_send_polls: false,
+      can_send_other_messages: false,
+      can_add_web_page_previews: false
+    });
+    u.verificationRestrictionApplied = true;
+    restricted = true;
+    saveDb();
+  } catch (e) {
+    console.error('[registration] Не удалось ограничить повторно вступившего участника:', e.message || e);
+  }
+
+  let botUsername = ctx.botInfo?.username;
+  if (!botUsername) {
+    try { botUsername = (await ctx.telegram.getMe()).username; } catch {}
+  }
+  if (!botUsername) return;
+  const payload = Buffer.from(String(chat.id)).toString('base64url');
+  const startUrl = 'https://t.me/' + botUsername + '?start=verify_' + payload;
+  const message = restricted
+    ? '🔐 С возвращением! Чтобы снова писать в группе, подтверди ФИО в личных сообщениях с ботом.'
+    : '🔐 С возвращением! Для допуска подтверди ФИО в личке бота. ⚠️ Не удалось автоматически ограничить отправку сообщений — администратору нужно проверить права бота.';
+  try {
+    await ctx.telegram.sendMessage(chat.id, message, {
+      reply_markup: { inline_keyboard: [[{ text: '📝 Подтвердить ФИО', url: startUrl }]] }
+    });
+  } catch (e) {
+    console.error('[registration] Не удалось отправить запрос повторной проверки:', e.message || e);
+  }
+});
 
 bot.use(registrationMiddleware);
 
@@ -1810,7 +1878,7 @@ async function main() {
     { command: 'subinfo', description: 'Проверить подписку' }
   ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } }));
 
-  await bot.launch({ dropPendingUpdates: false });
+  await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member'] });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
 }
