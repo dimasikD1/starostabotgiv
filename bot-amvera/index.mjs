@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.14';
+const BOT_RELEASE_VERSION = '2026.11.14.15';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -493,16 +493,14 @@ function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
   const out = [];
   let current = '';
-  let lessonNumber = 0;
   for (const x of items) {
     if (x.date !== current) {
       current = x.date;
-      lessonNumber = 0;
       out.push('\n📅 ' + (x.date || 'Дата не указана'));
     }
-    lessonNumber += 1;
     const lessonTime = x.timeStart && x.timeEnd ? x.timeStart + '–' + x.timeEnd : (x.time || '');
-    let line = '• ' + lessonNumber + '. ' + (lessonTime ? lessonTime + ' — ' : '') + (x.subject || 'Занятие');
+    const numberLabel = x.lessonNumber ? String(x.lessonNumber) + '. ' : '';
+    let line = '• ' + numberLabel + (lessonTime ? lessonTime + ' — ' : '') + (x.subject || 'Занятие');
     if (x.lessonType) line += ' (' + x.lessonType + ')';
     if (x.teacher) line += '\n   👨‍🏫 ' + x.teacher;
     const room = String(x.room || '').trim();
