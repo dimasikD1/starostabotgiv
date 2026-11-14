@@ -34,7 +34,6 @@ function parseCards(html, requestedGroup) {
   $('.card').each((_i, card) => {
     const children = $(card).children();
     if (!children.length) return;
-
     const date = parseDate($(children[0]).text());
     if (!date) return;
 
@@ -44,43 +43,36 @@ function parseCards(html, requestedGroup) {
       const text = clean(raw.replace(/<[^>]+>/g, ' '));
       if (!title) return;
 
-      const timeRange = (title + ' ' + text).match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
-      const singleTime = (title + ' ' + text).match(/\b(\d{1,2}:\d{2})\b/);
+      const combined = title + ' ' + text;
+      const timeRange = combined.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+      const singleTime = combined.match(/\b(\d{1,2}:\d{2})\b/);
       const timeLabel = timeRange ? timeRange[0].replace(/\s+/g, '') : (singleTime ? singleTime[1] : '');
-      let subject = title.replace(/\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/, '').replace(/^\d+\s*[.]?\s*/, '').trim();
-      let teacher = '';
-      let room = '';
-      const typeMatch = text.match(/\\b(лекц(?:ия|ии|ионная)?|практ(?:ика|ическое|ическая)?|лабораторн(?:ая|ые))\\b/i);
+      const subject = title.replace(/\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/, '').replace(/^\d+\s*[.]?\s*/, '').trim();
+
+      const groupMatch = text.match(/Группа\s*[:\-]?\s*([^,;]+)/i);
+      const roomMatch = text.match(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*([\p{L}\p{N}-]+)/iu);
+      const typeMatch = combined.match(/\b(лекц\w*|практ\w*|лаборатор\w*)\b/i);
       const lessonType = typeMatch
         ? (/лекц/i.test(typeMatch[1]) ? 'лекция' : /лаборатор/i.test(typeMatch[1]) ? 'лабораторная' : 'практическая')
         : '';
 
-      const groupMatch = text.match(/Группа\s*[:\-]?\s*([^,;]+)/i);
-      const roomMatch = text.match(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*(\S+)/i);
-
       if (groupMatch && requestedGroup &&
-          !groupMatch[1].toLowerCase().includes(requestedGroup.toLowerCase())) {
-        return;
-      }
+          !groupMatch[1].toLowerCase().includes(requestedGroup.toLowerCase())) return;
 
-      const beforeGroup = clean(text.split(/Группа/i)[0] || '');
-      const commaParts = beforeGroup.split(',').map(clean).filter(Boolean);
+      // Убираем предмет, номер пары и аудиторию из общей строки преподавателя.
+      let teacher = text;
+      teacher = teacher.replace(/\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/g, ' ');
+      teacher = teacher.replace(/^\s*\d+\s*[.)-]?\s*/, '');
+      if (subject) teacher = teacher.replace(subject, ' ');
+      teacher = teacher.replace(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*[\p{L}\p{N}-]+/giu, ' ');
+      teacher = teacher.replace(/Группа\s*[:\-]?\s*[^,;]+/i, ' ');
+      if (typeMatch) teacher = teacher.replace(typeMatch[0], ' ');
+      teacher = clean(teacher.replace(/^[,;:\s-]+|[,;:\s-]+$/g, ''));
 
-      if (commaParts.length >= 2) {
-        teacher = commaParts[0];
-        room = commaParts[1];
-      } else if (commaParts.length === 1) {
-        teacher = commaParts[0];
-      }
-
-      if (roomMatch) room = roomMatch[1];
-
+      const room = roomMatch ? roomMatch[1].replace(/[,;.]+$/g, '') : '';
       result.push({
         date,
-        dayOffset: Math.round(
-          (new Date(date + 'T00:00:00') -
-            new Date(isoToday(0) + 'T00:00:00')) / 86400000
-        ),
+        dayOffset: Math.round((new Date(date + 'T00:00:00') - new Date(isoToday(0) + 'T00:00:00')) / 86400000),
         time: timeLabel,
         timeStart: timeRange ? timeRange[1] : '',
         timeEnd: timeRange ? timeRange[2] : '',
@@ -92,7 +84,6 @@ function parseCards(html, requestedGroup) {
       });
     });
   });
-
   return result;
 }
 
