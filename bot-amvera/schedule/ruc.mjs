@@ -50,6 +50,10 @@ function parseCards(html, requestedGroup) {
       let subject = title.replace(/\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/, '').replace(/^\d+\s*[.]?\s*/, '').trim();
       let teacher = '';
       let room = '';
+      const typeMatch = text.match(/\\b(лекц(?:ия|ии|ионная)?|практ(?:ика|ическое|ическая)?|лабораторн(?:ая|ые))\\b/i);
+      const lessonType = typeMatch
+        ? (/лекц/i.test(typeMatch[1]) ? 'лекция' : /лаборатор/i.test(typeMatch[1]) ? 'лабораторная' : 'практическая')
+        : '';
 
       const groupMatch = text.match(/Группа\s*[:\-]?\s*([^,;]+)/i);
       const roomMatch = text.match(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*(\S+)/i);
@@ -81,6 +85,7 @@ function parseCards(html, requestedGroup) {
         timeStart: timeRange ? timeRange[1] : '',
         timeEnd: timeRange ? timeRange[2] : '',
         subject,
+        lessonType,
         teacher,
         room,
         group: groupMatch ? clean(groupMatch[1]) : requestedGroup
@@ -274,6 +279,15 @@ async function getNewSite(group, days, timeout, startDate = isoToday(0)) {
 function extractClock(value) {
   const match = String(value || '').match(/(?:T|\b)(\d{1,2}:\d{2})/);
   return match ? match[1] : '';
+}
+
+function normalizeLessonType(value) {
+  const s = clean(value).toLowerCase();
+  if (!s) return '';
+  if (/лекц/.test(s)) return 'лекция';
+  if (/лаборатор/.test(s)) return 'лабораторная';
+  if (/практ/.test(s)) return 'практическая';
+  return '';
 }
 
 function normalizeJson(data, days, startDate = isoToday(0)) {
