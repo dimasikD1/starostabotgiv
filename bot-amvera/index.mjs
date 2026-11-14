@@ -1649,10 +1649,10 @@ async function main() {
   // Отправляем владельцу список изменений один раз для каждой версии.
   if (OWNER_TELEGRAM_ID && db.lastNotifiedRelease !== BOT_RELEASE_VERSION) {
     const releaseMessage =
-      '🚀 <b>Староста Бот обновлён</b>\\n' +
-      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\\n\\n' +
-      '<b>Что нового:</b>\\n' +
-      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\\n');
+      '🚀 <b>Староста Бот обновлён</b>\n' +
+      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\n\n' +
+      '<b>Что нового:</b>\n' +
+      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\n');
     try {
       await bot.telegram.sendMessage(OWNER_TELEGRAM_ID, releaseMessage, { parse_mode: 'HTML' });
       db.lastNotifiedRelease = BOT_RELEASE_VERSION;
