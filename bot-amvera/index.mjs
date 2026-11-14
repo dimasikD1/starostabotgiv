@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.11';
+const BOT_RELEASE_VERSION = '2026.11.14.12';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -607,6 +607,48 @@ function nextWeekDateRange() {
   return { start: iso(start), end: iso(end) };
 }
 
+// Формирует одно расписание сразу для обеих учебных групп.
+async function buildWeeklyScheduleText(range) {
+  const names = Object.values(STUDY_GROUPS);
+  const results = [];
+  for (const name of names) {
+    try {
+      const lessons = await getSchedule(name, 7, range.start);
+      const weekLessons = (lessons || [])
+        .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)) ||
+          String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
+      results.push({ name, lessons: weekLessons });
+    } catch (error) {
+      console.error('[weekly schedule] source failed for ' + name + ':', error?.message || error);
+      results.push({ name, error });
+    }
+  }
+
+  const signature = items => JSON.stringify(items.map(x => [
+    x.date || '', x.timeStart || x.time || '', x.timeEnd || '',
+    x.subject || '', x.teacher || '', x.room || ''
+  ]));
+  const lines = [
+    '🗓 РАСПИСАНИЕ НА СЛЕДУЮЩУЮ НЕДЕЛЮ',
+    '📅 ' + range.start + ' — ' + range.end,
+    ''
+  ];
+  if (results.every(x => !x.error) && signature(results[0].lessons) === signature(results[1].lessons)) {
+    lines.push('👥 Обе учебные группы — расписание совпадает', '');
+    lines.push(format(results[0].lessons, 'обеих учебных групп'));
+  } else {
+    for (const result of results) {
+      lines.push('👥 ' + result.name);
+      lines.push(result.error
+        ? '❌ Не удалось загрузить расписание этой учебной группы.'
+        : format(result.lessons, result.name));
+      lines.push('');
+    }
+  }
+  return { text: lines.join('\n').trim(), lessonCount: results.reduce((sum, x) => sum + (x.lessons?.length || 0), 0) };
+}
+
 async function checkWeeklySchedules() {
   if (weeklyScheduleCheckRunning) return;
   const now = tallinnParts();
@@ -618,27 +660,24 @@ async function checkWeeklySchedules() {
   try {
     const range = nextWeekDateRange();
     db.sentWeeklySchedules ||= {};
-    for (const g of Object.values(db.groups)) {
+    const targetChats = Object.values(db.groups).filter(g => g.chatId);
+    for (const g of targetChats) {
       const chatId = g.chatId;
-      const scheduleGroup = String(g.scheduleGroup || '').trim();
-      if (!chatId || !scheduleGroup) continue;
       const key = String(chatId) + ':' + range.start;
       if (db.sentWeeklySchedules[key]) continue;
       try {
-        const lessons = await getSchedule(scheduleGroup, 7, range.start);
-        const weekLessons = (lessons || [])
-          .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
-          .sort((a, b) => String(a.date).localeCompare(String(b.date)) ||
-            String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
-        const heading = '🗓 <b>Расписание на следующую неделю</b>\\n' +
-          '👥 ' + escapeHtml(g.title || scheduleGroup) + '\\n' +
-          '📅 ' + range.start + ' — ' + range.end + '\\n\\n';
-        let message = heading + escapeHtml(format(weekLessons, scheduleGroup));
+        const built = await buildWeeklyScheduleText(range);
+        let message = escapeHtml(built.text);
         if (message.length > 3900) message = message.slice(0, 3850) + '\\n\\n… расписание сокращено.';
-        await bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
+        const sent = await bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
+        try {
+          await bot.telegram.pinChatMessage(chatId, sent.message_id, { disable_notification: true });
+        } catch (pinError) {
+          console.error('[weekly schedule] pin failed for ' + (g.title || chatId) + ':', pinError?.message || pinError);
+        }
         db.sentWeeklySchedules[key] = new Date().toISOString();
         saveDb();
-        console.log('[weekly schedule] sent:', g.title, range.start, range.end, 'lessons:', weekLessons.length);
+        console.log('[weekly schedule] sent:', g.title || chatId, range.start, range.end, 'lessons:', built.lessonCount);
       } catch (error) {
         console.error('[weekly schedule] failed for ' + (g.title || chatId) + ':', error?.message || error);
       }
@@ -1687,51 +1726,42 @@ bot.command('publishweek', async ctx => {
   const iso = d => d.toISOString().slice(0, 10);
   const range = { start: iso(start), end: iso(end) };
 
-  const targetGroups = Object.values(db.groups).filter(g =>
-    g.chatId && Object.values(STUDY_GROUPS).includes(String(g.scheduleGroup || '').trim())
-  );
-  const foundStudyGroups = new Set(targetGroups.map(g => String(g.scheduleGroup || '').trim()));
-  const missing = Object.values(STUDY_GROUPS).filter(name => !foundStudyGroups.has(name));
+  const targetGroups = Object.values(db.groups).filter(g => g.chatId);
   if (!targetGroups.length) {
-    return ctx.reply('❌ Не нашёл прикреплённые чаты первой и второй учебных групп. В каждой группе добавь бота и настрой расписание через /setgroup.');
+    return ctx.reply('❌ Не нашёл ни одного прикреплённого Telegram-чата. Добавь бота в нужную группу и настрой её через /setgroup.');
   }
 
-  await ctx.reply('⏳ Формирую расписание на ' + range.start + ' — ' + range.end + ' и отправляю его в обе группы…');
+  await ctx.reply('⏳ Загружаю расписание обеих учебных групп на ' + range.start + ' — ' + range.end + '…');
   let sent = 0;
   let pinned = 0;
   const details = [];
+  let built;
+  try {
+    built = await buildWeeklyScheduleText(range);
+  } catch (error) {
+    console.error('[publishweek] schedule build failed:', error?.message || error);
+    return ctx.reply('❌ Не удалось получить расписание учебных групп. Подробности есть в логах Amvera.');
+  }
+  const safeMessage = built.text.length > 3900 ? built.text.slice(0, 3850) + '\n\n… расписание сокращено.' : built.text;
 
   for (const g of targetGroups) {
-    const scheduleGroup = String(g.scheduleGroup || '').trim();
     try {
-      const lessons = await getSchedule(scheduleGroup, 7, range.start);
-      const weekLessons = (lessons || [])
-        .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
-        .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
-      const message =
-        '🗓 РАСПИСАНИЕ НА СЛЕДУЮЩУЮ НЕДЕЛЮ\n' +
-        '👥 ' + (g.title || scheduleGroup) + '\n' +
-        '📅 ' + range.start + ' — ' + range.end + '\n\n' +
-        format(weekLessons, scheduleGroup) +
-        '\n\n📌 Сообщение закреплено автоматически.';
-      const safeMessage = message.length > 3900 ? message.slice(0, 3850) + '\n\n… расписание сокращено.' : message;
       const sentMessage = await ctx.telegram.sendMessage(g.chatId, safeMessage);
       sent++;
       try {
         await ctx.telegram.pinChatMessage(g.chatId, sentMessage.message_id, { disable_notification: true });
         pinned++;
-        details.push('✅ ' + (g.title || scheduleGroup) + ' — отправлено и закреплено');
+        details.push('✅ ' + (g.title || g.chatId) + ' — отправлено и закреплено');
       } catch (pinError) {
         console.error('[publishweek] pin failed for ' + (g.title || g.chatId) + ':', pinError?.message || pinError);
-        details.push('⚠️ ' + (g.title || scheduleGroup) + ' — отправлено, но не удалось закрепить (проверь права бота)');
+        details.push('⚠️ ' + (g.title || g.chatId) + ' — отправлено, но не удалось закрепить (проверь права бота)');
       }
     } catch (error) {
       console.error('[publishweek] failed for ' + (g.title || g.chatId) + ':', error?.message || error);
-      details.push('❌ ' + (g.title || scheduleGroup) + ' — ошибка отправки расписания');
+      details.push('❌ ' + (g.title || g.chatId) + ' — ошибка отправки');
     }
   }
-  if (missing.length) details.push('⚠️ Не настроены чаты: ' + missing.join('; '));
-  return ctx.reply('📊 Публикация расписания завершена.\nОтправлено: ' + sent + '\nЗакреплено: ' + pinned + '\n\n' + details.join('\n'));
+  return ctx.reply('📊 Публикация расписания обеих учебных групп завершена.\nОтправлено: ' + sent + '\nЗакреплено: ' + pinned + '\n\n' + details.join('\n'));
 });
 // /menu принудительно обновляет устаревшую клавиатуру Telegram в чате.
 bot.command('menu', ctx => ctx.reply('⌨️ Меню обновлено.', menuFor(ctx)));
