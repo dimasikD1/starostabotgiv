@@ -63,6 +63,7 @@ const BOT_RELEASE_NOTES = [
   'Добавлена статистика выполнения ДЗ: недельный процент, отметившиеся и не отметившиеся студенты по каждому заданию.',
   'В списке студентов появилась персональная статистика посещаемости за последние 30 дней.',
   'Добавлена выгрузка посещаемости и выполнения домашних заданий в виде HTML-отчётов.',
+  'В HTML-журнал посещаемости добавлена общая сводка и статистика по каждому студенту за весь сохранённый период.',
   'В HTML-журнал посещаемости добавлена общая сводка и таблица статистики по каждому студенту за весь сохранённый период.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
@@ -475,33 +476,14 @@ function createAttendanceHtml(g) {
  const attendance=g.attendance||{},lessonAttendance=g.lessonAttendance||{},students=g.students||[];
  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const list=(title,items,icon)=>'<h3>'+title+' ('+items.length+')</h3>'+(items.length?'<ul>'+items.map(name=>'<li>'+icon+' '+esc(name)+'</li>').join('')+'</ul>':'<p>Нет записей</p>');
- const entries=Object.entries(lessonAttendance).map(([key,record])=>{
-  const [date='',timeStart='',timeEnd='',subject='Занятие']=key.split('|');
-  const present=[],absent=[],unmarked=[];
-  for(const student of students){
-   const name=studentName(student),status=record?.[attendanceKey(student)];
-   if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name);
-  }
-  return {date,timeStart,timeEnd,subject,record,present,absent,unmarked,html:'<section><h2>'+esc(date)+'</h2><h3>📚 '+esc(subject)+'</h3><p>🕒 '+esc(timeStart||'Время не указано')+(timeEnd?'–'+esc(timeEnd):'')+'</p>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'};
- }).sort((a,b)=>(a.date+' '+a.timeStart).localeCompare(b.date+' '+b.timeStart));
- const totals=students.map(student=>{
-  let present=0,absent=0,unmarked=0;
-  for(const entry of entries){const status=entry.record?.[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;else unmarked++}
-  const marked=present+absent,rate=marked?Math.round(present/marked*100):0;
-  return {name:studentName(student),present,absent,unmarked,marked,rate};
- });
- const summary='<section class="summary"><h2>Сводка за весь период</h2><p>Занятий с журналом: <b>'+entries.length+'</b> · Студентов: <b>'+students.length+'</b></p><div class="cards"><div>✅ Присутствий<b>'+totals.reduce((n,x)=>n+x.present,0)+'</b></div><div>❌ Пропусков<b>'+totals.reduce((n,x)=>n+x.absent,0)+'</b></div><div>▫️ Не отмечено<b>'+totals.reduce((n,x)=>n+x.unmarked,0)+'</b></div></div><h3>Посещаемость по студентам</h3><div class="tablewrap"><table><thead><tr><th>Студент</th><th>Был</th><th>Не был</th><th>Не отмечен</th><th>Посещаемость</th></tr></thead><tbody>'+totals.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+x.present+'</td><td>'+x.absent+'</td><td>'+x.unmarked+'</td><td>'+x.rate+'%</td></tr>').join('')+'</tbody></table></div><p class="hint">Процент рассчитывается только по занятиям с отметкой «Был» или «Не был». Неотмеченные занятия в процент не входят.</p></section>';
+ const entries=Object.entries(lessonAttendance).map(([key,record])=>{const [date='',timeStart='',timeEnd='',subject='Занятие']=key.split('|');const present=[],absent=[],unmarked=[];for(const student of students){const name=studentName(student),status=record?.[attendanceKey(student)];if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name)}return {date,timeStart,record,html:'<section><h2>'+esc(date)+'</h2><h3>📚 '+esc(subject)+'</h3><p>🕒 '+esc(timeStart||'Время не указано')+(timeEnd?'–'+esc(timeEnd):'')+'</p>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'}}).sort((x,y)=>(x.date+' '+x.timeStart).localeCompare(y.date+' '+y.timeStart));
+ const totals=students.map(student=>{let present=0,absent=0,unmarked=0;for(const entry of entries){const status=entry.record?.[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;else unmarked++}const marked=present+absent;return {name:studentName(student),present,absent,unmarked,rate:marked?Math.round(present/marked*100):0}});
+ const summary='<section><h2>Сводка за весь период</h2><p>Занятий с журналом: <b>'+entries.length+'</b> · Студентов: <b>'+students.length+'</b></p><h3>Посещаемость по студентам</h3><div style="overflow-x:auto"><table><thead><tr><th>Студент</th><th>Был</th><th>Не был</th><th>Не отмечен</th><th>Посещаемость</th></tr></thead><tbody>'+totals.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+x.present+'</td><td>'+x.absent+'</td><td>'+x.unmarked+'</td><td>'+x.rate+'%</td></tr>').join('')+'</tbody></table></div><p>Процент считается только по занятиям с отметкой «Был» или «Не был».</p></section>';
  let sections=entries.map(x=>x.html).join('');
  const legacyDates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].sort();
- if(legacyDates.length){
-  sections+='<h2>Старые записи (без привязки к паре)</h2>'+legacyDates.map(date=>{
-   const present=[],absent=[],unmarked=[];
-   for(const student of students){const name=studentName(student),status=attendance[attendanceKey(student)]?.[date];if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name)}
-   return '<section><h2>'+esc(date)+'</h2>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>';
-  }).join('');
- }
+ if(legacyDates.length)sections+='<h2>Старые записи (без привязки к паре)</h2>'+legacyDates.map(date=>{const present=[],absent=[],unmarked=[];for(const student of students){const name=studentName(student),status=attendance[attendanceKey(student)]?.[date];if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name)}return '<section><h2>'+esc(date)+'</h2>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'}).join('');
  if(!sections)sections='<p>Пока нет сохранённых отметок по парам.</p>';
- return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:950px;margin:32px auto;padding:0 16px;color:#222}h1{font-size:26px}section{border-top:1px solid #ddd;padding:12px 0}h2{color:#245}h3{margin-bottom:4px}ul{margin-top:4px}.cards{display:flex;gap:12px;flex-wrap:wrap}.cards div{background:#f1f5fa;border-radius:10px;padding:12px 16px;min-width:125px}.cards b{display:block;font-size:24px}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:9px;border-bottom:1px solid #e4e8ee}.hint{color:#667085;font-size:13px}@media print{body{margin:0;max-width:none}.cards div{border:1px solid #ddd}}</style></head><body><h1>Журнал посещаемости по парам</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:'Europe/Tallinn'}))+'</p>'+summary+sections+'</body></html>';
+ return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:950px;margin:32px auto;padding:0 16px;color:#222}h1,h2{color:#245}section{border-top:1px solid #ddd;padding:12px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid #ddd}@media print{body{margin:0;max-width:none}}</style></head><body><h1>Журнал посещаемости по парам</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:'Europe/Tallinn'}))+'</p>'+summary+sections+'</body></html>';
 }
 function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
