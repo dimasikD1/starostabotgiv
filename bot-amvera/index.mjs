@@ -1981,7 +1981,24 @@ async function handleMiniAppApi(req,res,url) {
     };
     const data=lessons.map(mapLesson);
     const scheduleData=scheduleItems.filter(x=>x.date&&x.subject).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.timeStart||'').localeCompare(String(b.timeStart||'')))).map(mapLesson);
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),scheduleLoading});
+    const historyCutoff=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+    const historyEntries=Object.entries(g.lessonAttendance||{}).map(([key,record])=>{
+      const [date='',timeStart='',timeEnd='',subject='Занятие']=key.split('|');
+      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||date>today||date<historyCutoff)return null;
+      let present=0,absent=0;
+      for(const student of students){const status=record?.[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
+      const marked=present+absent;
+      return {date,timeStart,timeEnd,subject,present,absent,marked,total:students.length,rate:marked?Math.round(present/marked*100):0};
+    }).filter(Boolean).sort((a,b)=>(String(b.date).localeCompare(String(a.date))||String(b.timeStart).localeCompare(String(a.timeStart))));
+    const summarizeHistory=days=>{
+      const cutoff=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
+      const entries=historyEntries.filter(x=>x.date>=cutoff);
+      const present=entries.reduce((n,x)=>n+x.present,0),absent=entries.reduce((n,x)=>n+x.absent,0),marked=present+absent;
+      return {lessons:entries.length,present,absent,marked,rate:marked?Math.round(present/marked*100):0};
+    };
+    const attendanceHistory={week:summarizeHistory(7),month:summarizeHistory(30),recent:historyEntries.slice(0,12)};
+
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
   }
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
