@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.15.01';
+const BOT_RELEASE_VERSION = '2026.11.15.02';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -56,7 +56,9 @@ const BOT_RELEASE_NOTES = [
   'Исправлена загрузка расписания на следующую неделю: источник теперь запрашивается с даты ближайшего понедельника. Аудитория больше не дублируется, добавлен тип занятия.',
   'Добавлен автоматический контроль изменений расписания с уведомлениями в подключённые чаты.',
   'В Mini App добавлен календарь контрольных, зачётов, экзаменов и мероприятий с возможностью добавления и удаления событий.',
-  'В профиле Mini App можно изменить ФИО с сохранением в базе бота.'
+  'В профиле Mini App можно изменить ФИО с сохранением в базе бота.',
+  'Добавлена команда /events для просмотра предстоящих событий группы.',
+  'Добавлены автоматические напоминания о событиях за день и за час, если указано время.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -414,7 +416,7 @@ async function getTodayLessons(g) {
 function managedGroup(userId) {
  const id=String(userId),u=normalizeUser(user(id));let g=Object.values(db.groups).find(x=>String(x.starostaId||'')===id||String(x.zamId||'')===id);
  if(!g&&isManagerRole(u))g=Object.values(db.groups).find(x=>x.title===u.group||x.scheduleGroup===u.group);if(!g)return null;
- g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};g.announcements||=[];
+ g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};g.announcements||=[];g.calendarEvents||=[];
  if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}
  return g;
 }
@@ -542,6 +544,36 @@ function tallinnParts(date = new Date()) {
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
   }).formatToParts(date);
   return Object.fromEntries(parts.map(p => [p.type, p.value]));
+}
+
+let calendarReminderCheckRunning = false;
+async function checkCalendarEventReminders() {
+  if (calendarReminderCheckRunning) return;
+  calendarReminderCheckRunning = true;
+  try {
+    const now=tallinnParts();
+    const nowStamp=Date.UTC(+now.year,+now.month-1,+now.day,+now.hour,+now.minute);
+    db.sentCalendarReminders ||= {};
+    for (const g of Object.values(db.groups)) {
+      if (!g.chatId) continue;
+      for (const event of (g.calendarEvents||[])) {
+        if (!event.date || !event.time) continue;
+        const match=String(event.time).match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+        if (!match) continue;
+        const [year,month,day]=String(event.date).split('-').map(Number);
+        const eventStamp=Date.UTC(year,month-1,day,+match[1],+match[2]);
+        const left=Math.round((eventStamp-nowStamp)/60000);
+        for (const [offset,label] of [[1440,'за день'],[60,'за час']]) {
+          const key=[g.chatId,event.id,offset].join('|');
+          if (left!==offset || db.sentCalendarReminders[key]) continue;
+          const labels={exam:'экзамен',test:'зачёт',control:'контрольная',event:'мероприятие',other:'событие'};
+          const message='⏰ <b>Напоминание: '+label+'</b>\n\n'+(labels[event.type]||'событие')+': <b>'+escapeHtml(event.title)+'</b>\n📅 '+escapeHtml(event.date)+' в '+escapeHtml(event.time)+(event.description?'\n\n'+escapeHtml(event.description):'');
+          try { await bot.telegram.sendMessage(g.chatId,message,{parse_mode:'HTML'}); db.sentCalendarReminders[key]=new Date().toISOString(); saveDb(); }
+          catch(e) { console.error('[calendar reminder]',e.message||e); }
+        }
+      }
+    }
+  } finally { calendarReminderCheckRunning=false; }
 }
 
 let attendancePollCheckRunning = false;
@@ -1080,6 +1112,19 @@ bot.on('poll_answer', async ctx => {
   }
   saveDb();
   console.log('[attendance poll] Answer recorded for ' + userId + ' in ' + record.groupName);
+});
+
+bot.command('events', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Список событий доступен в личных сообщениях.');
+  const g = managedGroup(ctx.from.id);
+  if (!g) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
+  const today = attendanceDate();
+  const items = (g.calendarEvents || []).filter(x => String(x.date || '') >= today)
+    .sort((a,b) => String(a.date).localeCompare(String(b.date)) || String(a.time || '').localeCompare(String(b.time || ''))).slice(0,20);
+  if (!items.length) return ctx.reply('🗓 В календаре пока нет предстоящих событий.');
+  const labels = { exam:'🎓 Экзамен', test:'📝 Зачёт', control:'📚 Контрольная', event:'📌 Мероприятие', other:'📅 Событие' };
+  const lines = items.map((x,i) => (i+1)+'. <b>'+escapeHtml(x.title)+'</b>\n📅 '+escapeHtml(x.date)+(x.time?' · '+escapeHtml(x.time):'')+'\n'+(labels[x.type]||labels.other)+(x.description?'\n'+escapeHtml(x.description):''));
+  return ctx.reply('🗓 <b>Предстоящие события · '+escapeHtml(g.title || 'Группа')+'</b>\n\n'+lines.join('\n\n'), { parse_mode:'HTML' });
 });
 
 bot.command('pollreport', async ctx => {
@@ -2052,11 +2097,37 @@ async function handleMiniAppApi(req,res,url) {
       g.calendarEvents.push(event);
       g.calendarEvents.sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||''))));
       saveDb();
+      if (g.chatId) {
+        const typeLabels={exam:'Экзамен',test:'Зачёт',control:'Контрольная',event:'Мероприятие',other:'Событие'};
+        const notice='📌 <b>Добавлено событие в календарь</b>\\n\\n<b>'+escapeHtml(event.title)+'</b>\\n📅 '+escapeHtml(event.date)+(event.time?' · '+escapeHtml(event.time):'')+'\\n'+(typeLabels[event.type]||'Событие')+(event.description?'\\n'+escapeHtml(event.description):'');
+        try { await bot.telegram.sendMessage(g.chatId,notice,{parse_mode:'HTML'}); }
+        catch(e) { console.error('[calendar event notify]',e?.message||e); }
+      }
       return sendJson(res,200,{ok:true,event});
     } catch(e) {
       console.error('[miniapp event create]',e?.message||e);
       return sendJson(res,400,{error:'Не удалось сохранить событие.'});
     }
+  }
+  if(req.method==='PUT' && url.pathname==='/api/events') {
+    try {
+      const body=await readJsonBody(req), id=String(body.id||'');
+      const event=(g.calendarEvents||[]).find(x=>String(x.id)===id);
+      if(!event) return sendJson(res,404,{error:'Событие не найдено.'});
+      const title=String(body.title||'').trim(), date=String(body.date||'').trim();
+      const time=String(body.time||'').trim(), type=String(body.type||'other').trim();
+      const description=String(body.description||'').trim();
+      if(!title || title.length>120) return sendJson(res,400,{error:'Укажи название до 120 символов.'});
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date+'T00:00:00Z')) || new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) return sendJson(res,400,{error:'Укажи корректную дату.'});
+      if(time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return sendJson(res,400,{error:'Укажи время в формате ЧЧ:ММ.'});
+      if(!['exam','test','control','event','other'].includes(type)) return sendJson(res,400,{error:'Неизвестный тип события.'});
+      if(description.length>500) return sendJson(res,400,{error:'Описание слишком длинное (максимум 500 символов).'});
+      Object.assign(event,{title,date,time,type,description,updatedAt:new Date().toISOString()});
+      g.calendarEvents.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')));
+      for(const key of Object.keys(db.sentCalendarReminders||{})) if(key.includes('|'+id+'|')) delete db.sentCalendarReminders[key];
+      saveDb();
+      return sendJson(res,200,{ok:true,event});
+    } catch(e) { console.error('[miniapp event update]',e?.message||e); return sendJson(res,400,{error:'Не удалось обновить событие.'}); }
   }
   if(req.method==='DELETE' && url.pathname==='/api/events') {
     try {
@@ -2189,7 +2260,8 @@ async function main() {
     { command: 'app', description: 'Открыть веб-кабинет' },
     { command: 'students', description: 'Список студентов группы' },
     { command: 'importstudents', description: 'Импорт списка студентов из текста' },
-    { command: 'pollreport', description: 'Ответы на последний опрос' }
+    { command: 'pollreport', description: 'Ответы на последний опрос' },
+    { command: 'events', description: 'Предстоящие события группы' }
   ], { scope: { type: 'all_private_chats' } }));
 
   await telegramStartupRequest('setMyCommands groups', () => bot.telegram.setMyCommands([], { scope: { type: 'all_group_chats' } }));
@@ -2205,6 +2277,8 @@ async function main() {
   await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member'] });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
+  await checkCalendarEventReminders();
+  setInterval(checkCalendarEventReminders, 30000).unref();
   await checkWeeklySchedules();
   setInterval(checkWeeklySchedules, 60000).unref();
 setInterval(checkScheduleChanges, 5 * 60 * 1000).unref();
