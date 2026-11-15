@@ -1981,21 +1981,21 @@ async function handleMiniAppApi(req,res,url) {
     };
     const data=lessons.map(mapLesson);
     const scheduleData=scheduleItems.filter(x=>x.date&&x.subject).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.timeStart||'').localeCompare(String(b.timeStart||'')))).map(mapLesson);
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCoif(req.method==='POST' && url.pathname==='/api/profile') {
-     try {
-       const body=await readJsonBody(req);
-       const fullName=String(body.fullName||'').replace(/\s+/g,' ').trim();
-       if(fullName.length<5 || fullName.length>100) return sendJson(res,400,{error:'Укажи ФИО длиной от 5 до 100 символов.'});
-       if(!/^[\p{L}][\p{L}\s.'’-]*$/u.test(fullName) || fullName.split(' ').filter(Boolean).length<2) return sendJson(res,400,{error:'Укажи корректные фамилию и имя (при наличии — отчество).'});
-       u.fullName=fullName.split(' ').map(part=>part[0].toLocaleUpperCase('ru-RU')+part.slice(1)).join(' ');
-       saveDb();
-       return sendJson(res,200,{ok:true,fullName:u.fullName});
-     } catch(e) {
-       console.error('[miniapp profile update]',e?.message||e);
-       return sendJson(res,400,{error:'Не удалось сохранить профиль.'});
-     }
-   }
-   mpare(String(b.time||'')))),scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),scheduleLoading});
+  }
+  if(req.method==='POST' && url.pathname==='/api/profile') {
+    try {
+      const body=await readJsonBody(req);
+      const fullName=String(body.fullName||'').replace(/\\s+/g,' ').trim();
+      if(fullName.length<5 || fullName.length>100) return sendJson(res,400,{error:'Укажи ФИО длиной от 5 до 100 символов.'});
+      if(!/^[\\p{L}][\\p{L}\\s.'’-]*$/u.test(fullName) || fullName.split(' ').filter(Boolean).length<2) return sendJson(res,400,{error:'Укажи корректные фамилию и имя (при наличии — отчество).'});
+      u.fullName=fullName.split(' ').map(part=>part[0].toLocaleUpperCase('ru-RU')+part.slice(1)).join(' ');
+      saveDb();
+      return sendJson(res,200,{ok:true,fullName:u.fullName});
+    } catch(e) {
+      console.error('[miniapp profile update]',e?.message||e);
+      return sendJson(res,400,{error:'Не удалось сохранить профиль.'});
+    }
   }
   if(req.method==='POST' && url.pathname==='/api/announcements') {
     try {
