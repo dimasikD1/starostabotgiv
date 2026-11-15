@@ -710,6 +710,11 @@ async function checkScheduleChanges() {
       try {
         const lessons = await getSchedule(scheduleGroup, 14);
         if (!Array.isArray(lessons)) continue;
+        const today = attendanceDate();
+        const monitorEndDate = new Date(today + 'T12:00:00Z');
+        monitorEndDate.setUTCDate(monitorEndDate.getUTCDate() + 7);
+        const monitorEnd = monitorEndDate.toISOString().slice(0, 10);
+        const inAlertWindow = date => date >= today && date <= monitorEnd;
         const current = {};
         for (const lesson of lessons) {
           if (!lesson?.date || !lesson?.subject) continue;
@@ -742,17 +747,17 @@ async function checkScheduleChanges() {
         for (const [key, item] of Object.entries(current)) {
           const old = previous[key];
           const label = (x) => [x.date, x.time, x.subject].filter(Boolean).join(' · ');
-          if (!old) added.push('➕ ' + label(item));
-          else if (old.room !== item.room || old.teacher !== item.teacher || old.timeEnd !== item.timeEnd) {
+          if (!old && inAlertWindow(item.date)) added.push('➕ ' + label(item));
+          else if (inAlertWindow(item.date) && (old.room !== item.room || old.teacher !== item.teacher || old.timeEnd !== item.timeEnd)) {
             const details = [];
             if (old.timeEnd !== item.timeEnd && (old.timeEnd || item.timeEnd)) details.push('время окончания: ' + (old.timeEnd || '—') + ' → ' + (item.timeEnd || '—'));
             if (old.room !== item.room) details.push('аудитория: ' + (old.room || '—') + ' → ' + (item.room || '—'));
             if (old.teacher !== item.teacher) details.push('преподаватель изменён');
-            changed.push('✏️ ' + label(item) + (details.length ? '\\n   ' + details.join('; ') : ''));
+            changed.push('✏️ ' + label(item) + (details.length ? '\n   ' + details.join('; ') : ''));
           }
         }
         for (const [key, item] of Object.entries(previous)) {
-          if (!current[key]) removed.push('➖ ' + [item.date, item.time, item.subject].filter(Boolean).join(' · '));
+          if (!current[key] && inAlertWindow(item.date)) removed.push('➖ ' + [item.date, item.time, item.subject].filter(Boolean).join(' · '));
         }
 
         if (added.length || removed.length || changed.length) {
@@ -761,7 +766,7 @@ async function checkScheduleChanges() {
           if (removed.length) lines.push('<b>Убрано:</b>', ...removed.slice(0, 12).map(escapeHtml), '');
           if (changed.length) lines.push('<b>Изменено:</b>', ...changed.slice(0, 12).map(escapeHtml), '');
           lines.push('Проверяй актуальное расписание в боте.');
-          const message = lines.join('\\n').slice(0, 3900);
+          const message = lines.join('\n').slice(0, 3900);
           for (const g of chats) {
             try {
               await bot.telegram.sendMessage(g.chatId, message, { parse_mode: 'HTML' });
@@ -2006,8 +2011,8 @@ async function handleMiniAppApi(req,res,url) {
       const description=String(body.description||'').trim();
       if(!title) return sendJson(res,400,{error:'Укажи название события.'});
       if(title.length>120) return sendJson(res,400,{error:'Название слишком длинное (максимум 120 символов).'});
-      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || Number.isNaN(Date.parse(date+'T00:00:00Z'))) return sendJson(res,400,{error:'Укажи корректную дату.'});
-      if(time && !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return sendJson(res,400,{error:'Укажи время в формате ЧЧ:ММ.'});
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date+'T00:00:00Z')) || new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) return sendJson(res,400,{error:'Укажи корректную дату.'});
+      if(time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return sendJson(res,400,{error:'Укажи время в формате ЧЧ:ММ.'});
       if(!['exam','test','control','event','other'].includes(type)) return sendJson(res,400,{error:'Неизвестный тип события.'});
       if(description.length>500) return sendJson(res,400,{error:'Описание слишком длинное (максимум 500 символов).'});
       g.calendarEvents ||= [];
