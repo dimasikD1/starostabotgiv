@@ -472,18 +472,23 @@ function attendancePairButtons(g,lesson,userId,page=0) {
  return Markup.inlineKeyboard(rows);
 }
 
-function createAttendanceHtml(g) {
+function createAttendanceHtml(g, period='all') {
  const attendance=g.attendance||{},lessonAttendance=g.lessonAttendance||{},students=g.students||[];
  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ const labels={week:'за последние 7 дней',month:'за последние 30 дней',all:'за весь период'};
+ const today=tallinnParts().year+'-'+tallinnParts().month+'-'+tallinnParts().day;
+ const days=period==='week'?7:period==='month'?30:0;
+ const cutoff=days?new Date(Date.UTC(+today.slice(0,4),+today.slice(5,7)-1,+today.slice(8,10))-((days-1)*86400000)).toISOString().slice(0,10):'';
+ const inPeriod=date=>!cutoff||String(date)>=cutoff;
  const list=(title,items,icon)=>'<h3>'+title+' ('+items.length+')</h3>'+(items.length?'<ul>'+items.map(name=>'<li>'+icon+' '+esc(name)+'</li>').join('')+'</ul>':'<p>Нет записей</p>');
- const entries=Object.entries(lessonAttendance).map(([key,record])=>{const [date='',timeStart='',timeEnd='',subject='Занятие']=key.split('|');const present=[],absent=[],unmarked=[];for(const student of students){const name=studentName(student),status=record?.[attendanceKey(student)];if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name)}return {date,timeStart,record,html:'<section><h2>'+esc(date)+'</h2><h3>📚 '+esc(subject)+'</h3><p>🕒 '+esc(timeStart||'Время не указано')+(timeEnd?'–'+esc(timeEnd):'')+'</p>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'}}).sort((x,y)=>(x.date+' '+x.timeStart).localeCompare(y.date+' '+y.timeStart));
+ const entries=Object.entries(lessonAttendance).map(([key,record])=>{const [date='',timeStart='',timeEnd='',subject='Занятие']=key.split('|');const present=[],absent=[],unmarked=[];for(const student of students){const name=studentName(student),status=record?.[attendanceKey(student)];if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name)}return {date,timeStart,record,html:'<section><h2>'+esc(date)+'</h2><h3>📚 '+esc(subject)+'</h3><p>🕒 '+esc(timeStart||'Время не указано')+(timeEnd?'–'+esc(timeEnd):'')+'</p>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'}}).filter(x=>inPeriod(x.date)).sort((x,y)=>(x.date+' '+x.timeStart).localeCompare(y.date+' '+y.timeStart));
  const totals=students.map(student=>{let present=0,absent=0,unmarked=0;for(const entry of entries){const status=entry.record?.[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;else unmarked++}const marked=present+absent;return {name:studentName(student),present,absent,unmarked,rate:marked?Math.round(present/marked*100):0}});
- const summary='<section><h2>Сводка за весь период</h2><p>Занятий с журналом: <b>'+entries.length+'</b> · Студентов: <b>'+students.length+'</b></p><h3>Посещаемость по студентам</h3><div style="overflow-x:auto"><table><thead><tr><th>Студент</th><th>Был</th><th>Не был</th><th>Не отмечен</th><th>Посещаемость</th></tr></thead><tbody>'+totals.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+x.present+'</td><td>'+x.absent+'</td><td>'+x.unmarked+'</td><td>'+x.rate+'%</td></tr>').join('')+'</tbody></table></div><p>Процент считается только по занятиям с отметкой «Был» или «Не был».</p></section>';
+ const summary='<section><h2>Сводка '+(labels[period]||labels.all)+'</h2><p>Занятий с журналом: <b>'+entries.length+'</b> · Студентов: <b>'+students.length+'</b></p><h3>Посещаемость по студентам</h3><div style="overflow-x:auto"><table><thead><tr><th>Студент</th><th>Был</th><th>Не был</th><th>Не отмечен</th><th>Посещаемость</th></tr></thead><tbody>'+totals.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+x.present+'</td><td>'+x.absent+'</td><td>'+x.unmarked+'</td><td>'+x.rate+'%</td></tr>').join('')+'</tbody></table></div><p>Процент считается только по занятиям с отметкой «Был» или «Не был».</p></section>';
  let sections=entries.map(x=>x.html).join('');
- const legacyDates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].sort();
+ const legacyDates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].filter(inPeriod).sort();
  if(legacyDates.length)sections+='<h2>Старые записи (без привязки к паре)</h2>'+legacyDates.map(date=>{const present=[],absent=[],unmarked=[];for(const student of students){const name=studentName(student),status=attendance[attendanceKey(student)]?.[date];if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name)}return '<section><h2>'+esc(date)+'</h2>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'}).join('');
- if(!sections)sections='<p>Пока нет сохранённых отметок по парам.</p>';
- return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:950px;margin:32px auto;padding:0 16px;color:#222}h1,h2{color:#245}section{border-top:1px solid #ddd;padding:12px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid #ddd}@media print{body{margin:0;max-width:none}}</style></head><body><h1>Журнал посещаемости по парам</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:'Europe/Tallinn'}))+'</p>'+summary+sections+'</body></html>';
+ if(!sections)sections='<p>За выбранный период сохранённых отметок нет.</p>';
+ return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:950px;margin:32px auto;padding:0 16px;color:#222}h1,h2{color:#245}section{border-top:1px solid #ddd;padding:12px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid #ddd}@media print{body{margin:0;max-width:none}}</style></head><body><h1>Журнал посещаемости по парам</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Период: <b>'+esc(labels[period]||labels.all)+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:'Europe/Tallinn'}))+'</p>'+summary+sections+'</body></html>';
 }
 function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
@@ -1654,22 +1659,32 @@ bot.action('attendanceweb:cancel', async ctx => {
 });
 bot.action('attendanceweb:confirm', async ctx => {
  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой бота в личке.');
- const u = normalizeUser(user(ctx.from.id));
- if (!u.pendingAttendanceHtml) return ctx.answerCbQuery('Запрос устарел.');
- const g = managedGroup(ctx.from.id);
- delete u.pendingAttendanceHtml;
- saveDb();
- if (!g) return ctx.answerCbQuery('Группа не найдена.');
+ const u=normalizeUser(user(ctx.from.id));
+ if(!u.pendingAttendanceHtml)return ctx.answerCbQuery('Запрос устарел.');
+ await ctx.answerCbQuery();
+ return ctx.editMessageText('📅 <b>Выбери период отчёта:</b>',{parse_mode:'HTML',...Markup.inlineKeyboard([
+  [Markup.button.callback('📆 Последние 7 дней','attendanceweb:period:week')],
+  [Markup.button.callback('🗓 Последние 30 дней','attendanceweb:period:month')],
+  [Markup.button.callback('📚 Весь период','attendanceweb:period:all')],
+  [Markup.button.callback('❌ Отмена','attendanceweb:cancel')]
+ ])});
+});
+bot.action(/^attendanceweb:period:(week|month|all)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой бота в личке.');
+ const u=normalizeUser(user(ctx.from.id));
+ if(!u.pendingAttendanceHtml)return ctx.answerCbQuery('Запрос устарел.');
+ const g=managedGroup(ctx.from.id),period=ctx.match[1];
+ delete u.pendingAttendanceHtml;saveDb();
+ if(!g)return ctx.answerCbQuery('Группа не найдена.');
  await ctx.answerCbQuery('Формирую файл…');
- try {
-  const html = createAttendanceHtml(g);
-   await ctx.editMessageText('⏳ HTML-файл сформирован, отправляю…');
-   await ctx.replyWithDocument({ source: Buffer.from(html, 'utf8'), filename: 'attendance.html' }, { caption: '✅ Журнал посещаемости группы «' + String(g.title || 'Без названия').replace(/[<>]/g, '') + '». Открой файл в браузере.' });
-   return;
- } catch (error) {
-  const reason = String(error?.message || error || 'Неизвестная ошибка').slice(0, 220);
-  console.error('[attendance html export]', reason);
-   return ctx.reply('❌ Не удалось сформировать HTML-файл: ' + reason);
+ try{
+  const html=createAttendanceHtml(g,period);
+  await ctx.editMessageText('⏳ HTML-файл сформирован, отправляю…');
+  await ctx.replyWithDocument({source:Buffer.from(html,'utf8'),filename:'attendance-'+period+'.html'},{caption:'✅ Журнал посещаемости группы «'+String(g.title||'Без названия').replace(/[<>]/g,'')+'». Период: '+({week:'последние 7 дней',month:'последние 30 дней',all:'весь период'}[period])+'.'});
+ }catch(error){
+  const reason=String(error?.message||error||'Неизвестная ошибка').slice(0,220);
+  console.error('[attendance html export]',reason);
+  return ctx.reply('❌ Не удалось сформировать HTML-файл: '+reason);
  }
 });
 bot.command('mark',async ctx=>{
