@@ -38,9 +38,10 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.15.08';
+const BOT_RELEASE_VERSION = '2026.11.15.09';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
+  'Ответы на опросы посещаемости автоматически связываются со студентом по уникальному username, если Telegram ID ещё не привязан.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
   'Добавлена история объявлений с датой, временем и автором.',
   'Mini App продолжает открываться, даже если источник расписания временно недоступен.',
@@ -1099,7 +1100,22 @@ bot.on('poll_answer', async ctx => {
     answeredAt: new Date().toISOString()
   };
   const group = db.groups[String(record.groupId)];
-  const student = group?.students?.find(x => String(typeof x === 'object' ? x.telegramId : '') === userId);
+  let student = group?.students?.find(x =>
+    String(typeof x === 'object' ? x.telegramId || '' : '') === userId
+  );
+  // Если Telegram ID ещё не привязан, ищем ровно одного студента по username.
+  // При однозначном совпадении сохраняем ID для следующих ответов.
+  if (!student && group?.students?.length && answer.user?.username) {
+    const username = String(answer.user.username).replace(/^@/, '').toLowerCase();
+    const matches = group.students.filter(x =>
+      x && typeof x === 'object' &&
+      String(x.username || '').replace(/^@/, '').toLowerCase() === username
+    );
+    if (matches.length === 1) {
+      student = matches[0];
+      if (!student.telegramId) student.telegramId = userId;
+    }
+  }
   if (student && record.lessonKey) {
     group.lessonAttendance ||= {};
     group.lessonAttendance[record.lessonKey] ||= {};
