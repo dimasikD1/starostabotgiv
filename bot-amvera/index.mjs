@@ -1986,9 +1986,9 @@ async function handleMiniAppApi(req,res,url) {
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
       const body=await readJsonBody(req);
-      const fullName=String(body.fullName||'').replace(/\\s+/g,' ').trim();
+      const fullName=String(body.fullName||'').replace(/\s+/g,' ').trim();
       if(fullName.length<5 || fullName.length>100) return sendJson(res,400,{error:'Укажи ФИО длиной от 5 до 100 символов.'});
-      if(!/^[\\p{L}][\\p{L}\\s.'’-]*$/u.test(fullName) || fullName.split(' ').filter(Boolean).length<2) return sendJson(res,400,{error:'Укажи корректные фамилию и имя (при наличии — отчество).'});
+      if(!/^[\p{L}][\p{L}\s.'’-]*$/u.test(fullName) || fullName.split(' ').filter(Boolean).length<2) return sendJson(res,400,{error:'Укажи корректные фамилию и имя (при наличии — отчество).'});
       u.fullName=fullName.split(' ').map(part=>part[0].toLocaleUpperCase('ru-RU')+part.slice(1)).join(' ');
       saveDb();
       return sendJson(res,200,{ok:true,fullName:u.fullName});
