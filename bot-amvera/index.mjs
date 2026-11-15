@@ -2042,6 +2042,20 @@ async function handleMiniAppApi(req,res,url) {
     const today=attendanceDate();
     const lessons=scheduleItems.filter(x=>x.date===today&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
     const students=g.students||[];
+    const homeworkItems=(g.homework||[]).map(h=>{
+      const completedBy=h.completedBy||{},completedIds=new Set(Object.keys(completedBy));
+      const completedUserNames=new Set([...completedIds].map(id=>String(db.users?.[id]?.fullName||'').trim().toLocaleLowerCase('ru-RU')).filter(Boolean));
+      const isCompleted=student=>{const id=typeof student==='object'?String(student.telegramId||''):'';return (id&&completedIds.has(id))||completedUserNames.has(studentName(student).trim().toLocaleLowerCase('ru-RU'));};
+      const completedStudents=students.filter(isCompleted).map(studentName);
+      const pendingStudents=students.filter(student=>!isCompleted(student)).map(studentName);
+      const matchedIds=new Set(students.filter(student=>typeof student==='object'&&student.telegramId).map(student=>String(student.telegramId)));
+      const matchedNames=new Set(students.map(student=>studentName(student).trim().toLocaleLowerCase('ru-RU')));
+      const unmatchedCompletions=[...completedIds].filter(id=>!matchedIds.has(id)&&!matchedNames.has(String(db.users?.[id]?.fullName||'').trim().toLocaleLowerCase('ru-RU'))).map(id=>String(db.users?.[id]?.fullName||db.users?.[id]?.username||'Участник без записи в списке'));
+      return {id:h.id||'',subject:h.subject||'',homework:h.homework||'',createdAt:h.createdAt||'',completedCount:completedStudents.length,totalStudents:students.length,completionRate:students.length?Math.round(completedStudents.length/students.length*100):0,completedStudents,pendingStudents,unmatchedCompletions};
+    }).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,100);
+    const homeworkWeek=homeworkItems.filter(h=>{const t=Date.parse(h.createdAt||'');return Number.isFinite(t)&&t>=Date.now()-7*86400000;});
+    const homeworkWeekCompleted=homeworkWeek.reduce((n,h)=>n+h.completedCount,0),homeworkWeekPossible=homeworkWeek.reduce((n,h)=>n+h.totalStudents,0);
+    const homeworkStats={week:{assignments:homeworkWeek.length,completed:homeworkWeekCompleted,possible:homeworkWeekPossible,rate:homeworkWeekPossible?Math.round(homeworkWeekCompleted/homeworkWeekPossible*100):0},all:{assignments:homeworkItems.length,completed:homeworkItems.reduce((n,h)=>n+h.completedCount,0),possible:homeworkItems.reduce((n,h)=>n+h.totalStudents,0)}};
     const mapLesson=lesson=>{
       const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
       let present=0,absent=0;
@@ -2067,7 +2081,7 @@ async function handleMiniAppApi(req,res,url) {
     };
     const attendanceHistory={week:summarizeHistory(7),month:summarizeHistory(30),recent:historyEntries.slice(0,12)};
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),homework:(g.homework||[]).map(h=>({id:h.id||'',subject:h.subject||'',homework:h.homework||'',createdAt:h.createdAt||'',completedCount:Object.keys(h.completedBy||{}).length})).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,100),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
   }
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
