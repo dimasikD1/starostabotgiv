@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.15.04';
+const BOT_RELEASE_VERSION = '2026.11.15.05';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -61,6 +61,7 @@ const BOT_RELEASE_NOTES = [
   'Добавлены автоматические напоминания о событиях за день и за час, если указано время.',
   'Добавлен API домашних заданий для Mini App: создание, редактирование, удаление и история.',
   'Добавлена статистика выполнения ДЗ: недельный процент, отметившиеся и не отметившиеся студенты по каждому заданию.'
+  'В списке студентов появилась персональная статистика посещаемости за последние 30 дней.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -2072,7 +2073,7 @@ async function handleMiniAppApi(req,res,url) {
       let present=0,absent=0;
       for(const student of students){const status=record?.[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
       const marked=present+absent;
-      return {date,timeStart,timeEnd,subject,present,absent,marked,total:students.length,rate:marked?Math.round(present/marked*100):0};
+      return {key,date,timeStart,timeEnd,subject,present,absent,marked,total:students.length,rate:marked?Math.round(present/marked*100):0};
     }).filter(Boolean).sort((a,b)=>(String(b.date).localeCompare(String(a.date))||String(b.timeStart).localeCompare(String(a.timeStart))));
     const summarizeHistory=days=>{
       const cutoff=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
@@ -2082,7 +2083,7 @@ async function handleMiniAppApi(req,res,url) {
     };
     const attendanceHistory={week:summarizeHistory(7),month:summarizeHistory(30),recent:historyEntries.slice(0,12)};
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>{const attendance={present:0,absent:0,marked:0,rate:0};for(const entry of historyEntries){const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];if(status==='present')attendance.present++;else if(status==='absent')attendance.absent++;}attendance.marked=attendance.present+attendance.absent;attendance.rate=attendance.marked?Math.round(attendance.present/attendance.marked*100):0;return {index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked'])),attendance30d:attendance};}),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
   }
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
