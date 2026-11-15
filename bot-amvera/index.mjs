@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.14.15';
+const BOT_RELEASE_VERSION = '2026.11.14.16';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -53,7 +53,9 @@ const BOT_RELEASE_NOTES = [
   'Владелец может видеть количество и сумму пожертвований на хостинг в /stats.',
   'Проверка ФИО теперь повторно запускается при повторном вступлении пользователя в группу.',
   'Добавлена команда /publishweek для ручной отправки и закрепления расписания в первой и второй учебных группах.',
-  'Исправлена загрузка расписания на следующую неделю: источник теперь запрашивается с даты ближайшего понедельника. Аудитория больше не дублируется, добавлен тип занятия.'
+  'Исправлена загрузка расписания на следующую неделю: источник теперь запрашивается с даты ближайшего понедельника. Аудитория больше не дублируется, добавлен тип занятия.',
+  'Добавлен автоматический контроль изменений расписания с уведомлениями в подключённые чаты.',
+  'В Mini App добавлен календарь контрольных, зачётов, экзаменов и мероприятий с возможностью добавления и удаления событий.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -687,6 +689,96 @@ async function checkWeeklySchedules() {
     }
   } finally {
     weeklyScheduleCheckRunning = false;
+  }
+}
+
+let scheduleChangeCheckRunning = false;
+async function checkScheduleChanges() {
+  if (scheduleChangeCheckRunning) return;
+  scheduleChangeCheckRunning = true;
+  try {
+    db.scheduleSnapshots ||= {};
+    const targets = Object.values(db.groups).filter(g => g.chatId && g.scheduleGroup);
+    const bySchedule = new Map();
+    for (const g of targets) {
+      const key = String(g.scheduleGroup).trim();
+      if (!bySchedule.has(key)) bySchedule.set(key, []);
+      bySchedule.get(key).push(g);
+    }
+
+    for (const [scheduleGroup, chats] of bySchedule) {
+      try {
+        const lessons = await getSchedule(scheduleGroup, 14);
+        if (!Array.isArray(lessons)) continue;
+        const current = {};
+        for (const lesson of lessons) {
+          if (!lesson?.date || !lesson?.subject) continue;
+          const key = [lesson.date, lesson.timeStart || lesson.time || '', lesson.subject].join('|');
+          current[key] = {
+            date: lesson.date,
+            time: lesson.timeStart || lesson.time || '',
+            subject: lesson.subject || '',
+            teacher: lesson.teacher || '',
+            room: lesson.room || '',
+            timeEnd: lesson.timeEnd || ''
+          };
+        }
+
+        const previous = db.scheduleSnapshots[scheduleGroup];
+        // Не считаем первое успешное получение расписания изменением.
+        if (!previous) {
+          db.scheduleSnapshots[scheduleGroup] = current;
+          saveDb();
+          console.log('[schedule changes] baseline saved:', scheduleGroup, Object.keys(current).length);
+          continue;
+        }
+        // Пустой ответ источника может быть временным сбоем — не рассылаем ложное удаление всех пар.
+        if (!Object.keys(current).length && Object.keys(previous).length) {
+          console.warn('[schedule changes] empty response ignored:', scheduleGroup);
+          continue;
+        }
+
+        const added = [], removed = [], changed = [];
+        for (const [key, item] of Object.entries(current)) {
+          const old = previous[key];
+          const label = (x) => [x.date, x.time, x.subject].filter(Boolean).join(' · ');
+          if (!old) added.push('➕ ' + label(item));
+          else if (old.room !== item.room || old.teacher !== item.teacher || old.timeEnd !== item.timeEnd) {
+            const details = [];
+            if (old.timeEnd !== item.timeEnd && (old.timeEnd || item.timeEnd)) details.push('время окончания: ' + (old.timeEnd || '—') + ' → ' + (item.timeEnd || '—'));
+            if (old.room !== item.room) details.push('аудитория: ' + (old.room || '—') + ' → ' + (item.room || '—'));
+            if (old.teacher !== item.teacher) details.push('преподаватель изменён');
+            changed.push('✏️ ' + label(item) + (details.length ? '\\n   ' + details.join('; ') : ''));
+          }
+        }
+        for (const [key, item] of Object.entries(previous)) {
+          if (!current[key]) removed.push('➖ ' + [item.date, item.time, item.subject].filter(Boolean).join(' · '));
+        }
+
+        if (added.length || removed.length || changed.length) {
+          const lines = ['🔔 <b>Обнаружены изменения в расписании</b>', 'Учебная группа: <b>' + escapeHtml(scheduleGroup) + '</b>', ''];
+          if (added.length) lines.push('<b>Добавлено:</b>', ...added.slice(0, 12).map(escapeHtml), '');
+          if (removed.length) lines.push('<b>Убрано:</b>', ...removed.slice(0, 12).map(escapeHtml), '');
+          if (changed.length) lines.push('<b>Изменено:</b>', ...changed.slice(0, 12).map(escapeHtml), '');
+          lines.push('Проверяй актуальное расписание в боте.');
+          const message = lines.join('\\n').slice(0, 3900);
+          for (const g of chats) {
+            try {
+              await bot.telegram.sendMessage(g.chatId, message, { parse_mode: 'HTML' });
+            } catch (sendError) {
+              console.error('[schedule changes] notify failed for ' + (g.title || g.chatId) + ':', sendError?.message || sendError);
+            }
+          }
+          console.log('[schedule changes] detected:', scheduleGroup, 'added:', added.length, 'removed:', removed.length, 'changed:', changed.length);
+        }
+        db.scheduleSnapshots[scheduleGroup] = current;
+        saveDb();
+      } catch (error) {
+        console.error('[schedule changes] check failed for ' + scheduleGroup + ':', error?.message || error);
+      }
+    }
+  } finally {
+    scheduleChangeCheckRunning = false;
   }
 }
 
@@ -1883,7 +1975,7 @@ async function handleMiniAppApi(req,res,url) {
     };
     const data=lessons.map(mapLesson);
     const scheduleData=scheduleItems.filter(x=>x.date&&x.subject).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.timeStart||'').localeCompare(String(b.timeStart||'')))).map(mapLesson);
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),scheduleLoading});
   }
   if(req.method==='POST' && url.pathname==='/api/announcements') {
     try {
@@ -1902,6 +1994,45 @@ async function handleMiniAppApi(req,res,url) {
     } catch(e) {
       console.error('[miniapp announcement]',e?.message||e);
       return sendJson(res,502,{error:'Не удалось отправить объявление в группу. Проверь, что бот добавлен в чат и может отправлять сообщения.'});
+    }
+  }
+  if(req.method==='POST' && url.pathname==='/api/events') {
+    try {
+      const body=await readJsonBody(req);
+      const title=String(body.title||'').trim();
+      const date=String(body.date||'').trim();
+      const time=String(body.time||'').trim();
+      const type=String(body.type||'other').trim();
+      const description=String(body.description||'').trim();
+      if(!title) return sendJson(res,400,{error:'Укажи название события.'});
+      if(title.length>120) return sendJson(res,400,{error:'Название слишком длинное (максимум 120 символов).'});
+      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || Number.isNaN(Date.parse(date+'T00:00:00Z'))) return sendJson(res,400,{error:'Укажи корректную дату.'});
+      if(time && !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(time)) return sendJson(res,400,{error:'Укажи время в формате ЧЧ:ММ.'});
+      if(!['exam','test','control','event','other'].includes(type)) return sendJson(res,400,{error:'Неизвестный тип события.'});
+      if(description.length>500) return sendJson(res,400,{error:'Описание слишком длинное (максимум 500 символов).'});
+      g.calendarEvents ||= [];
+      const event={id:crypto.randomUUID(),title,date,time,type,description,authorId:String(tgUser.id),createdAt:new Date().toISOString()};
+      g.calendarEvents.push(event);
+      g.calendarEvents.sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||''))));
+      saveDb();
+      return sendJson(res,200,{ok:true,event});
+    } catch(e) {
+      console.error('[miniapp event create]',e?.message||e);
+      return sendJson(res,400,{error:'Не удалось сохранить событие.'});
+    }
+  }
+  if(req.method==='DELETE' && url.pathname==='/api/events') {
+    try {
+      const body=await readJsonBody(req);
+      const id=String(body.id||'');
+      const before=(g.calendarEvents||[]).length;
+      g.calendarEvents=(g.calendarEvents||[]).filter(x=>String(x.id)!==id);
+      if(g.calendarEvents.length===before) return sendJson(res,404,{error:'Событие уже удалено или не найдено.'});
+      saveDb();
+      return sendJson(res,200,{ok:true});
+    } catch(e) {
+      console.error('[miniapp event delete]',e?.message||e);
+      return sendJson(res,400,{error:'Не удалось удалить событие.'});
     }
   }
   if(req.method==='POST' && url.pathname==='/api/attendance') {
@@ -2039,6 +2170,7 @@ async function main() {
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
   await checkWeeklySchedules();
   setInterval(checkWeeklySchedules, 60000).unref();
+setInterval(checkScheduleChanges, 5 * 60 * 1000).unref();
 }
 
 function shutdown(signal) {
