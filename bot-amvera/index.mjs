@@ -38,7 +38,7 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.15.02';
+const BOT_RELEASE_VERSION = '2026.11.15.03';
 const BOT_RELEASE_NOTES = [
   'Добавлен раздел «Объявления» в Mini App.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -58,7 +58,8 @@ const BOT_RELEASE_NOTES = [
   'В Mini App добавлен календарь контрольных, зачётов, экзаменов и мероприятий с возможностью добавления и удаления событий.',
   'В профиле Mini App можно изменить ФИО с сохранением в базе бота.',
   'Добавлена команда /events для просмотра предстоящих событий группы.',
-  'Добавлены автоматические напоминания о событиях за день и за час, если указано время.'
+  'Добавлены автоматические напоминания о событиях за день и за час, если указано время.',
+  'Добавлен API домашних заданий для Mini App: создание, редактирование, удаление и история.'
 ];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
@@ -416,7 +417,7 @@ async function getTodayLessons(g) {
 function managedGroup(userId) {
  const id=String(userId),u=normalizeUser(user(id));let g=Object.values(db.groups).find(x=>String(x.starostaId||'')===id||String(x.zamId||'')===id);
  if(!g&&isManagerRole(u))g=Object.values(db.groups).find(x=>x.title===u.group||x.scheduleGroup===u.group);if(!g)return null;
- g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};g.announcements||=[];g.calendarEvents||=[];
+ g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};g.announcements||=[];g.calendarEvents||=[];g.homework||=[];
  if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}
  return g;
 }
@@ -1826,7 +1827,7 @@ bot.on('callback_query', async ctx => {
       if (isHomework) {
         await ctx.telegram.sendMessage(g.chatId, '📚 <b>Домашнее задание</b>\n\n<b>' + escapeHtml(u.pendingHomework.subject) + '</b>\n' + escapeHtml(u.pendingHomework.homework), { parse_mode: 'HTML' });
         g.homework ||= [];
-        g.homework.push({ subject: u.pendingHomework.subject, homework: u.pendingHomework.homework, createdAt: new Date().toISOString(), authorId: ctx.from.id });
+        g.homework.push({ id: crypto.randomUUID(), subject: u.pendingHomework.subject, homework: u.pendingHomework.homework, createdAt: new Date().toISOString(), authorId: ctx.from.id, completedBy: {} });
         if (g.homework.length > 50) g.homework = g.homework.slice(-50);
       } else {
         await ctx.telegram.sendPoll(g.chatId, u.pendingPoll.question, u.pendingPoll.options, {
@@ -2043,7 +2044,7 @@ async function handleMiniAppApi(req,res,url) {
     };
     const attendanceHistory={week:summarizeHistory(7),month:summarizeHistory(30),recent:historyEntries.slice(0,12)};
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>({index:i,name:studentName(s),statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked']))})),announcements:(g.announcements||[]).slice(-30).reverse(),homework:(g.homework||[]).map(h=>({id:h.id||'',subject:h.subject||'',homework:h.homework||'',createdAt:h.createdAt||'',completedCount:Object.keys(h.completedBy||{}).length})).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,100),calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
   }
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
@@ -2077,6 +2078,37 @@ async function handleMiniAppApi(req,res,url) {
       console.error('[miniapp announcement]',e?.message||e);
       return sendJson(res,502,{error:'Не удалось отправить объявление в группу. Проверь, что бот добавлен в чат и может отправлять сообщения.'});
     }
+  }
+  if(req.method==='POST' && url.pathname==='/api/homework') {
+    try {
+      const body=await readJsonBody(req), subject=String(body.subject||'').trim(), homework=String(body.homework||'').trim();
+      if(!subject || subject.length>100) return sendJson(res,400,{error:'Укажи предмет (до 100 символов).'});
+      if(!homework || homework.length>3500) return sendJson(res,400,{error:'Укажи задание (до 3500 символов).'});
+      if(!g.chatId) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
+      const item={id:crypto.randomUUID(),subject,homework,createdAt:new Date().toISOString(),authorId:String(tgUser.id),completedBy:{}};
+      g.homework||=[];g.homework.push(item);if(g.homework.length>100)g.homework=g.homework.slice(-100);
+      await bot.telegram.sendMessage(g.chatId,'📚 <b>Новое домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
+      saveDb();return sendJson(res,200,{ok:true,homework:item});
+    } catch(e) { console.error('[miniapp homework create]',e?.message||e);return sendJson(res,502,{error:'Не удалось отправить ДЗ в группу.'}); }
+  }
+  if(req.method==='PUT' && url.pathname==='/api/homework') {
+    try {
+      const body=await readJsonBody(req),id=String(body.id||''),subject=String(body.subject||'').trim(),homework=String(body.homework||'').trim();
+      const item=(g.homework||[]).find(x=>String(x.id||'')===id);
+      if(!item)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
+      if(!subject||subject.length>100||!homework||homework.length>3500)return sendJson(res,400,{error:'Проверь предмет и текст задания.'});
+      Object.assign(item,{subject,homework,updatedAt:new Date().toISOString()});saveDb();
+      if(g.chatId)try{await bot.telegram.sendMessage(g.chatId,'✏️ <b>Изменено домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});}catch(e){console.error('[homework update notify]',e?.message||e);}
+      return sendJson(res,200,{ok:true,homework:item});
+    } catch(e) {console.error('[miniapp homework update]',e?.message||e);return sendJson(res,400,{error:'Не удалось изменить ДЗ.'});}
+  }
+  if(req.method==='DELETE' && url.pathname==='/api/homework') {
+    try {
+      const body=await readJsonBody(req),id=String(body.id||''),before=(g.homework||[]).length;
+      g.homework=(g.homework||[]).filter(x=>String(x.id||'')!==id);
+      if(g.homework.length===before)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
+      saveDb();return sendJson(res,200,{ok:true});
+    } catch(e) {console.error('[miniapp homework delete]',e?.message||e);return sendJson(res,400,{error:'Не удалось удалить ДЗ.'});}
   }
   if(req.method==='POST' && url.pathname==='/api/events') {
     try {
