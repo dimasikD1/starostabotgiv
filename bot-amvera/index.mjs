@@ -1702,6 +1702,15 @@ bot.command('groups', async ctx => {
 bot.command('poll', startPoll);
 bot.command('hw', startHomework);
 bot.command('homework', startHomework);
+function homeworkMessage(records,userId,ctx) {
+  const keyboard=[];
+  const text='📚 <b>Домашние задания</b>\\n\\n'+records.map((h,i)=>{
+    const done=Boolean(h.completedBy?.[String(userId)]);
+    if(h.id&&!done)keyboard.push([Markup.button.callback('✅ Выполнено: '+String(h.subject||'ДЗ').slice(0,35),'hwcomplete:'+h.id)]);
+    return (i+1)+'. <b>'+escapeHtml(h.subject)+'</b> — '+escapeHtml(h.groupTitle)+'\\n'+escapeHtml(h.homework)+'\\n'+escapeHtml(h.createdAt||'')+'\\n'+(done?'✅ Выполнение отмечено':'▫️ Ещё не отмечено');
+  }).join('\\n\\n');
+  return {text,extra:{parse_mode:'HTML',...(keyboard.length?Markup.inlineKeyboard(keyboard):{}),...menuFor(ctx)}};
+}
 async function showHomework(ctx) {
   const u = normalizeUser(user(ctx.from.id));
   const groupName = String(u.group || '').trim();
@@ -1709,10 +1718,24 @@ async function showHomework(ctx) {
   const records = matching.flatMap(g => (g.homework || []).map(h => ({...h, groupTitle:g.title})));
   const latest = records.sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 10);
   if (!latest.length) return ctx.reply('Пока не готово, либо ничего не задано, лучше напишите вашему старосте', menuFor(ctx));
-  return ctx.reply('📚 <b>Домашние задания</b>\\n\\n' + latest.map(h => '<b>' + escapeHtml(h.subject) + '</b> — ' + escapeHtml(h.groupTitle) + '\\n' + escapeHtml(h.homework) + '\\n' + escapeHtml(h.createdAt || '')).join('\\n\\n'), {parse_mode:'HTML', ...menuFor(ctx)});
+  const view=homeworkMessage(latest,ctx.from.id,ctx);
+  return ctx.reply(view.text,view.extra);
 }
-bot.hears(/^📚\s*ДЗ\s*$/iu, showHomework);
+bot.hears(/^📚\\s*ДЗ\\s*$/iu, showHomework);
 bot.command('dz', showHomework);
+bot.action(/^hwcomplete:([a-f0-9-]{36})$/i,async ctx=>{
+  const userId=String(ctx.from.id),u=normalizeUser(user(userId)),groupName=String(u.group||'').trim();
+  const groups=Object.values(db.groups).filter(g=>!groupName||String(g.scheduleGroup||'').trim()===groupName||String(g.title||'').trim()===groupName);
+  const item=groups.flatMap(g=>g.homework||[]).find(h=>String(h.id||'')===String(ctx.match[1]));
+  if(!item){await ctx.answerCbQuery('Задание не найдено или уже удалено.');return}
+  item.completedBy||={};
+  if(item.completedBy[userId]){await ctx.answerCbQuery('Уже отмечено.');return}
+  item.completedBy[userId]=new Date().toISOString();saveDb();
+  const records=groups.flatMap(g=>(g.homework||[]).map(h=>({...h,groupTitle:g.title}))).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,10);
+  const view=homeworkMessage(records,ctx.from.id,ctx);
+  try{await ctx.editMessageText(view.text,view.extra)}catch(e){console.error('[homework complete view]',e?.message||e)}
+  await ctx.answerCbQuery('Выполнение отмечено!');
+});
 bot.hears('📚 Создать ДЗ', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('🔒 Создание ДЗ выполняется в личных сообщениях.');
   return ctx.reply('Напиши ДЗ командой:\n/hw Предмет | Домашнее задание');
