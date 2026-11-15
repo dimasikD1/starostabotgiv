@@ -1709,7 +1709,7 @@ function homeworkMessage(records,userId,ctx) {
     if(h.id&&!done)keyboard.push([Markup.button.callback('✅ Выполнено: '+String(h.subject||'ДЗ').slice(0,35),'hwcomplete:'+h.id)]);
     return (i+1)+'. <b>'+escapeHtml(h.subject)+'</b> — '+escapeHtml(h.groupTitle)+'\\n'+escapeHtml(h.homework)+'\\n'+escapeHtml(h.createdAt||'')+'\\n'+(done?'✅ Выполнение отмечено':'▫️ Ещё не отмечено');
   }).join('\\n\\n');
-  return {text,extra:{parse_mode:'HTML',...(keyboard.length?Markup.inlineKeyboard(keyboard):{}),...menuFor(ctx)}};
+  return {text,extra:{parse_mode:'HTML',...(keyboard.length?Markup.inlineKeyboard(keyboard):{})}};
 }
 async function showHomework(ctx) {
   const u = normalizeUser(user(ctx.from.id));
