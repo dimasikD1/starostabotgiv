@@ -2197,8 +2197,26 @@ async function handleMiniAppApi(req,res,url) {
       const item=(g.homework||[]).find(x=>String(x.id||'')===id);
       if(!item)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
       if(!subject||subject.length>100||!homework||homework.length>3500)return sendJson(res,400,{error:'Проверь предмет и текст задания.'});
+      let added=[];
+      if(Array.isArray(body.attachments)){
+        if(body.attachments.length>10)return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
+        const pending=g.pendingHomeworkMedia?.[String(tgUser.id)]||{},next=[];
+        for(const entry of body.attachments){
+          if(Number.isInteger(entry?.index)){
+            const old=item.attachments?.[entry.index];if(!old)return sendJson(res,400,{error:'Одно из старых вложений не найдено.'});next.push(old);
+          }else if(entry?.id){
+            const media=pending[String(entry.id)];if(!media)return sendJson(res,400,{error:'Новое вложение устарело. Прикрепи его ещё раз.'});
+            const saved={fileId:media.fileId,type:media.type,fileName:media.fileName,mimeType:media.mimeType};next.push(saved);added.push(saved);delete pending[String(entry.id)];
+          }else return sendJson(res,400,{error:'Некорректное вложение.'});
+        }
+        item.attachments=next;
+      }
       Object.assign(item,{subject,homework,updatedAt:new Date().toISOString()});saveDb();
-      if(g.chatId)try{await bot.telegram.sendMessage(g.chatId,'✏️ <b>Изменено домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});}catch(e){console.error('[homework update notify]',e?.message||e);}
+      if(g.chatId)try{
+        await bot.telegram.sendMessage(g.chatId,'✏️ <b>Изменено домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
+        if(added.length===1){const a=added[0];if(a.type==='photo')await bot.telegram.sendPhoto(g.chatId,a.fileId,{caption:'📎 Дополнительный материал к ДЗ: '+subject});else await bot.telegram.sendVideo(g.chatId,a.fileId,{caption:'📎 Дополнительный материал к ДЗ: '+subject});}
+        else if(added.length>1)await bot.telegram.sendMediaGroup(g.chatId,added.map(a=>({type:a.type,media:a.fileId})));
+      }catch(e){console.error('[homework update notify]',e?.message||e);}
       return sendJson(res,200,{ok:true,homework:item});
     } catch(e) {console.error('[miniapp homework update]',e?.message||e);return sendJson(res,400,{error:'Не удалось изменить ДЗ.'});}
   }
