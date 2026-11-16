@@ -2142,7 +2142,7 @@ async function handleMiniAppApi(req,res,url) {
   if(req.method==='POST' && url.pathname==='/api/homework-media-upload') {
     try {
       const body=await readJsonBody(req,12*1024*1024),fileName=String(body.fileName||'attachment').slice(0,120),mimeType=String(body.mimeType||'').toLowerCase();
-      const imageTypes=['image/jpeg','image/png','image/webp'],videoTypes=['video/mp4','video/webm','video/quicktime'];
+      const imageTypes=['image/jpeg','image/png'],videoTypes=['video/mp4'];
       const type=imageTypes.includes(mimeType)?'photo':videoTypes.includes(mimeType)?'video':'';
       if(!type)return sendJson(res,400,{error:'Поддерживаются JPG, PNG, WebP, MP4, WebM и MOV.'});
       const encoded=String(body.data||'').replace(/^data:[^;]+;base64,/,'');
@@ -2155,7 +2155,7 @@ async function handleMiniAppApi(req,res,url) {
       try{await bot.telegram.deleteMessage(String(tgUser.id),message.message_id)}catch(e){console.warn('[homework media cleanup]',e?.message||e)}
       g.pendingHomeworkMedia||={};const ownerKey=String(tgUser.id),pending=g.pendingHomeworkMedia[ownerKey]||{};
       for(const [key,value] of Object.entries(pending))if(Date.now()-Number(value.createdAt||0)>2*60*60*1000)delete pending[key];
-      const id=crypto.randomUUID();pending[id]={fileId,type,fileName,mimeType,createdAt:Date.now()};g.pendingHomeworkMedia[ownerKey]=pending;saveDb();
+      const id=crypto.randomUUID();pending[id]={fileId,type,fileName,mimeType:type==='photo'?'image/jpeg':mimeType,createdAt:Date.now()};g.pendingHomeworkMedia[ownerKey]=pending;saveDb();
       return sendJson(res,200,{ok:true,attachment:{id,type,fileName}});
     } catch(e) {console.error('[miniapp homework media upload]',e?.message||e);return sendJson(res,400,{error:'Не удалось загрузить вложение. Проверь размер файла и доступ бота к личным сообщениям.'});}
   }
@@ -2184,7 +2184,7 @@ async function handleMiniAppApi(req,res,url) {
       for(const entry of requested)delete pending[String(entry.id)];
       saveDb();
       try {
-        await bot.telegram.sendMessage(g.chatId,'📚 <b>Новое домашнее задание</b>\\n\\n<b>'+escapeHtml(subject)+'</b>\\n'+escapeHtml(homework),{parse_mode:'HTML'});
+        await bot.telegram.sendMessage(g.chatId,'📚 <b>Новое домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
         if(attachments.length===1){const a=attachments[0];if(a.type==='photo')await bot.telegram.sendPhoto(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});else await bot.telegram.sendVideo(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});}
         else if(attachments.length>1)await bot.telegram.sendMediaGroup(g.chatId,attachments.map(a=>({type:a.type,media:a.fileId})));
       } catch(e) {console.error('[homework group publish]',e?.message||e);}
