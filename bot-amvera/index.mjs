@@ -38,8 +38,9 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.15.09';
+const BOT_RELEASE_VERSION = '2026.11.16.01';
 const BOT_RELEASE_NOTES = [
+  'В домашние задания добавлены фотографии и видео с просмотром в Mini App и публикацией в группе.',
   'Добавлен раздел «Объявления» в Mini App.',
   'Ответы на опросы посещаемости автоматически связываются со студентом по уникальному username, если Telegram ID ещё не привязан.',
   'Староста может отправлять объявления прямо в Telegram-группу.',
@@ -2022,9 +2023,10 @@ function sendJson(res, status, data) {
   res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
   res.end(JSON.stringify(data));
 }
-async function readJsonBody(req) {
-  let raw='';
-  for await (const chunk of req) { raw+=chunk; if(raw.length>32768) throw new Error('Слишком большой запрос.'); }
+async function readJsonBody(req, maxBytes=32768) {
+  const chunks=[];let size=0;
+  for await (const chunk of req) { size+=chunk.length;if(size>maxBytes)throw new Error('Слишком большой запрос.');chunks.push(chunk); }
+  const raw=Buffer.concat(chunks).toString('utf8');
   return raw ? JSON.parse(raw) : {};
 }
 async function getMiniAppTodayLessons(g) {
@@ -2072,7 +2074,7 @@ async function handleMiniAppApi(req,res,url) {
       const matchedIds=new Set(students.filter(student=>typeof student==='object'&&student.telegramId).map(student=>String(student.telegramId)));
       const matchedNames=new Set(students.map(student=>studentName(student).trim().toLocaleLowerCase('ru-RU')));
       const unmatchedCompletions=[...completedIds].filter(id=>!matchedIds.has(id)&&!matchedNames.has(String(db.users?.[id]?.fullName||'').trim().toLocaleLowerCase('ru-RU'))).map(id=>String(db.users?.[id]?.fullName||db.users?.[id]?.username||'Участник без записи в списке'));
-      return {id:h.id||'',subject:h.subject||'',homework:h.homework||'',createdAt:h.createdAt||'',completedCount:completedStudents.length,totalStudents:students.length,completionRate:students.length?Math.round(completedStudents.length/students.length*100):0,completedStudents,pendingStudents,unmatchedCompletions};
+      return {id:h.id||'',subject:h.subject||'',homework:h.homework||'',attachments:(h.attachments||[]).map(a=>({type:a.type||'photo',fileName:a.fileName||'Вложение'})),createdAt:h.createdAt||'',completedCount:completedStudents.length,totalStudents:students.length,completionRate:students.length?Math.round(completedStudents.length/students.length*100):0,completedStudents,pendingStudents,unmatchedCompletions};
     }).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,100);
     const homeworkWeek=homeworkItems.filter(h=>{const t=Date.parse(h.createdAt||'');return Number.isFinite(t)&&t>=Date.now()-7*86400000;});
     const homeworkWeekCompleted=homeworkWeek.reduce((n,h)=>n+h.completedCount,0),homeworkWeekPossible=homeworkWeek.reduce((n,h)=>n+h.totalStudents,0);
@@ -2137,17 +2139,57 @@ async function handleMiniAppApi(req,res,url) {
       return sendJson(res,502,{error:'Не удалось отправить объявление в группу. Проверь, что бот добавлен в чат и может отправлять сообщения.'});
     }
   }
+  if(req.method==='POST' && url.pathname==='/api/homework-media-upload') {
+    try {
+      const body=await readJsonBody(req,12*1024*1024),fileName=String(body.fileName||'attachment').slice(0,120),mimeType=String(body.mimeType||'').toLowerCase();
+      const imageTypes=['image/jpeg','image/png','image/webp'],videoTypes=['video/mp4','video/webm','video/quicktime'];
+      const type=imageTypes.includes(mimeType)?'photo':videoTypes.includes(mimeType)?'video':'';
+      if(!type)return sendJson(res,400,{error:'Поддерживаются JPG, PNG, WebP, MP4, WebM и MOV.'});
+      const encoded=String(body.data||'').replace(/^data:[^;]+;base64,/,'');
+      if(!encoded||encoded.length>11*1024*1024)return sendJson(res,413,{error:'Файл слишком большой. Максимум 8 МБ.'});
+      const buffer=Buffer.from(encoded,'base64');
+      if(!buffer.length||buffer.length>8*1024*1024)return sendJson(res,413,{error:'Файл слишком большой. Максимум 8 МБ.'});
+      const message=type==='photo'?await bot.telegram.sendPhoto(String(tgUser.id),{source:buffer,filename:fileName}):await bot.telegram.sendVideo(String(tgUser.id),{source:buffer,filename:fileName});
+      const fileId=type==='photo'?message.photo?.[message.photo.length-1]?.file_id:message.video?.file_id;
+      if(!fileId)throw new Error('Telegram не вернул file_id вложения.');
+      try{await bot.telegram.deleteMessage(String(tgUser.id),message.message_id)}catch(e){console.warn('[homework media cleanup]',e?.message||e)}
+      g.pendingHomeworkMedia||={};const ownerKey=String(tgUser.id),pending=g.pendingHomeworkMedia[ownerKey]||{};
+      for(const [key,value] of Object.entries(pending))if(Date.now()-Number(value.createdAt||0)>2*60*60*1000)delete pending[key];
+      const id=crypto.randomUUID();pending[id]={fileId,type,fileName,mimeType,createdAt:Date.now()};g.pendingHomeworkMedia[ownerKey]=pending;saveDb();
+      return sendJson(res,200,{ok:true,attachment:{id,type,fileName}});
+    } catch(e) {console.error('[miniapp homework media upload]',e?.message||e);return sendJson(res,400,{error:'Не удалось загрузить вложение. Проверь размер файла и доступ бота к личным сообщениям.'});}
+  }
+  if(req.method==='GET' && url.pathname==='/api/homework-media') {
+    try {
+      const homeworkId=String(url.searchParams.get('id')||''),index=Number(url.searchParams.get('index')||0),item=(g.homework||[]).find(x=>String(x.id||'')===homeworkId),attachment=Number.isInteger(index)&&index>=0?item?.attachments?.[index]:null;
+      if(!attachment?.fileId)return sendJson(res,404,{error:'Вложение не найдено.'});
+      const fileUrl=await bot.telegram.getFileLink(attachment.fileId),upstream=await fetch(String(fileUrl));
+      if(!upstream.ok)throw new Error('Telegram file fetch failed: '+upstream.status);
+      const buffer=Buffer.from(await upstream.arrayBuffer()),mime=attachment.mimeType||(attachment.type==='photo'?'image/jpeg':'video/mp4');
+      res.writeHead(200,{'Content-Type':mime,'Content-Length':buffer.length,'Cache-Control':'private, max-age=300','X-Content-Type-Options':'nosniff'});return res.end(buffer);
+    } catch(e) {console.error('[miniapp homework media view]',e?.message||e);return sendJson(res,502,{error:'Не удалось открыть вложение.'});}
+  }
   if(req.method==='POST' && url.pathname==='/api/homework') {
     try {
-      const body=await readJsonBody(req), subject=String(body.subject||'').trim(), homework=String(body.homework||'').trim();
-      if(!subject || subject.length>100) return sendJson(res,400,{error:'Укажи предмет (до 100 символов).'});
-      if(!homework || homework.length>3500) return sendJson(res,400,{error:'Укажи задание (до 3500 символов).'});
-      if(!g.chatId) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
-      const item={id:crypto.randomUUID(),subject,homework,createdAt:new Date().toISOString(),authorId:String(tgUser.id),completedBy:{}};
+      const body=await readJsonBody(req),subject=String(body.subject||'').trim(),homework=String(body.homework||'').trim();
+      if(!subject||subject.length>100)return sendJson(res,400,{error:'Укажи предмет (до 100 символов).'});
+      if(!homework||homework.length>3500)return sendJson(res,400,{error:'Укажи задание (до 3500 символов).'});
+      if(!g.chatId)return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
+      const pending=g.pendingHomeworkMedia?.[String(tgUser.id)]||{},requested=Array.isArray(body.attachments)?body.attachments:[];
+      if(requested.length>10)return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
+      const attachments=[];
+      for(const entry of requested){const media=pending[String(entry?.id||'')];if(!media)return sendJson(res,400,{error:'Одно из вложений устарело. Прикрепи файл ещё раз.'});attachments.push({fileId:media.fileId,type:media.type,fileName:media.fileName,mimeType:media.mimeType});}
+      const item={id:crypto.randomUUID(),subject,homework,attachments,createdAt:new Date().toISOString(),authorId:String(tgUser.id),completedBy:{}};
       g.homework||=[];g.homework.push(item);if(g.homework.length>100)g.homework=g.homework.slice(-100);
-      await bot.telegram.sendMessage(g.chatId,'📚 <b>Новое домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
-      saveDb();return sendJson(res,200,{ok:true,homework:item});
-    } catch(e) { console.error('[miniapp homework create]',e?.message||e);return sendJson(res,502,{error:'Не удалось отправить ДЗ в группу.'}); }
+      for(const entry of requested)delete pending[String(entry.id)];
+      saveDb();
+      try {
+        await bot.telegram.sendMessage(g.chatId,'📚 <b>Новое домашнее задание</b>\\n\\n<b>'+escapeHtml(subject)+'</b>\\n'+escapeHtml(homework),{parse_mode:'HTML'});
+        if(attachments.length===1){const a=attachments[0];if(a.type==='photo')await bot.telegram.sendPhoto(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});else await bot.telegram.sendVideo(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});}
+        else if(attachments.length>1)await bot.telegram.sendMediaGroup(g.chatId,attachments.map(a=>({type:a.type,media:a.fileId})));
+      } catch(e) {console.error('[homework group publish]',e?.message||e);}
+      return sendJson(res,200,{ok:true,homework:item});
+    } catch(e) {console.error('[miniapp homework create]',e?.message||e);return sendJson(res,502,{error:'Не удалось создать домашнее задание.'});}
   }
   if(req.method==='PUT' && url.pathname==='/api/homework') {
     try {
