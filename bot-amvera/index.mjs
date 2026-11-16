@@ -355,6 +355,28 @@ function parseStudentNames(raw){
 }
 function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.callback('✅ Подтвердить','studentimport:confirm')],[Markup.button.callback('❌ Отменить','studentimport:cancel')]]);}
 
+// OCR загружается только по запросу. Одновременно допускается одна задача,
+// worker завершается после распознавания, чтобы не держать языковую модель в RAM.
+let studentOcrBusy = false;
+async function recognizeStudentPhoto(buffer) {
+  if (studentOcrBusy) throw new Error('OCR_BUSY');
+  studentOcrBusy = true;
+  let worker;
+  try {
+    const { createWorker } = await import('tesseract.js');
+    worker = await createWorker('rus', 1, { cacheMethod: 'none' });
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    const result = await worker.recognize(buffer);
+    return String(result.data.text || '');
+  } finally {
+    if (worker) {
+      try { await worker.terminate(); }
+      catch (e) { console.error('[student OCR] Не удалось завершить worker:', e.message || e); }
+    }
+    studentOcrBusy = false;
+  }
+}
+
 function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn' }).format(new Date()); }
 function attendanceLessonKey(lesson) {
  return [lesson.date||attendanceDate(),lesson.timeStart||lesson.time||'',lesson.timeEnd||'',lesson.subject||'Занятие'].join('|');
@@ -1380,11 +1402,57 @@ bot.command('detach', async ctx => {
   await ctx.reply('✅ Группа откреплена от рассылки опросов.');
 });
 
+bot.on('photo', async (ctx, next) => {
+  if (!isPrivate(ctx)) return next();
+  const u = normalizeUser(user(ctx.from.id));
+  if (!u.pendingStudentImport) return next();
+  const group = managedGroup(ctx.from.id);
+  if (!group) {
+    delete u.pendingStudentImport;
+    saveDb();
+    return ctx.reply('Группа не найдена. Начни импорт заново командой /importstudents.');
+  }
+  if (studentOcrBusy) return ctx.reply('⏳ Сейчас обрабатывается другое фото. Подожди немного и отправь ещё раз.');
+  try {
+    const photo = ctx.message.photo?.at(-1);
+    if (!photo) return ctx.reply('Не удалось получить фотографию. Отправь её ещё раз.');
+    if (Number(photo.file_size || 0) > 4 * 1024 * 1024) {
+      return ctx.reply('Фото слишком большое. Отправь сжатое изображение размером до 4 МБ.');
+    }
+    await ctx.reply('🔎 Получил фото. Распознаю список — это может занять некоторое время.');
+    const fileUrl = await ctx.telegram.getFileLink(photo.file_id);
+    const response = await fetch(fileUrl, { signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error('Telegram photo download failed: ' + response.status);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (!buffer.length || buffer.length > 4 * 1024 * 1024) {
+      return ctx.reply('Фото не удалось обработать: размер должен быть до 4 МБ.');
+    }
+    const rawText = await recognizeStudentPhoto(buffer);
+    const names = parseStudentNames(rawText);
+    if (!names.length) {
+      return ctx.reply('Не удалось распознать ФИО. Попробуй отправить более чёткое фото или вставь список текстом.');
+    }
+    u.pendingStudentImport = false;
+    u.pendingStudentImportReview = names;
+    saveDb();
+    return ctx.reply(
+      '🔎 <b>Проверь распознанный список</b>\\n\\n' +
+      names.map((name, i) => (i + 1) + '. ' + escapeHtml(name)).join('\\n') +
+      '\\n\\nСписок будет сохранён только после подтверждения.',
+      { parse_mode: 'HTML', ...importPreviewKeyboard() }
+    );
+  } catch (e) {
+    console.error('[student OCR]', e?.message || e);
+    if (e?.message === 'OCR_BUSY') return ctx.reply('⏳ Распознавание уже выполняется. Попробуй чуть позже.');
+    return ctx.reply('❌ Не удалось распознать фото. Попробуй другое изображение или отправь список текстом.');
+  }
+});
+
 bot.command('importstudents',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('Используй команду в личке.');
  if(!managedGroup(ctx.from.id))return ctx.reply('Команда доступна старосте или заместителю группы.');
  const u=normalizeUser(user(ctx.from.id));u.pendingStudentImport=true;delete u.pendingStudentImportReview;saveDb();
- return ctx.reply('Вставь список студентов текстом — по одному ФИО на строку. Я покажу результат для проверки. Для отмены: /cancel.');
+ return ctx.reply('Отправь фото списка студентов или вставь ФИО текстом — по одному человеку на строку. Я покажу распознанный результат для проверки. Для отмены: /cancel.');
 });
 // Импорт списка студентов обычным текстом в личных сообщениях.
 bot.command('cancel', async ctx => {
