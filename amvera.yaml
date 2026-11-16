@@ -5,5 +5,5 @@ meta:
     version: "20"
 
 run:
-  command: npm start
+  command: npm install --no-audit --no-fund && npm start
   persistenceMount: /data
