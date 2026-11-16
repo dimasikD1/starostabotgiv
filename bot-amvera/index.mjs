@@ -1403,10 +1403,18 @@ bot.command('detach', async ctx => {
 });
 
 bot.on('photo', async (ctx, next) => {
-  if (!isPrivate(ctx)) return next();
   const u = normalizeUser(user(ctx.from.id));
-  if (!u.pendingStudentImport) return next();
-  const group = managedGroup(ctx.from.id);
+  const inPrivateImport = isPrivate(ctx) && u.pendingStudentImport && !u.pendingStudentImportChatId;
+  const inGroupImport = ['group','supergroup'].includes(ctx.chat?.type) &&
+    u.pendingStudentImport && String(u.pendingStudentImportChatId||'')===String(ctx.chat.id) &&
+    String(ctx.message.reply_to_message?.from?.id||'')===String(ctx.botInfo.id);
+  if (!inPrivateImport && !inGroupImport) return next();
+  if (inGroupImport) {
+    const group=db.groups[String(ctx.chat.id)];
+    if (!group || (!isOwner(ctx.from.id) && String(group.starostaId||'')!==String(ctx.from.id) && String(group.zamId||'')!==String(ctx.from.id)))
+      return ctx.reply('❌ Нет прав импортировать список в эту группу.');
+  }
+  const group = inGroupImport ? db.groups[String(ctx.chat.id)] : managedGroup(ctx.from.id);
   if (!group) {
     delete u.pendingStudentImport;
     saveDb();
@@ -1449,31 +1457,43 @@ bot.on('photo', async (ctx, next) => {
 });
 
 bot.command('importstudents',async ctx=>{
- if(!isPrivate(ctx))return ctx.reply('Используй команду в личке.');
- if(!managedGroup(ctx.from.id))return ctx.reply('Команда доступна старосте или заместителю группы.');
- const u=normalizeUser(user(ctx.from.id));u.pendingStudentImport=true;delete u.pendingStudentImportReview;saveDb();
- return ctx.reply('Отправь фото списка студентов или вставь ФИО текстом — по одному человеку на строку. Я покажу распознанный результат для проверки. Для отмены: /cancel.');
+ const u=normalizeUser(user(ctx.from.id));
+ if(isPrivate(ctx)){
+  if(!managedGroup(ctx.from.id))return ctx.reply('Команда доступна старосте или заместителю группы.');
+  u.pendingStudentImport=true;u.pendingStudentImportChatId='';delete u.pendingStudentImportReview;saveDb();
+  return ctx.reply('Отправь фото списка студентов или вставь ФИО текстом — по одному человеку на строку. Я покажу результат для проверки.');
+ }
+ if(!['group','supergroup'].includes(ctx.chat.type))return;
+ const group=db.groups[String(ctx.chat.id)];
+ if(!group)return ctx.reply('Сначала прикрепи эту группу командой /attach.');
+ if(!isOwner(ctx.from.id)&&String(group.starostaId||'')!==String(ctx.from.id)&&String(group.zamId||'')!==String(ctx.from.id))
+  return ctx.reply('❌ Импортировать список может только староста или заместитель этой группы.');
+ u.pendingStudentImport=true;u.pendingStudentImportChatId=String(ctx.chat.id);delete u.pendingStudentImportReview;saveDb();
+ return ctx.reply('📋 Отправь список ФИО ответом на это сообщение (по одному человеку на строку) или прикрепи фото списка ответом на это сообщение. Для отмены: /cancel.');
 });
 // Импорт списка студентов обычным текстом в личных сообщениях.
 bot.command('cancel', async ctx => {
- if(!isPrivate(ctx))return;
  const u=normalizeUser(user(ctx.from.id));
  if(!u.pendingStudentImport&&!u.pendingStudentImportReview)return ctx.reply('Нет активного действия для отмены.');
- delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();
+ if (u.pendingStudentImportChatId && String(u.pendingStudentImportChatId)!==String(ctx.chat.id)) return ctx.reply('Отмени импорт в том же чате, где начал его.');
+ delete u.pendingStudentImport;delete u.pendingStudentImportChatId;delete u.pendingStudentImportReview;saveDb();
  return ctx.reply('❌ Импорт списка отменён.');
 });
 bot.action('studentimport:confirm', async ctx => {
  try {
-  if(!isPrivate(ctx)){await ctx.answerCbQuery('Открой бота в личке.');return;}
   const u=normalizeUser(user(ctx.from.id));
+  const groupId=String(u.pendingStudentImportChatId||'');
+  if (groupId && groupId!==String(ctx.chat.id)) { await ctx.answerCbQuery('Подтверди импорт в том же чате.'); return; }
   const list=u.pendingStudentImportReview;
   if(!Array.isArray(list)||!list.length){await ctx.answerCbQuery('Список не найден. Начни импорт заново: /importstudents');return;}
-  const g=managedGroup(ctx.from.id);
+  const g=groupId ? db.groups[groupId] : managedGroup(ctx.from.id);
+  if(groupId && g && !isOwner(ctx.from.id) && String(g.starostaId||'')!==String(ctx.from.id) && String(g.zamId||'')!==String(ctx.from.id)) { await ctx.answerCbQuery('Нет прав для подтверждения.'); return; }
   if(!g){await ctx.answerCbQuery('Группа не найдена.');return;}
   g.students=list.slice(0,100);
   g.attendance||={};
   u.students=JSON.parse(JSON.stringify(g.students));
   delete u.pendingStudentImport;
+  delete u.pendingStudentImportChatId;
   delete u.pendingStudentImportReview;
   saveDb();
   await ctx.answerCbQuery('Список сохранён!');
@@ -1487,15 +1507,29 @@ bot.action('studentimport:confirm', async ctx => {
  }
 });
 bot.action('studentimport:cancel', async ctx => {
- if(!isPrivate(ctx))return ctx.answerCbQuery();
- const u=normalizeUser(user(ctx.from.id));delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();
+ const u=normalizeUser(user(ctx.from.id));
+ if(u.pendingStudentImportChatId && String(u.pendingStudentImportChatId)!==String(ctx.chat.id))return ctx.answerCbQuery('Открой сообщение в исходной группе.');
+ delete u.pendingStudentImport;delete u.pendingStudentImportChatId;delete u.pendingStudentImportReview;saveDb();
  await ctx.answerCbQuery('Импорт отменён');
  return ctx.editMessageText('❌ Импорт списка отменён.');
 });
 bot.on('text', async (ctx,next) => {
- if(!isPrivate(ctx))return next();
  const u=normalizeUser(user(ctx.from.id));
  const raw=String(ctx.message.text||'').trim();
+ if (!isPrivate(ctx) && ['group','supergroup'].includes(ctx.chat?.type)) {
+  const groupId=String(ctx.chat.id),group=db.groups[groupId];
+  const waiting=u.pendingStudentImport && String(u.pendingStudentImportChatId||'')===groupId;
+  const isReply=String(ctx.message.reply_to_message?.from?.id||'')===String(ctx.botInfo.id);
+  if (!waiting || !isReply || raw.startsWith('/')) return next();
+  if (!group || (!isOwner(ctx.from.id) && String(group.starostaId||'')!==String(ctx.from.id) && String(group.zamId||'')!==String(ctx.from.id)))
+   return ctx.reply('❌ Нет прав импортировать список в эту группу.');
+  const names=parseStudentNames(raw);
+  if(!names.length)return ctx.reply('Не удалось распознать ФИО. Ответь на сообщение бота списком: по одному ФИО на строку.');
+  u.pendingStudentImport=false;u.pendingStudentImportReview=names;saveDb();
+  const preview=names.map((name,i)=>(i+1)+'. '+escapeHtml(name)).join('\\n');
+  return ctx.reply('📝 <b>Проверь список студентов</b>\\n👥 Группа: <b>'+escapeHtml(group.title)+'</b>\\n👨‍🎓 Найдено: <b>'+names.length+'</b>\\n\\n'+preview+'\\n\\nПосле подтверждения текущий список группы будет заменён.',{parse_mode:'HTML',...importPreviewKeyboard()});
+ }
+ if(!isPrivate(ctx))return next();
  if (u.pendingFullName && !raw.startsWith('/')) {
   const words = raw.replace(/\\s+/g, ' ').trim().split(' ').filter(Boolean);
   if (words.length < 2 || words.length > 5 || !/^[a-zа-яё -]+$/i.test(raw)) {
