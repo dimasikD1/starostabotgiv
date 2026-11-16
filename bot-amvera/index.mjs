@@ -38,8 +38,9 @@ const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.16.01';
+const BOT_RELEASE_VERSION = '2026.11.16.02';
 const BOT_RELEASE_NOTES = [
+  'Добавлено подробное логирование каждого этапа импорта списка студентов по фото и распознавания OCR.',
   'В домашние задания добавлены фотографии и видео с просмотром в Mini App и публикацией в группе.',
   'Добавлен раздел «Объявления» в Mini App.',
   'Ответы на опросы посещаемости автоматически связываются со студентом по уникальному username, если Telegram ID ещё не привязан.',
@@ -358,22 +359,59 @@ function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.ca
 // OCR загружается только по запросу. Одновременно допускается одна задача,
 // worker завершается после распознавания, чтобы не держать языковую модель в RAM.
 let studentOcrBusy = false;
-async function recognizeStudentPhoto(buffer) {
-  if (studentOcrBusy) throw new Error('OCR_BUSY');
+function studentOcrLog(event, details = {}) {
+  console.log('[student OCR]', JSON.stringify({
+    time: new Date().toISOString(),
+    event,
+    ...details
+  }));
+}
+async function recognizeStudentPhoto(buffer, traceId = 'unknown') {
+  if (studentOcrBusy) {
+    studentOcrLog('worker_busy', { traceId });
+    throw new Error('OCR_BUSY');
+  }
   studentOcrBusy = true;
   let worker;
+  const startedAt = Date.now();
   try {
+    studentOcrLog('worker_import_start', { traceId, bytes: buffer.length });
     const { createWorker } = await import('tesseract.js');
+    studentOcrLog('worker_import_done', { traceId, ms: Date.now() - startedAt });
+    studentOcrLog('language_model_load_start', { traceId, language: 'rus' });
     worker = await createWorker('rus', 1, { cacheMethod: 'none' });
+    studentOcrLog('language_model_load_done', { traceId, ms: Date.now() - startedAt });
     await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    studentOcrLog('recognition_start', { traceId });
     const result = await worker.recognize(buffer);
-    return String(result.data.text || '');
+    const text = String(result.data.text || '');
+    studentOcrLog('recognition_done', {
+      traceId,
+      ms: Date.now() - startedAt,
+      textLength: text.length,
+      confidence: Number.isFinite(result.data.confidence) ? result.data.confidence : null
+    });
+    return text;
+  } catch (error) {
+    studentOcrLog('worker_error', {
+      traceId,
+      ms: Date.now() - startedAt,
+      message: error?.message || String(error)
+    });
+    throw error;
   } finally {
     if (worker) {
-      try { await worker.terminate(); }
-      catch (e) { console.error('[student OCR] Не удалось завершить worker:', e.message || e); }
+      const terminateStartedAt = Date.now();
+      studentOcrLog('worker_terminate_start', { traceId });
+      try {
+        await worker.terminate();
+        studentOcrLog('worker_terminate_done', { traceId, ms: Date.now() - terminateStartedAt });
+      } catch (e) {
+        console.error('[student OCR] Не удалось завершить worker:', e?.stack || e?.message || e);
+      }
     }
     studentOcrBusy = false;
+    studentOcrLog('worker_released', { traceId });
   }
 }
 
@@ -1403,58 +1441,107 @@ bot.command('detach', async ctx => {
 });
 
 bot.on('photo', async (ctx, next) => {
+  const traceId = String(ctx.update?.update_id || Date.now());
+  const log = (event, details = {}) => studentOcrLog(event, {
+    traceId,
+    chatType: ctx.chat?.type || 'unknown',
+    ...details
+  });
+  log('photo_update_received');
   const u = normalizeUser(user(ctx.from.id));
   const inPrivateImport = isPrivate(ctx) && u.pendingStudentImport && !u.pendingStudentImportChatId;
   const inGroupImport = ['group','supergroup'].includes(ctx.chat?.type) &&
     u.pendingStudentImport && String(u.pendingStudentImportChatId||'')===String(ctx.chat.id) &&
     String(ctx.message.reply_to_message?.from?.id||'')===String(ctx.botInfo.id);
-  if (!inPrivateImport && !inGroupImport) return next();
+  log('import_context_checked', { inPrivateImport: Boolean(inPrivateImport), inGroupImport: Boolean(inGroupImport) });
+  if (!inPrivateImport && !inGroupImport) {
+    log('photo_ignored_not_waiting_for_import');
+    return next();
+  }
   if (inGroupImport) {
     const group=db.groups[String(ctx.chat.id)];
-    if (!group || (!isOwner(ctx.from.id) && String(group.starostaId||'')!==String(ctx.from.id) && String(group.zamId||'')!==String(ctx.from.id)))
+    if (!group || (!isOwner(ctx.from.id) && String(group.starostaId||'')!==String(ctx.from.id) && String(group.zamId||'')!==String(ctx.from.id))) {
+      log('group_permission_denied');
       return ctx.reply('❌ Нет прав импортировать список в эту группу.');
+    }
   }
   const group = inGroupImport ? db.groups[String(ctx.chat.id)] : managedGroup(ctx.from.id);
   if (!group) {
+    log('group_not_found');
     delete u.pendingStudentImport;
     saveDb();
     return ctx.reply('Группа не найдена. Начни импорт заново командой /importstudents.');
   }
-  if (studentOcrBusy) return ctx.reply('⏳ Сейчас обрабатывается другое фото. Подожди немного и отправь ещё раз.');
+  if (studentOcrBusy) {
+    log('photo_rejected_worker_busy');
+    return ctx.reply('⏳ Сейчас обрабатывается другое фото. Подожди немного и отправь ещё раз.');
+  }
   let stage = 'получение фото';
+  const totalStartedAt = Date.now();
   try {
+    log('photo_metadata_read_start');
     const photo = ctx.message.photo?.at(-1);
-    if (!photo) return ctx.reply('Не удалось получить фотографию. Отправь её ещё раз.');
+    if (!photo) {
+      log('photo_metadata_missing');
+      return ctx.reply('Не удалось получить фотографию. Отправь её ещё раз.');
+    }
+    log('photo_metadata_read_done', {
+      width: photo.width || null,
+      height: photo.height || null,
+      telegramFileSize: photo.file_size || null
+    });
     if (Number(photo.file_size || 0) > 4 * 1024 * 1024) {
+      log('photo_rejected_too_large', { telegramFileSize: photo.file_size });
       return ctx.reply('Фото слишком большое. Отправь сжатое изображение размером до 4 МБ.');
     }
+    log('processing_notice_send_start');
     await ctx.reply('🔎 Получил фото. Распознаю список — это может занять некоторое время.');
+    log('processing_notice_send_done');
     stage = 'получение ссылки Telegram';
+    log('telegram_file_link_start');
     const fileUrl = await ctx.telegram.getFileLink(photo.file_id);
+    log('telegram_file_link_done');
     stage = 'загрузка фото из Telegram';
+    log('photo_download_start');
     const response = await fetch(fileUrl, { signal: AbortSignal.timeout(30000) });
+    log('photo_download_response', { status: response.status, ok: response.ok });
     if (!response.ok) throw new Error('Telegram photo download failed: ' + response.status);
     const buffer = Buffer.from(await response.arrayBuffer());
+    log('photo_download_done', { bytes: buffer.length, ms: Date.now() - totalStartedAt });
     if (!buffer.length || buffer.length > 4 * 1024 * 1024) {
+      log('photo_rejected_invalid_download_size', { bytes: buffer.length });
       return ctx.reply('Фото не удалось обработать: размер должен быть до 4 МБ.');
     }
     stage = 'запуск OCR / загрузка русской языковой модели';
-    const rawText = await recognizeStudentPhoto(buffer);
+    log('ocr_pipeline_start');
+    const rawText = await recognizeStudentPhoto(buffer, traceId);
+    log('ocr_pipeline_done', { rawTextLength: rawText.length });
     stage = 'разбор распознанного текста';
+    log('recognized_text_parse_start');
     const names = parseStudentNames(rawText);
+    log('recognized_text_parse_done', { namesCount: names.length });
     if (!names.length) {
+      log('no_student_names_detected', { totalMs: Date.now() - totalStartedAt });
       return ctx.reply('Не удалось распознать ФИО. Попробуй отправить более чёткое фото или вставь список текстом.');
     }
     u.pendingStudentImport = false;
     u.pendingStudentImportReview = names;
     saveDb();
-    return ctx.reply(
+    log('preview_data_saved', { namesCount: names.length });
+    const sent = await ctx.reply(
       '🔎 <b>Проверь распознанный список</b>\\n\\n' +
       names.map((name, i) => (i + 1) + '. ' + escapeHtml(name)).join('\\n') +
       '\\n\\nСписок будет сохранён только после подтверждения.',
       { parse_mode: 'HTML', ...importPreviewKeyboard() }
     );
+    log('preview_message_sent', { messageId: sent?.message_id || null, totalMs: Date.now() - totalStartedAt });
+    return sent;
   } catch (e) {
+    log('pipeline_error', {
+      stage,
+      totalMs: Date.now() - totalStartedAt,
+      message: e?.message || String(e)
+    });
     console.error('[student OCR] stage=' + stage, e?.stack || e?.message || e);
     if (e?.message === 'OCR_BUSY') return ctx.reply('⏳ Распознавание уже выполняется. Попробуй чуть позже.');
     return ctx.reply('❌ Ошибка на этапе: ' + stage + '. Проверь логи Amvera — там будет точная причина. Пока можно отправить список текстом.');
