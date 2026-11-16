@@ -1733,6 +1733,29 @@ function homeworkMessage(records,userId,ctx) {
   }).join('\\n\\n');
   return {text,extra:{parse_mode:'HTML',...(keyboard.length?Markup.inlineKeyboard(keyboard):{})}};
 }
+async function sendHomeworkAttachments(ctx, records) {
+  for (const item of records) {
+    const attachments = Array.isArray(item.attachments) ? item.attachments.filter(a => a?.fileId && ['photo','video'].includes(a.type)) : [];
+    if (!attachments.length) continue;
+    const label = '📎 Материалы к ДЗ: ' + String(item.subject || 'Без названия').slice(0, 180);
+    try {
+      if (attachments.length === 1) {
+        const a = attachments[0];
+        if (a.type === 'photo') await ctx.replyWithPhoto(a.fileId, { caption: label });
+        else await ctx.replyWithVideo(a.fileId, { caption: label });
+      } else {
+        await ctx.replyWithMediaGroup(attachments.map(a => ({
+          type: a.type,
+          media: a.fileId
+        })));
+        await ctx.reply(label);
+      }
+    } catch (e) {
+      console.error('[homework private media]', e?.message || e);
+      await ctx.reply('⚠️ Не удалось отправить вложения к заданию «' + String(item.subject || 'Без названия').slice(0, 100) + '».');
+    }
+  }
+}
 async function showHomework(ctx) {
   const u = normalizeUser(user(ctx.from.id));
   const groupName = String(u.group || '').trim();
@@ -1741,7 +1764,8 @@ async function showHomework(ctx) {
   const latest = records.sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 10);
   if (!latest.length) return ctx.reply('Пока не готово, либо ничего не задано, лучше напишите вашему старосте', menuFor(ctx));
   const view=homeworkMessage(latest,ctx.from.id,ctx);
-  return ctx.reply(view.text,view.extra);
+  await ctx.reply(view.text,view.extra);
+  await sendHomeworkAttachments(ctx, latest);
 }
 bot.hears(/^📚\\s*ДЗ\\s*$/iu, showHomework);
 bot.command('dz', showHomework);
