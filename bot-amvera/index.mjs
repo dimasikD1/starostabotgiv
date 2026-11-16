@@ -1421,6 +1421,7 @@ bot.on('photo', async (ctx, next) => {
     return ctx.reply('Группа не найдена. Начни импорт заново командой /importstudents.');
   }
   if (studentOcrBusy) return ctx.reply('⏳ Сейчас обрабатывается другое фото. Подожди немного и отправь ещё раз.');
+  let stage = 'получение фото';
   try {
     const photo = ctx.message.photo?.at(-1);
     if (!photo) return ctx.reply('Не удалось получить фотографию. Отправь её ещё раз.');
@@ -1428,14 +1429,18 @@ bot.on('photo', async (ctx, next) => {
       return ctx.reply('Фото слишком большое. Отправь сжатое изображение размером до 4 МБ.');
     }
     await ctx.reply('🔎 Получил фото. Распознаю список — это может занять некоторое время.');
+    stage = 'получение ссылки Telegram';
     const fileUrl = await ctx.telegram.getFileLink(photo.file_id);
+    stage = 'загрузка фото из Telegram';
     const response = await fetch(fileUrl, { signal: AbortSignal.timeout(30000) });
     if (!response.ok) throw new Error('Telegram photo download failed: ' + response.status);
     const buffer = Buffer.from(await response.arrayBuffer());
     if (!buffer.length || buffer.length > 4 * 1024 * 1024) {
       return ctx.reply('Фото не удалось обработать: размер должен быть до 4 МБ.');
     }
+    stage = 'запуск OCR / загрузка русской языковой модели';
     const rawText = await recognizeStudentPhoto(buffer);
+    stage = 'разбор распознанного текста';
     const names = parseStudentNames(rawText);
     if (!names.length) {
       return ctx.reply('Не удалось распознать ФИО. Попробуй отправить более чёткое фото или вставь список текстом.');
@@ -1450,9 +1455,9 @@ bot.on('photo', async (ctx, next) => {
       { parse_mode: 'HTML', ...importPreviewKeyboard() }
     );
   } catch (e) {
-    console.error('[student OCR]', e?.message || e);
+    console.error('[student OCR] stage=' + stage, e?.stack || e?.message || e);
     if (e?.message === 'OCR_BUSY') return ctx.reply('⏳ Распознавание уже выполняется. Попробуй чуть позже.');
-    return ctx.reply('❌ Не удалось распознать фото. Попробуй другое изображение или отправь список текстом.');
+    return ctx.reply('❌ Ошибка на этапе: ' + stage + '. Проверь логи Amvera — там будет точная причина. Пока можно отправить список текстом.');
   }
 });
 
