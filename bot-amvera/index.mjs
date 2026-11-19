@@ -2103,7 +2103,7 @@ bot.command('addcourse', async ctx => {
 
 bot.command('structure', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Структура доступна в личке с ботом.');
-  const institutionId = String(ctx.message?.text || '').replace(/^\\/structure(?:@\\S+)?/i, '').trim();
+  const institutionId = String(ctx.message?.text || '').replace(/^\/structure(?:@\S+)?/i, '').trim();
   if (!institutionId) return ctx.reply('Формат: /structure ID_ЗАВЕДЕНИЯ\nID можно посмотреть через /institutions.');
   const result = institutionForStructureCommand(ctx, institutionId);
   if (result.error) return ctx.reply(result.error);
