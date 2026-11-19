@@ -1899,10 +1899,10 @@ bot.command('institutions', async ctx => {
   const lines = institutions.map((item, index) =>
     (index + 1) + '. <b>' + escapeHtml(item.name || 'Без названия') + '</b>' +
     (item.city ? ' · ' + escapeHtml(item.city) : '') +
-    '\\nID: <code>' + escapeHtml(item.id) + '</code>' +
+    '\nID: <code>' + escapeHtml(item.id) + '</code>' +
     (item.id === DEFAULT_INSTITUTION_ID ? ' · основное' : '')
   );
-  return ctx.reply('🏫 <b>Учебные заведения (' + institutions.length + ')</b>\\n\\n' + lines.join('\\n\\n'), { parse_mode: 'HTML' });
+  return ctx.reply('🏫 <b>Учебные заведения (' + institutions.length + ')</b>\n\n' + lines.join('\n\n'), { parse_mode: 'HTML' });
 });
 
 bot.command('groups', async ctx => {
