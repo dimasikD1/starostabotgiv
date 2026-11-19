@@ -433,6 +433,7 @@ function ensureStudyGroups(chat) {
  if (!chat) return [];
  chat.studyGroups ||= {};
  const names=Object.values(STUDY_GROUPS);
+ const needsSave=!chat._studyGroupsMigratedV1;
  const legacyFields=['students','attendance','lessonAttendance','activeAttendanceLessons','announcements','calendarEvents','homework','todayAttendanceLessons'];
  if (!chat._studyGroupsMigratedV1) {
   const first=chat.studyGroups[names[0]] ||= {};
@@ -448,6 +449,7 @@ function ensureStudyGroups(chat) {
   item.activeAttendanceLessons ||= {}; item.announcements ||= [];
   item.calendarEvents ||= []; item.homework ||= [];
  }
+ if (needsSave) saveDb();
  return names.map(name=>chat.studyGroups[name]);
 }
 function allStudyGroups() { return Object.values(db.groups).flatMap(chat=>ensureStudyGroups(chat)); }
