@@ -247,6 +247,10 @@ const STUDY_GROUPS = Object.freeze({
   '1': 'БИ(ЭБ)1-ОЗ/Бп/КД26',
   '2': 'БИ(ЭБ)2-ОЗ/Бп/КД26'
 });
+const STUDY_GROUP_STAROSTAS = Object.freeze({
+  'БИ(ЭБ)1-ОЗ/Бп/КД26': '9038958939',
+  'БИ(ЭБ)2-ОЗ/Бп/КД26': '8267726970'
+});
 
 bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = STUDY_GROUPS[ctx.match[1]];
@@ -425,26 +429,47 @@ async function getTodayLessons(g) {
  const lessons=await getCachedSchedule(String(g.scheduleGroup),7);
  return (lessons||[]).filter(x=>x.date===attendanceDate()&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
 }
+function ensureStudyGroups(chat) {
+ if (!chat) return [];
+ chat.studyGroups ||= {};
+ const names=Object.values(STUDY_GROUPS);
+ const legacyFields=['students','attendance','lessonAttendance','activeAttendanceLessons','announcements','calendarEvents','homework','todayAttendanceLessons'];
+ if (!chat._studyGroupsMigratedV1) {
+  const first=chat.studyGroups[names[0]] ||= {};
+  for (const field of legacyFields) if (first[field] == null && chat[field] != null) first[field]=JSON.parse(JSON.stringify(chat[field]));
+  chat._studyGroupsMigratedV1=true;
+ }
+ for (const name of names) {
+  const item=chat.studyGroups[name] ||= {};
+  item.chatId=chat.chatId; item.chatTitle=chat.title || 'Общий чат';
+  item.title=name; item.studyGroup=name; item.scheduleGroup=name;
+  item.starostaId=STUDY_GROUP_STAROSTAS[name];
+  item.students ||= []; item.attendance ||= {}; item.lessonAttendance ||= {};
+  item.activeAttendanceLessons ||= {}; item.announcements ||= [];
+  item.calendarEvents ||= []; item.homework ||= [];
+ }
+ return names.map(name=>chat.studyGroups[name]);
+}
+function allStudyGroups() { return Object.values(db.groups).flatMap(chat=>ensureStudyGroups(chat)); }
+function studyGroupForUser(chatId,userId) {
+ const chat=db.groups[String(chatId)]; if(!chat)return null;
+ const id=String(userId);
+ return ensureStudyGroups(chat).find(g=>String(g.starostaId||'')===id||String(g.zamId||'')===id)||null;
+}
 function accessibleGroups(userId) {
  const id=String(userId),u=normalizeUser(user(id));
- let groups=Object.entries(db.groups).filter(([,g])=>String(g.starostaId||'')===id||String(g.zamId||'')===id);
- if(!groups.length&&isManagerRole(u))groups=Object.entries(db.groups).filter(([,g])=>g.title===u.group||g.scheduleGroup===u.group);
- return groups.map(([id,g])=>({id:String(g.chatId||id),title:String(g.scheduleGroup||g.title||'Учебная группа')}));
+ return allStudyGroups().filter(g=>isOwner(id)||String(g.starostaId||'')===id||String(g.zamId||'')===id||
+  (isManagerRole(u)&&(g.title===u.group||g.studyGroup===u.group)))
+  .map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId)}));
 }
-function managedGroup(userId, selectedGroupId='') {
- const id=String(userId),u=normalizeUser(user(id)),allowed=accessibleGroups(id);
- let g=null;
- if(selectedGroupId) {
-  const key=String(selectedGroupId);
-  if(!allowed.some(x=>x.id===key))return null;
-  g=db.groups[key]||Object.values(db.groups).find(x=>String(x.chatId||'')===key);
- } else {
-  const first=allowed[0];
-  if(first)g=db.groups[first.id]||Object.values(db.groups).find(x=>String(x.chatId||'')===first.id);
- }
- if(!g)return null;
- g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};g.announcements||=[];g.calendarEvents||=[];g.homework||=[];
- if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}
+function managedGroup(userId,selectedGroupId='') {
+ const allowed=accessibleGroups(userId);
+ const selected=selectedGroupId?allowed.find(x=>x.id===String(selectedGroupId)):allowed[0];
+ if(!selected)return null;
+ const chat=db.groups[String(selected.chatId)]; if(!chat)return null;
+ const g=ensureStudyGroups(chat).find(x=>x.studyGroup===selected.title); if(!g)return null;
+ g.chatId=chat.chatId; g.chatTitle=chat.title || 'Общий чат';
+ g.title=selected.title; g.scheduleGroup=selected.title;
  return g;
 }
 function formatAttendance(g) {
@@ -852,7 +877,9 @@ async function isGroupAdmin(ctx) {
 }
 
 function registerGroup(ctx) {
- const id=String(ctx.chat.id),old=db.groups[id]||{};db.groups[id]={...old,chatId:ctx.chat.id,title:ctx.chat.title||old.title||'Группа без названия',addedBy:old.addedBy||ctx.from.id,addedAt:old.addedAt||new Date().toISOString(),students:old.students||[],attendance:old.attendance||{}};saveDb();
+ const id=String(ctx.chat.id),old=db.groups[id]||{};
+ db.groups[id]={...old,chatId:ctx.chat.id,title:ctx.chat.title||old.title||'Группа без названия',addedBy:old.addedBy||ctx.from.id,addedAt:old.addedAt||new Date().toISOString(),students:old.students||[],attendance:old.attendance||{}};
+ ensureStudyGroups(db.groups[id]); saveDb();
 }
 
 function removeGroup(ctx) {
@@ -1375,8 +1402,9 @@ bot.command('setgroup', async ctx => {
   const scheduleGroup = (ctx.message.text || '').trim().split(' ').filter(Boolean).slice(1).join(' ');
   if (!scheduleGroup) return ctx.reply('Формат: /setgroup ИСП-21\\nУкажи точное название группы из расписания.');
   registerGroup(ctx);
-  db.groups[String(ctx.chat.id)].scheduleGroup = scheduleGroup;
-  saveDb();
+  const selected=ensureStudyGroups(db.groups[String(ctx.chat.id)]).find(g=>g.studyGroup===scheduleGroup);
+  if(!selected)return ctx.reply('❌ Укажи одну из двух учебных групп: '+Object.values(STUDY_GROUPS).join(' или ')+'.');
+  selected.scheduleGroup=scheduleGroup; saveDb();
   return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '».\n\n🗓 Каждое воскресенье после 18:00 бот будет автоматически отправлять сюда расписание на следующую неделю (понедельник–воскресенье).\n⏰ Напоминание приходит за 30 минут, опрос посещаемости — за 10 минут до пары.');
 });
 
