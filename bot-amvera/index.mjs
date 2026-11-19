@@ -2482,6 +2482,22 @@ const healthServer = http.createServer(async (req, res) => {
     }
   });
   if (url.pathname.startsWith('/api/')) return handleMiniAppApi(req,res,url);
+  if (url.pathname === '/telegram-web-app.js') {
+    try {
+      const sdkFile = new URL('./webapp/telegram-web-app.js', import.meta.url);
+      const sdk = fs.readFileSync(sdkFile, 'utf8');
+      res.writeHead(200, {
+        'Content-Type': 'application/javascript; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600',
+        'X-Content-Type-Options': 'nosniff'
+      });
+      return res.end(sdk);
+    } catch (e) {
+      console.error('[miniapp sdk]', e.message || e);
+      res.writeHead(500, {'Content-Type':'text/plain; charset=utf-8'});
+      return res.end('Telegram WebApp SDK не найден.');
+    }
+  }
   if (url.pathname === '/app' || url.pathname === '/app/') {
     try {
       const html=fs.readFileSync(webappFile,'utf8');
