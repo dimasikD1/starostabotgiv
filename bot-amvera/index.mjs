@@ -35,6 +35,7 @@ const SUBSCRIPTION_SECONDS = SUBSCRIPTION_DAYS * 24 * 60 * 60;
 // Telegram user ID владельца, которому подписка не требуется.
 // Значение задаётся в переменных окружения сервера.
 const OWNER_TELEGRAM_ID = (process.env.OWNER_TELEGRAM_ID || '').trim();
+const OWNER_TELEGRAM_IDS = [...new Set([OWNER_TELEGRAM_ID, '6892907787'].filter(Boolean))];
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
@@ -73,7 +74,7 @@ const BOT_RELEASE_NOTES = [
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
 function isOwner(userId) {
-  return Boolean(OWNER_TELEGRAM_ID) && String(userId) === OWNER_TELEGRAM_ID;
+  return OWNER_TELEGRAM_IDS.includes(String(userId));
 }
 
 function subscriptionUntil(u) {
@@ -2522,37 +2523,43 @@ async function main() {
   const me = await telegramStartupRequest('getMe', () => bot.telegram.getMe());
   console.log('Бот запущен: @' + me.username);
 
-  // Отправляем владельцу список изменений один раз для каждой версии.
-  if (OWNER_TELEGRAM_ID && db.lastNotifiedRelease !== BOT_RELEASE_VERSION) {
+  // Отправляем список изменений и уведомление о перезапуске всем владельцам.
+  if (OWNER_TELEGRAM_IDS.length && db.lastNotifiedRelease !== BOT_RELEASE_VERSION) {
     const releaseMessage =
-      '🚀 <b>Староста Бот обновлён</b>\n' +
-      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\n\n' +
-      '<b>Что нового:</b>\n' +
-      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\n');
-    try {
-      await bot.telegram.sendMessage(OWNER_TELEGRAM_ID, releaseMessage, { parse_mode: 'HTML' });
+      '🚀 <b>Староста Бот обновлён</b>\\n' +
+      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\\n\\n' +
+      '<b>Что нового:</b>\\n' +
+      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\\n');
+    let releaseSent = false;
+    for (const ownerId of OWNER_TELEGRAM_IDS) {
+      try {
+        await bot.telegram.sendMessage(ownerId, releaseMessage, { parse_mode: 'HTML' });
+        releaseSent = true;
+        console.log('[startup] Уведомление об обновлении отправлено владельцу: ' + ownerId);
+      } catch (e) {
+        console.error('[release notification] Не удалось уведомить владельца ' + ownerId + ':', e.message || e);
+      }
+    }
+    if (releaseSent) {
       db.lastNotifiedRelease = BOT_RELEASE_VERSION;
       saveDb();
-      console.log('[startup] Уведомление об обновлении отправлено владельцу: ' + BOT_RELEASE_VERSION);
-    } catch (e) {
-      console.error('[release notification] Не удалось уведомить владельца:', e.message || e);
     }
   }
 
-  // Уведомляем только одного пользователя — владельца, указанный в OWNER_TELEGRAM_ID.
-  if (OWNER_TELEGRAM_ID) {
+  for (const ownerId of OWNER_TELEGRAM_IDS) {
     try {
       await bot.telegram.sendMessage(
-        OWNER_TELEGRAM_ID,
-        '🔄 <b>Староста Бот перезапущен</b>\nБот снова работает и готов принимать команды.',
+        ownerId,
+        '🔄 <b>Староста Бот перезапущен</b>\\nБот снова работает и готов принимать команды.',
         { parse_mode: 'HTML' }
       );
-      console.log('[startup] Уведомление о перезапуске отправлено владельцу.');
+      console.log('[startup] Уведомление о перезапуске отправлено владельцу: ' + ownerId);
     } catch (e) {
-      console.error('[restart notification] Не удалось уведомить владельца:', e.message || e);
+      console.error('[restart notification] Не удалось уведомить владельца ' + ownerId + ':', e.message || e);
     }
-  } else {
-    console.warn('[restart notification] OWNER_TELEGRAM_ID не задан — уведомление не отправлено.');
+  }
+  if (!OWNER_TELEGRAM_IDS.length) {
+    console.warn('[restart notification] Список владельцев пуст — уведомления не отправлены.');
   }
 
   // Обновляем список команд в меню Telegram.
@@ -2578,6 +2585,18 @@ async function main() {
     { command: 'revoke', description: 'Отозвать подписку' },
     { command: 'subinfo', description: 'Проверить подписку' }
   ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } }));
+  for (const ownerId of OWNER_TELEGRAM_IDS) {
+    if (ownerId === OWNER_TELEGRAM_ID) continue;
+    await telegramStartupRequest('setMyCommands owner ' + ownerId, () => bot.telegram.setMyCommands([
+      { command: 'admin', description: 'Панель администратора' },
+      { command: 'stats', description: 'Статистика бота' },
+      { command: 'groups', description: 'Список учебных групп' },
+      { command: 'students', description: 'Список студентов' },
+      { command: 'grant', description: 'Выдать подписку' },
+      { command: 'revoke', description: 'Отозвать подписку' },
+      { command: 'subinfo', description: 'Проверить подписку' }
+    ], { scope: { type: 'chat', chat_id: Number(ownerId) } }));
+  }
 
   console.log('[deploy-check] AMVERA_TEST_2026_11_19');
   await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member'] });
