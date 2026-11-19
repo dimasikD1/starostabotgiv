@@ -348,7 +348,7 @@ function parseStudentNames(raw){
   line=line.replace(/\t+/g,' ').replace(/^\s*(?:№\s*)?\d+[.)]?[\s.)-]*/,'').replace(/^\s*[-•*]\s*/,'').trim();
   line=line.split(/\s{3,}/)[0].trim().replace(/\s+/g,' ').replace(/\s+\d+\s*$/,'').trim();
   const words=line.split(' ').filter(Boolean);
-  if(line.length<5||words.length<2||words.length>5||!/^[a-zа-яё -]+$/i.test(line)||/^(список|группа|фамилия|имя|отчество|студенты|итого|всего)$/i.test(words[0]))continue;
+  if(line.length<5||words.length<2||words.length>5||!/^[a-zа-яё .-]+$/i.test(line)||/^(список|группа|фамилия|имя|отчество|студенты|итого|всего)$/i.test(words[0]))continue;
   const name=words.map(w=>w[0].toLocaleUpperCase('ru-RU')+w.slice(1)).join(' '),key=name.toLocaleLowerCase('ru-RU');
   if(!seen.has(key)){seen.add(key);out.push(name);}
  }
