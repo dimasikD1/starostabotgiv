@@ -1672,7 +1672,7 @@ bot.command('starosta', async ctx => {
 bot.command('zam', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('❌ Команду /zam нужно выполнить в общем учебном чате.');
   if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначить заместителя может владелец бота или администратор группы.');
-  const args=String(ctx.message.text||'').replace(/^\\/zam(?:@\\S+)?/i,'').trim().split(/\\s+/).filter(Boolean);
+  const args=String(ctx.message.text||'').trim().split(' ').filter(Boolean).slice(1);
   const groupNumber=args[0];
   if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи номер учебной группы и ответь на сообщение будущего заместителя:\\n/zam 1 — заместитель 1 группы\\n/zam 2 — заместитель 2 группы');
   const target = ctx.message.reply_to_message?.from || ctx.from;
