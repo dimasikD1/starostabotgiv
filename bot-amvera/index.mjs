@@ -2521,6 +2521,7 @@ async function main() {
     { command: 'subinfo', description: 'Проверить подписку' }
   ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } }));
 
+  console.log('[deploy-check] AMVERA_TEST_2026_11_19');
   await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member'] });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
