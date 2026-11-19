@@ -461,9 +461,15 @@ function studyGroupForUser(chatId,userId) {
 }
 function accessibleGroups(userId) {
  const id=String(userId),u=normalizeUser(user(id));
- return allStudyGroups().filter(g=>isOwner(id)||String(g.starostaId||'')===id||String(g.zamId||'')===id||
-  (isManagerRole(u)&&(g.title===u.group||g.studyGroup===u.group)))
-  .map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId)}));
+ const groups=allStudyGroups().filter(g=>isOwner(id)||String(g.starostaId||'')===id||String(g.zamId||'')===id||
+  (isManagerRole(u)&&(g.title===u.group||g.studyGroup===u.group)));
+ // Prefer the group where this user is explicitly appointed, even if they are also the bot owner.
+ groups.sort((a,b)=>{
+  const ownA=String(a.starostaId||'')===id||String(a.zamId||'')===id;
+  const ownB=String(b.starostaId||'')===id||String(b.zamId||'')===id;
+  return Number(ownB)-Number(ownA);
+ });
+ return groups.map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId)}));
 }
 function managedGroup(userId,selectedGroupId='') {
  const allowed=accessibleGroups(userId);
