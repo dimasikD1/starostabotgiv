@@ -56,6 +56,13 @@ function isOwner(userId) {
   return OWNER_TELEGRAM_IDS.includes(String(userId));
 }
 
+function isInstitutionAdmin(userId, institutionId) {
+  if (isOwner(userId)) return true;
+  const institution = db.institutions?.[String(institutionId)];
+  return Boolean(institution && Array.isArray(institution.adminIds) &&
+    institution.adminIds.map(String).includes(String(userId)));
+}
+
 function subscriptionUntil(u) {
   return Number(u.subscriptionUntil || 0);
 }
@@ -1957,6 +1964,60 @@ bot.command('deleteinstitution', async ctx => {
   );
 });
 
+// Управление администраторами заведений: только владельцы платформы.
+bot.command('setinstadmin', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Назначать администраторов может только владелец платформы.');
+  const args = String(ctx.message?.text || '').replace(/^\/setinstadmin(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
+  const [institutionId, userId] = args;
+  const institution = db.institutions?.[String(institutionId || '')];
+  if (!institution) return ctx.reply('❌ Учебное заведение не найдено. Сначала проверь ID командой /institutions.');
+  if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /setinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
+  if (isOwner(userId)) return ctx.reply('Этот пользователь уже является владельцем платформы.');
+  institution.adminIds ||= [];
+  if (!institution.adminIds.map(String).includes(String(userId))) institution.adminIds.push(String(userId));
+  saveDb();
+  console.log('[institutions] Admin assigned:', userId, 'institution:', institutionId, 'by owner:', String(ctx.from.id));
+  return ctx.reply(
+    '✅ Администратор назначен.\n\n🏫 ' + escapeHtml(institution.name || institutionId) +
+    '\n👤 Telegram ID: <code>' + escapeHtml(userId) + '</code>\n\n' +
+    'Права пока ограничены регистрацией в списке администраторов; управление разделами заведения подключим следующим этапом.',
+    { parse_mode: 'HTML' }
+  );
+});
+
+bot.command('removeinstadmin', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Снимать администраторов может только владелец платформы.');
+  const args = String(ctx.message?.text || '').replace(/^\/removeinstadmin(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
+  const [institutionId, userId] = args;
+  const institution = db.institutions?.[String(institutionId || '')];
+  if (!institution) return ctx.reply('❌ Учебное заведение не найдено.');
+  if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /removeinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
+  institution.adminIds ||= [];
+  const before = institution.adminIds.length;
+  institution.adminIds = institution.adminIds.filter(id => String(id) !== String(userId));
+  if (institution.adminIds.length === before) return ctx.reply('ℹ️ Этот пользователь не числится администратором данного заведения.');
+  saveDb();
+  console.log('[institutions] Admin removed:', userId, 'institution:', institutionId, 'by owner:', String(ctx.from.id));
+  return ctx.reply('✅ Администратор <code>' + escapeHtml(userId) + '</code> снят с должности в заведении «' + escapeHtml(institution.name || institutionId) + '».', { parse_mode: 'HTML' });
+});
+
+bot.command('instadmins', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Список администраторов доступен только владельцу платформы.');
+  const institutionId = String(ctx.message?.text || '').replace(/^\/instadmins(?:@\S+)?/i, '').trim();
+  if (!institutionId) return ctx.reply('Формат: /instadmins ID_ЗАВЕДЕНИЯ');
+  const institution = db.institutions?.[institutionId];
+  if (!institution) return ctx.reply('❌ Учебное заведение не найдено.');
+  const admins = Array.isArray(institution.adminIds) ? institution.adminIds : [];
+  return ctx.reply(
+    '👥 <b>Администраторы заведения</b>\n🏫 ' + escapeHtml(institution.name || institutionId) + '\n\n' +
+    (admins.length ? admins.map((id, i) => (i + 1) + '. <code>' + escapeHtml(String(id)) + '</code>').join('\n') : 'Администраторы пока не назначены.'),
+    { parse_mode: 'HTML' }
+  );
+});
+
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
@@ -2795,7 +2856,10 @@ async function main() {
     { command: 'revoke', description: 'Отозвать подписку' },
     { command: 'subinfo', description: 'Проверить подписку' },
     { command: 'addinstitution', description: 'Добавить учебное заведение' },
-    { command: 'institutions', description: 'Список учебных заведений' }
+    { command: 'institutions', description: 'Список учебных заведений' },
+    { command: 'setinstadmin', description: 'Назначить администратора заведения' },
+    { command: 'removeinstadmin', description: 'Снять администратора заведения' },
+    { command: 'instadmins', description: 'Список администраторов заведения' }
   ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } }));
   for (const ownerId of OWNER_TELEGRAM_IDS) {
     if (ownerId === OWNER_TELEGRAM_ID) continue;
@@ -2808,7 +2872,10 @@ async function main() {
       { command: 'revoke', description: 'Отозвать подписку' },
       { command: 'subinfo', description: 'Проверить подписку' },
       { command: 'addinstitution', description: 'Добавить учебное заведение' },
-      { command: 'institutions', description: 'Список учебных заведений' }
+      { command: 'institutions', description: 'Список учебных заведений' },
+      { command: 'setinstadmin', description: 'Назначить администратора заведения' },
+      { command: 'removeinstadmin', description: 'Снять администратора заведения' },
+      { command: 'instadmins', description: 'Список администраторов заведения' }
     ], { scope: { type: 'chat', chat_id: Number(ownerId) } }));
   }
 
