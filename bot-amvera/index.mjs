@@ -2543,6 +2543,24 @@ async function telegramStartupRequest(label, operation, attempts = 5) {
 }
 
 async function main() {
+  // Выполняем миграцию tenant-привязок при старте, а не ждём первого действия старосты.
+  let migratedChatCount = 0;
+  let migratedStudyGroupCount = 0;
+  for (const chat of Object.values(db.groups || {})) {
+    if (!chat) continue;
+    const before = Boolean(chat._institutionMigrationV1);
+    const groups = ensureStudyGroups(chat);
+    migratedStudyGroupCount += groups.length;
+    if (!before && chat._institutionMigrationV1) migratedChatCount += 1;
+  }
+  console.log(
+    '[institutions] Startup check complete:',
+    'chats=' + Object.keys(db.groups || {}).length,
+    'studyGroups=' + migratedStudyGroupCount,
+    'newlyMigratedChats=' + migratedChatCount,
+    'institutions=' + Object.keys(db.institutions || {}).length
+  );
+
   healthServer.listen(port, '0.0.0.0', () => {
     console.log('[health] HTTP сервер слушает 0.0.0.0:' + port);
   });
