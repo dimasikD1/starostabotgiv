@@ -1829,6 +1829,82 @@ bot.command('mark',async ctx=>{
  const key=attendanceLessonKey(lesson);g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][attendanceKey(g.students[i])]=status;saveDb();
  return ctx.reply('✅ Отметка сохранена для пары «'+lesson.subject+'»: '+studentName(g.students[i]));
 });
+// Управление учебными заведениями доступно только владельцам платформы в личке.
+bot.command('addinstitution', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /addinstitution.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Добавлять учебные заведения может только владелец платформы.');
+
+  const raw = String(ctx.message?.text || '').replace(/^\/addinstitution(?:@\S+)?/i, '').trim();
+  if (!raw) {
+    return ctx.reply(
+      '🏫 <b>Добавление учебного заведения</b>\n\n' +
+      'Формат:\n<code>/addinstitution Название | Сокращение | Город</code>\n\n' +
+      'Пример:\n<code>/addinstitution Колледж связи | КС | Таллин</code>\n\n' +
+      'Название обязательно. Сокращение и город можно не указывать.',
+      { parse_mode: 'HTML' }
+    );
+  }
+
+  const parts = raw.split('|').map(value => value.trim());
+  const name = String(parts[0] || '').slice(0, 120).trim();
+  const shortName = String(parts[1] || '').slice(0, 40).trim();
+  const city = String(parts[2] || '').slice(0, 80).trim();
+  if (!name) return ctx.reply('❌ Укажи название учебного заведения.');
+
+  db.institutions ||= {};
+  const duplicate = Object.values(db.institutions).find(item =>
+    item && String(item.name || '').trim().toLocaleLowerCase('ru-RU') === name.toLocaleLowerCase('ru-RU') &&
+    String(item.city || '').trim().toLocaleLowerCase('ru-RU') === city.toLocaleLowerCase('ru-RU')
+  );
+  if (duplicate) {
+    return ctx.reply(
+      '⚠️ Такое учебное заведение уже зарегистрировано.\n' +
+      'ID: <code>' + escapeHtml(duplicate.id) + '</code>',
+      { parse_mode: 'HTML' }
+    );
+  }
+
+  const id = 'inst_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  db.institutions[id] = {
+    id,
+    name,
+    shortName,
+    city,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    createdBy: String(ctx.from.id),
+    adminIds: [],
+    faculties: {}
+  };
+  saveDb();
+
+  console.log('[institutions] Institution created:', id, 'by owner:', String(ctx.from.id));
+  return ctx.reply(
+    '✅ <b>Учебное заведение зарегистрировано!</b>\n\n' +
+    '🏫 Название: <b>' + escapeHtml(name) + '</b>\n' +
+    (shortName ? '🔖 Сокращение: ' + escapeHtml(shortName) + '\n' : '') +
+    (city ? '📍 Город: ' + escapeHtml(city) + '\n' : '') +
+    '🆔 ID: <code>' + escapeHtml(id) + '</code>\n\n' +
+    'Пока оно создано отдельно: существующие группы и данные остались в основном заведении. На следующем этапе подключим администраторов и добавление групп.',
+    { parse_mode: 'HTML' }
+  );
+});
+
+bot.command('institutions', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Список учебных заведений доступен в личных сообщениях.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Список доступен только владельцу платформы.');
+
+  const institutions = Object.values(db.institutions || {});
+  if (!institutions.length) return ctx.reply('Пока нет зарегистрированных учебных заведений.');
+  const lines = institutions.map((item, index) =>
+    (index + 1) + '. <b>' + escapeHtml(item.name || 'Без названия') + '</b>' +
+    (item.city ? ' · ' + escapeHtml(item.city) : '') +
+    '\\nID: <code>' + escapeHtml(item.id) + '</code>' +
+    (item.id === DEFAULT_INSTITUTION_ID ? ' · основное' : '')
+  );
+  return ctx.reply('🏫 <b>Учебные заведения (' + institutions.length + ')</b>\\n\\n' + lines.join('\\n\\n'), { parse_mode: 'HTML' });
+});
+
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
@@ -2665,7 +2741,9 @@ async function main() {
     { command: 'stats', description: 'Статистика' },
     { command: 'grant', description: 'Выдать подписку' },
     { command: 'revoke', description: 'Отозвать подписку' },
-    { command: 'subinfo', description: 'Проверить подписку' }
+    { command: 'subinfo', description: 'Проверить подписку' },
+    { command: 'addinstitution', description: 'Добавить учебное заведение' },
+    { command: 'institutions', description: 'Список учебных заведений' }
   ], { scope: { type: 'chat', chat_id: Number(OWNER_TELEGRAM_ID) } }));
   for (const ownerId of OWNER_TELEGRAM_IDS) {
     if (ownerId === OWNER_TELEGRAM_ID) continue;
@@ -2676,7 +2754,9 @@ async function main() {
       { command: 'students', description: 'Список студентов' },
       { command: 'grant', description: 'Выдать подписку' },
       { command: 'revoke', description: 'Отозвать подписку' },
-      { command: 'subinfo', description: 'Проверить подписку' }
+      { command: 'subinfo', description: 'Проверить подписку' },
+      { command: 'addinstitution', description: 'Добавить учебное заведение' },
+      { command: 'institutions', description: 'Список учебных заведений' }
     ], { scope: { type: 'chat', chat_id: Number(ownerId) } }));
   }
 
