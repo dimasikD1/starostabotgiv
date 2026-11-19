@@ -2950,8 +2950,8 @@ async function main() {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [[
-            { text: '🤖 Открыть бота', url: 'https://t.me/starostagivbot' },
-            { text: '📱 Открыть Mini App', url: 'https://starostabotgiv-givenchy06.msk1.amvera.tech/app' }
+            { text: '💻 Репозиторий на GitHub', url: 'https://github.com/dimasikD1/starostabotgiv' },
+            { text: '🤖 Открыть бота', url: 'https://t.me/starostagivbot' }
           ]]
         }
       });
