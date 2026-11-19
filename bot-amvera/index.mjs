@@ -252,6 +252,10 @@ const STUDY_GROUP_STAROSTAS = Object.freeze({
   'БИ(ЭБ)1-ОЗ/Бп/КД26': '9038958939',
   'БИ(ЭБ)2-ОЗ/Бп/КД26': '8267726970'
 });
+const STUDY_GROUP_ZAMS = Object.freeze({
+  'БИ(ЭБ)1-ОЗ/Бп/КД26': '8080239138',
+  'БИ(ЭБ)2-ОЗ/Бп/КД26': '1812288553'
+});
 
 bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = STUDY_GROUPS[ctx.match[1]];
@@ -446,6 +450,7 @@ function ensureStudyGroups(chat) {
   item.chatId=chat.chatId; item.chatTitle=chat.title || 'Общий чат';
   item.title=name; item.studyGroup=name; item.scheduleGroup=name;
   item.starostaId=STUDY_GROUP_STAROSTAS[name];
+  if (STUDY_GROUP_ZAMS[name]) item.zamId=STUDY_GROUP_ZAMS[name];
   item.students ||= []; item.attendance ||= {}; item.lessonAttendance ||= {};
   item.activeAttendanceLessons ||= {}; item.announcements ||= [];
   item.calendarEvents ||= []; item.homework ||= [];
