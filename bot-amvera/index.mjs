@@ -2545,11 +2545,11 @@ async function main() {
   // Публикуем каждую новую версию в канал отдельно от личных уведомлений владельцам.
   if (RELEASE_CHANNEL && db.lastPublishedRelease !== BOT_RELEASE_VERSION) {
     const channelReleaseMessage =
-      '🚀 <b>Староста Бот — обновление</b>\\n' +
-      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\\n\\n' +
-      '<b>Что нового:</b>\\n' +
-      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\\n') +
-      '\\n\\n🛠 Продолжаем улучшать бота!';
+      '🚀 <b>Староста Бот — обновление</b>\n' +
+      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\n\n' +
+      '<b>Что нового:</b>\n' +
+      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\n') +
+      '\n\n🛠 Продолжаем улучшать бота!';
     try {
       await bot.telegram.sendMessage(RELEASE_CHANNEL, channelReleaseMessage, { parse_mode: 'HTML' });
       db.lastPublishedRelease = BOT_RELEASE_VERSION;
