@@ -1915,6 +1915,48 @@ bot.command('institutions', async ctx => {
   return ctx.reply('🏫 <b>Учебные заведения (' + institutions.length + ')</b>\n\n' + lines.join('\n\n'), { parse_mode: 'HTML' });
 });
 
+bot.command('deleteinstitution', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /deleteinstitution ID.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Удалять учебные заведения может только владелец платформы.');
+
+  const id = String(ctx.message?.text || '').replace(/^\/deleteinstitution(?:@\S+)?/i, '').trim();
+  if (!id) {
+    return ctx.reply(
+      'Формат: <code>/deleteinstitution ID</code>\n' +
+      'Сначала посмотри ID командой /institutions.\n' +
+      'Основное заведение удалить нельзя.',
+      { parse_mode: 'HTML' }
+    );
+  }
+  if (id === DEFAULT_INSTITUTION_ID) {
+    return ctx.reply('⛔ Нельзя удалить основное учебное заведение. Оно содержит действующие группы.');
+  }
+
+  const institution = db.institutions?.[id];
+  if (!institution) return ctx.reply('❌ Учебное заведение с таким ID не найдено.');
+
+  const attachedChats = Object.values(db.groups || {}).filter(chat =>
+    chat && (
+      String(chat.institutionId || '') === id ||
+      Object.values(chat.studyGroups || {}).some(group => group && String(group.institutionId || '') === id)
+    )
+  );
+  if (attachedChats.length) {
+    return ctx.reply('⛔ Удаление отменено: к этому заведению привязаны учебные группы. Сначала перенеси их в другое заведение.');
+  }
+
+  delete db.institutions[id];
+  saveDb();
+  console.log('[institutions] Institution deleted:', id, 'by owner:', String(ctx.from.id));
+  return ctx.reply(
+    '✅ Учебное заведение удалено.\n' +
+    '🏫 ' + escapeHtml(institution.name || 'Без названия') + '\n' +
+    '🆔 <code>' + escapeHtml(id) + '</code>\n\n' +
+    'Основное заведение и его группы не затронуты.',
+    { parse_mode: 'HTML' }
+  );
+});
+
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
