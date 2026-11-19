@@ -71,7 +71,7 @@ async function waitForTelegram(){
   }
   if(Date.now()>=nextRetry&&retries<4){
    const script=document.createElement('script');
-   script.src='https://telegram.org/js/telegram-web-app.js?65&retry='+retries;
+   script.src='/telegram-web-app.js?retry='+retries;
    script.async=true;
    script.onerror=()=>console.warn('[miniapp] Telegram SDK load attempt failed',retries);
    document.head.appendChild(script);
