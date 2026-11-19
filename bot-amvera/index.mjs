@@ -2498,20 +2498,21 @@ async function main() {
     }
   }
 
-  // Уведомляем всех пользователей, назначенных старостами, после каждого запуска/перезапуска.
-  const starostas = Object.entries(db.users).filter(([, u]) => ['starosta', 'zam'].includes(u?.role));
-  for (const [starostaId] of starostas) {
+  // Уведомляем только одного пользователя — владельца, указанный в OWNER_TELEGRAM_ID.
+  if (OWNER_TELEGRAM_ID) {
     try {
       await bot.telegram.sendMessage(
-        starostaId,
+        OWNER_TELEGRAM_ID,
         '🔄 <b>Староста Бот перезапущен</b>\nБот снова работает и готов принимать команды.',
         { parse_mode: 'HTML' }
       );
+      console.log('[startup] Уведомление о перезапуске отправлено владельцу.');
     } catch (e) {
-      console.error('[restart notification] Не удалось уведомить старосту ' + starostaId + ':', e.message || e);
+      console.error('[restart notification] Не удалось уведомить владельца:', e.message || e);
     }
+  } else {
+    console.warn('[restart notification] OWNER_TELEGRAM_ID не задан — уведомление не отправлено.');
   }
-  console.log('[startup] Уведомления отправлены старостам: ' + starostas.length);
 
   // Обновляем список команд в меню Telegram.
   await telegramStartupRequest('setMyCommands private', () => bot.telegram.setMyCommands([
