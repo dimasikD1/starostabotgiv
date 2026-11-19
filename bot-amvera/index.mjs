@@ -2175,6 +2175,14 @@ async function handleMiniAppApi(req,res,url) {
 
     return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role},group:g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>{const attendance={present:0,absent:0,marked:0,rate:0},bySubject={};for(const entry of historyEntries){const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];if(status==='present')attendance.present++;else if(status==='absent')attendance.absent++;if(status==='present'||status==='absent'){const subject=String(entry.subject||'Занятие').trim()||'Занятие';bySubject[subject]||={subject,present:0,absent:0,marked:0,rate:0};bySubject[subject][status]++;}}attendance.marked=attendance.present+attendance.absent;attendance.rate=attendance.marked?Math.round(attendance.present/attendance.marked*100):0;const attendanceBySubject=Object.values(bySubject).map(x=>{x.marked=x.present+x.absent;x.rate=x.marked?Math.round(x.present/x.marked*100):0;return x;}).sort((a,b)=>a.subject.localeCompare(b.subject,'ru'));return {index:i,name:studentName(s),attendanceBySubject,statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked'])),attendance30d:attendance,attendanceHistory:historyEntries.map(entry=>{const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];return status==='present'||status==='absent'?{date:entry.date,timeStart:entry.timeStart,subject:entry.subject,status}:null;}).filter(Boolean)};}),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
   }
+  if(req.method==='DELETE' && url.pathname==='/api/students') {
+    const count=(g.students||[]).length;
+    if(!count) return sendJson(res,400,{error:'Список студентов уже пуст.'});
+    g.students=[];
+    saveDb();
+    console.log('[miniapp students] roster cleared', {group:g.title||'',by:String(tgUser.id),count});
+    return sendJson(res,200,{ok:true,deleted:count});
+  }
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
       const body=await readJsonBody(req);
