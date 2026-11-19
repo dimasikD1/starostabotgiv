@@ -240,16 +240,26 @@ const STUDY_GROUP_ZAMS = Object.freeze({
 // Первый tenant платформы. Существующие группы остаются внутри него.
 // Следующие учебные заведения будут добавляться отдельными записями.
 const DEFAULT_INSTITUTION_ID = 'inst_001';
+const DEFAULT_INSTITUTION_NAME = 'Краснодарский Кооперативный Институт';
+const DEFAULT_INSTITUTION_SHORT_NAME = 'РУК';
+const DEFAULT_INSTITUTION_CITY = 'Краснодар';
 db.institutions ||= {};
 db.institutions[DEFAULT_INSTITUTION_ID] ||= {
   id: DEFAULT_INSTITUTION_ID,
-  name: 'Основное учебное заведение',
-  shortName: 'Основное',
-  city: '',
+  name: DEFAULT_INSTITUTION_NAME,
+  shortName: DEFAULT_INSTITUTION_SHORT_NAME,
+  city: DEFAULT_INSTITUTION_CITY,
   status: 'active',
   createdAt: new Date().toISOString(),
   faculties: {}
 };
+// Обновляем карточку уже существующего основного заведения без смены ID
+// и без затрагивания привязанных к нему групп и их данных.
+Object.assign(db.institutions[DEFAULT_INSTITUTION_ID], {
+  name: DEFAULT_INSTITUTION_NAME,
+  shortName: DEFAULT_INSTITUTION_SHORT_NAME,
+  city: DEFAULT_INSTITUTION_CITY
+});
 db.schemaVersion = Math.max(Number(db.schemaVersion) || 1, 2);
 
 bot.action(/^studygroup:(1|2)$/, async ctx => {
