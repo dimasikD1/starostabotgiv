@@ -1354,7 +1354,7 @@ bot.help(ctx => ctx.reply(
   '/schedule — сегодня\n/tomorrow — завтра\n/week — неделя\n\n' +
   '👨‍🎓 <b>Студенты и посещаемость</b>\n' +
   '/role — посмотреть роль\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
-  '/delstudent НОМЕР — удалить из списка\n/attendance — журнал (староста)\n' +
+  '/delstudent НОМЕР — удалить из списка\n/attendance — журнал (староста)\n/html — HTML-отчёт посещаемости\n' +
   '/mark НОМЕР present|absent — отметить вручную\n\n' +
   '📢 <b>Для группы</b>\n' +
   '/poll Вопрос | Вариант 1 | Вариант 2 — создать опрос\n' +
@@ -1391,7 +1391,7 @@ bot.command(['admin', 'adminhelp', 'commands'], ctx => {
     '/students — список студентов\n' +
     '/student ИМЯ — добавить студента вручную\n' +
     '/delstudent НОМЕР — удалить студента\n' +
-    '/attendance — открыть журнал посещаемости\n/attendanceweb — получить журнал посещаемости HTML-файлом\n' +
+    '/attendance — открыть журнал посещаемости\n/html — получить журнал посещаемости HTML-файлом (также работает /attendanceweb)\n' +
     '/mark НОМЕР present|absent — отметить посещаемость\n' +
     '/starosta — назначить себя старостой <i>(в группе, владелец или администратор)</i>\n' +
     '/setstarosta — назначить старосту <i>(ответом на сообщение)</i>\n' +
@@ -1787,7 +1787,7 @@ bot.command('attendance',async ctx=>{
   return ctx.reply('❌ Не удалось загрузить пары из расписания. Проверь название группы через /setgroup и попробуй ещё раз.');
  }
 });
-bot.command('attendanceweb', async ctx => {
+bot.command(['attendanceweb', 'html'], async ctx => {
  if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях.');
  const g = managedGroup(ctx.from.id);
  if (!g) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
