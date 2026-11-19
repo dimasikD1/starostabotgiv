@@ -424,9 +424,24 @@ async function getTodayLessons(g) {
  const lessons=await getCachedSchedule(String(g.scheduleGroup),7);
  return (lessons||[]).filter(x=>x.date===attendanceDate()&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
 }
-function managedGroup(userId) {
- const id=String(userId),u=normalizeUser(user(id));let g=Object.values(db.groups).find(x=>String(x.starostaId||'')===id||String(x.zamId||'')===id);
- if(!g&&isManagerRole(u))g=Object.values(db.groups).find(x=>x.title===u.group||x.scheduleGroup===u.group);if(!g)return null;
+function accessibleGroups(userId) {
+ const id=String(userId),u=normalizeUser(user(id));
+ let groups=Object.entries(db.groups).filter(([,g])=>String(g.starostaId||'')===id||String(g.zamId||'')===id);
+ if(!groups.length&&isManagerRole(u))groups=Object.entries(db.groups).filter(([,g])=>g.title===u.group||g.scheduleGroup===u.group);
+ return groups.map(([id,g])=>({id:String(g.chatId||id),title:String(g.title||'Учебная группа')}));
+}
+function managedGroup(userId, selectedGroupId='') {
+ const id=String(userId),u=normalizeUser(user(id)),allowed=accessibleGroups(id);
+ let g=null;
+ if(selectedGroupId) {
+  const key=String(selectedGroupId);
+  if(!allowed.some(x=>x.id===key))return null;
+  g=db.groups[key]||Object.values(db.groups).find(x=>String(x.chatId||'')===key);
+ } else {
+  const first=allowed[0];
+  if(first)g=db.groups[first.id]||Object.values(db.groups).find(x=>String(x.chatId||'')===first.id);
+ }
+ if(!g)return null;
  g.students||=[];g.attendance||={};g.lessonAttendance||={};g.activeAttendanceLessons||={};g.announcements||=[];g.calendarEvents||=[];g.homework||=[];
  if(!g._attendanceMigrated){if(!g.students.length&&u.students?.length)g.students=JSON.parse(JSON.stringify(u.students));if(!Object.keys(g.attendance).length&&Object.keys(u.attendance||{}).length)g.attendance=JSON.parse(JSON.stringify(u.attendance));g._attendanceMigrated=true;saveDb();}
  return g;
@@ -2118,8 +2133,13 @@ async function handleMiniAppApi(req,res,url) {
   catch(e) { return sendJson(res,401,{error:e.message}); }
   const u=normalizeUser(user(tgUser.id));
   // Подписка временно отключена: Mini App доступен без оплаты.
-  const g=managedGroup(tgUser.id);
-  if(!g) return sendJson(res,403,{error:'Кабинет доступен старосте или заместителю группы.'});
+  if(req.method==='GET' && url.pathname==='/api/groups') {
+    const groups=accessibleGroups(tgUser.id);
+    return sendJson(res,200,{groups});
+  }
+  const selectedGroupId=String(url.searchParams.get('groupId')||'');
+  const g=managedGroup(tgUser.id,selectedGroupId);
+  if(!g) return sendJson(res,403,{error:'Нет доступа к выбранной группе. Обнови список групп.'});
   if(req.method==='GET' && url.pathname==='/api/data') {
     let scheduleItems=[],scheduleError='',scheduleLoading=false;
     try {
