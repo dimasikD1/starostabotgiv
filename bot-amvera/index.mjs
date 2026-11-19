@@ -39,7 +39,7 @@ const OWNER_TELEGRAM_IDS = [...new Set([OWNER_TELEGRAM_ID, '6892907787'].filter(
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.19.03';
+const BOT_RELEASE_VERSION = '2026.11.20.01';
 const RELEASE_CHANNEL = '@starostabotgiv';
 const BOT_RELEASE_NOTES = [
   'Разделены данные двух учебных групп; добавлены роли старост, заместителей и двух владельцев.',
@@ -48,6 +48,7 @@ const BOT_RELEASE_NOTES = [
   'В Mini App добавлены календарь, объявления, профиль, домашние задания с фото и видео.',
   'Добавлены статистика посещаемости и ДЗ, а также HTML-отчёты.',
   'Улучшены загрузка Mini App, обновление данных и стабильность работы.',
+  'Добавлена структура учебных заведений: факультеты, направления и курсы.'
   'OCR временно отключён; бот и Mini App доступны бесплатно.'
 ];;
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
@@ -2016,6 +2017,117 @@ bot.command('instadmins', async ctx => {
     (admins.length ? admins.map((id, i) => (i + 1) + '. <code>' + escapeHtml(String(id)) + '</code>').join('\n') : 'Администраторы пока не назначены.'),
     { parse_mode: 'HTML' }
   );
+});
+
+// Структура учебного заведения: факультеты → направления → курсы.
+// Команды работают только в личке и только в пределах доступного заведения.
+function institutionForStructureCommand(ctx, institutionId) {
+  const institution = db.institutions?.[String(institutionId || '').trim()];
+  if (!institution) return { error: '❌ Учебное заведение не найдено. Проверь ID командой /institutions.' };
+  if (!isInstitutionAdmin(ctx.from.id, institution.id)) {
+    return { error: '❌ Нет прав на управление структурой этого учебного заведения.' };
+  }
+  institution.faculties ||= {};
+  return { institution };
+}
+function structureParts(ctx, command) {
+  return String(ctx.message?.text || '')
+    .replace(new RegExp('^\\/' + command + '(?:@\\S+)?', 'i'), '')
+    .trim().split('|').map(value => value.trim());
+}
+function newStructureId(prefix) {
+  return prefix + '_' + crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+}
+function sameStructureName(items, name) {
+  const normalized = String(name || '').trim().toLocaleLowerCase('ru-RU');
+  return Object.values(items || {}).some(item =>
+    String(item?.name || '').trim().toLocaleLowerCase('ru-RU') === normalized
+  );
+}
+
+bot.command('addfaculty', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Команду используй в личке с ботом.');
+  const [institutionId, name] = structureParts(ctx, 'addfaculty');
+  if (!institutionId || !name) {
+    return ctx.reply('Формат:\n<code>/addfaculty ID_ЗАВЕДЕНИЯ | Название факультета</code>\nID можно посмотреть через /institutions.', { parse_mode: 'HTML' });
+  }
+  const result = institutionForStructureCommand(ctx, institutionId);
+  if (result.error) return ctx.reply(result.error);
+  const institution = result.institution;
+  if (sameStructureName(institution.faculties, name)) return ctx.reply('⚠️ Такой факультет уже есть в этом заведении.');
+  const id = newStructureId('fac');
+  institution.faculties[id] = { id, name: name.slice(0, 120), directions: {}, createdAt: new Date().toISOString() };
+  saveDb();
+  console.log('[institution-structure] Faculty created:', id, 'institution:', institution.id);
+  return ctx.reply('✅ Факультет добавлен.\n\n🏫 ' + escapeHtml(institution.name) + '\n🎓 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
+});
+
+bot.command('adddirection', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Команду используй в личке с ботом.');
+  const [institutionId, facultyId, name] = structureParts(ctx, 'adddirection');
+  if (!institutionId || !facultyId || !name) {
+    return ctx.reply('Формат:\n<code>/adddirection ID_ЗАВЕДЕНИЯ | ID_ФАКУЛЬТЕТА | Название направления</code>\nID факультета можно посмотреть через /structure ID_ЗАВЕДЕНИЯ.', { parse_mode: 'HTML' });
+  }
+  const result = institutionForStructureCommand(ctx, institutionId);
+  if (result.error) return ctx.reply(result.error);
+  const faculty = result.institution.faculties[String(facultyId)];
+  if (!faculty) return ctx.reply('❌ Факультет не найден в этом заведении.');
+  faculty.directions ||= {};
+  if (sameStructureName(faculty.directions, name)) return ctx.reply('⚠️ Такое направление уже есть на этом факультете.');
+  const id = newStructureId('dir');
+  faculty.directions[id] = { id, name: name.slice(0, 120), courses: {}, createdAt: new Date().toISOString() };
+  saveDb();
+  console.log('[institution-structure] Direction created:', id, 'faculty:', facultyId);
+  return ctx.reply('✅ Направление добавлено.\n\n🎓 ' + escapeHtml(faculty.name) + '\n📚 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
+});
+
+bot.command('addcourse', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Команду используй в личке с ботом.');
+  const [institutionId, facultyId, directionId, name] = structureParts(ctx, 'addcourse');
+  if (!institutionId || !facultyId || !directionId || !name) {
+    return ctx.reply('Формат:\n<code>/addcourse ID_ЗАВЕДЕНИЯ | ID_ФАКУЛЬТЕТА | ID_НАПРАВЛЕНИЯ | Курс</code>\nПример названия: 1 курс.', { parse_mode: 'HTML' });
+  }
+  const result = institutionForStructureCommand(ctx, institutionId);
+  if (result.error) return ctx.reply(result.error);
+  const faculty = result.institution.faculties[String(facultyId)];
+  const direction = faculty?.directions?.[String(directionId)];
+  if (!direction) return ctx.reply('❌ Направление не найдено на указанном факультете.');
+  direction.courses ||= {};
+  if (sameStructureName(direction.courses, name)) return ctx.reply('⚠️ Такой курс уже есть у этого направления.');
+  const id = newStructureId('course');
+  direction.courses[id] = { id, name: name.slice(0, 80), groups: {}, createdAt: new Date().toISOString() };
+  saveDb();
+  console.log('[institution-structure] Course created:', id, 'direction:', directionId);
+  return ctx.reply('✅ Курс добавлен.\n\n📚 ' + escapeHtml(direction.name) + '\n🎓 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
+});
+
+bot.command('structure', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Структура доступна в личке с ботом.');
+  const institutionId = String(ctx.message?.text || '').replace(/^\\/structure(?:@\\S+)?/i, '').trim();
+  if (!institutionId) return ctx.reply('Формат: /structure ID_ЗАВЕДЕНИЯ\nID можно посмотреть через /institutions.');
+  const result = institutionForStructureCommand(ctx, institutionId);
+  if (result.error) return ctx.reply(result.error);
+  const institution = result.institution;
+  const lines = ['🏫 <b>' + escapeHtml(institution.name || institution.id) + '</b>', ''];
+  const faculties = Object.values(institution.faculties || {});
+  if (!faculties.length) lines.push('Пока нет факультетов. Добавь первый командой /addfaculty.');
+  for (const faculty of faculties) {
+    lines.push('🎓 <b>' + escapeHtml(faculty.name) + '</b>', 'ID: <code>' + escapeHtml(faculty.id) + '</code>');
+    const directions = Object.values(faculty.directions || {});
+    if (!directions.length) lines.push('  Направления пока не добавлены.');
+    for (const direction of directions) {
+      lines.push('  📚 <b>' + escapeHtml(direction.name) + '</b>', '  ID: <code>' + escapeHtml(direction.id) + '</code>');
+      const courses = Object.values(direction.courses || {});
+      if (!courses.length) lines.push('    Курсы пока не добавлены.');
+      for (const course of courses) {
+        lines.push('    • ' + escapeHtml(course.name) + ' · ID: <code>' + escapeHtml(course.id) + '</code>');
+        const groups = Object.values(course.groups || {});
+        for (const group of groups) lines.push('      — ' + escapeHtml(group.name || group.title || 'Учебная группа'));
+      }
+    }
+    lines.push('');
+  }
+  return ctx.reply(lines.join('\n').slice(0, 3900), { parse_mode: 'HTML' });
 });
 
 bot.command('groups', async ctx => {
