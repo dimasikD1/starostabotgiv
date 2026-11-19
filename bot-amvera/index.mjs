@@ -39,7 +39,7 @@ const OWNER_TELEGRAM_IDS = [...new Set([OWNER_TELEGRAM_ID, '6892907787'].filter(
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.19.02';
+const BOT_RELEASE_VERSION = '2026.11.19.03';
 const RELEASE_CHANNEL = '@starostabotgiv';
 const BOT_RELEASE_NOTES = [
   'Разделены данные двух учебных групп; добавлены роли старост, заместителей и двух владельцев.',
@@ -2545,18 +2545,35 @@ async function main() {
   // Публикуем каждую новую версию в канал отдельно от личных уведомлений владельцам.
   if (RELEASE_CHANNEL && db.lastPublishedRelease !== BOT_RELEASE_VERSION) {
     const channelReleaseMessage =
-      '🚀 <b>Староста Бот — обновление</b>\n' +
-      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\n\n' +
-      '<b>Что нового:</b>\n' +
-      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\n') +
-      '\n\n🛠 Продолжаем улучшать бота!';
+      '👋 <b>Всем привет! Я — Староста Бот.</b>\n\n' +
+      'Я создан, чтобы учебная жизнь группы стала проще: расписание, посещаемость, домашние задания и важные объявления — в одном месте.\n\n' +
+      '📚 <b>Что я умею:</b>\n' +
+      '• Показываю расписание на сегодня, завтра и всю неделю.\n' +
+      '• Помогаю старостам вести списки студентов и отмечать посещаемость по отдельным парам.\n' +
+      '• Позволяю публиковать домашние задания и объявления.\n' +
+      '• Содержу календарь событий и статистику посещаемости.\n' +
+      '• Открываю удобный личный кабинет в Mini App.\n\n' +
+      '🎓 <b>Для наших учебных групп:</b>\n' +
+      'БИ(ЭБ)1-ОЗ/Бп/КД26\n' +
+      'БИ(ЭБ)2-ОЗ/Бп/КД26\n\n' +
+      '🤖 <b>Как начать?</b> Откройте бота, выберите свою учебную группу и пользуйтесь нужными разделами.\n\n' +
+      '🛠 <b>Мы продолжаем развивать проект.</b> Здесь будем публиковать новости, изменения и полезные обновления. Спасибо, что пользуетесь Староста Ботом!\n\n' +
+      'Актуальная версия: <b>' + BOT_RELEASE_VERSION + '</b>';
     try {
-      await bot.telegram.sendMessage(RELEASE_CHANNEL, channelReleaseMessage, { parse_mode: 'HTML' });
+      await bot.telegram.sendMessage(RELEASE_CHANNEL, channelReleaseMessage, {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🤖 Открыть бота', url: 'https://t.me/starostagivbot' },
+            { text: '📱 Открыть Mini App', url: 'https://starostabotgiv-givenchy06.msk1.amvera.tech/app' }
+          ]]
+        }
+      });
       db.lastPublishedRelease = BOT_RELEASE_VERSION;
       saveDb();
-      console.log('[release channel] Публикация версии отправлена: ' + BOT_RELEASE_VERSION);
+      console.log('[release channel] Приветственная публикация отправлена: ' + BOT_RELEASE_VERSION);
     } catch (e) {
-      console.error('[release channel] Не удалось опубликовать обновление. Проверьте, что бот добавлен администратором канала с правом публикации:', e.message || e);
+      console.error('[release channel] Не удалось опубликовать пост. Проверьте права администратора канала:', e.message || e);
     }
   }
 
