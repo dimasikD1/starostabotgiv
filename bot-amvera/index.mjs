@@ -40,6 +40,7 @@ const OWNER_TELEGRAM_IDS = [...new Set([OWNER_TELEGRAM_ID, '6892907787'].filter(
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
 const BOT_RELEASE_VERSION = '2026.11.19.01';
+const RELEASE_CHANNEL = '@starostabotgiv';
 const BOT_RELEASE_NOTES = [
   'Данные студентов, посещаемость, домашние задания, объявления и календарь разделены по двум учебным группам в общем Telegram-чате.',
   'OCR-распознавание фото временно отключено для снижения нагрузки на сервер. Импорт списка студентов текстом продолжает работать.',
@@ -2559,6 +2560,25 @@ async function main() {
     if (releaseSent) {
       db.lastNotifiedRelease = BOT_RELEASE_VERSION;
       saveDb();
+    }
+  }
+
+
+  // Публикуем каждую новую версию в канал отдельно от личных уведомлений владельцам.
+  if (RELEASE_CHANNEL && db.lastPublishedRelease !== BOT_RELEASE_VERSION) {
+    const channelReleaseMessage =
+      '🚀 <b>Староста Бот — обновление</b>\\n' +
+      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\\n\\n' +
+      '<b>Что нового:</b>\\n' +
+      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\\n') +
+      '\\n\\n🛠 Продолжаем улучшать бота!';
+    try {
+      await bot.telegram.sendMessage(RELEASE_CHANNEL, channelReleaseMessage, { parse_mode: 'HTML' });
+      db.lastPublishedRelease = BOT_RELEASE_VERSION;
+      saveDb();
+      console.log('[release channel] Публикация версии отправлена: ' + BOT_RELEASE_VERSION);
+    } catch (e) {
+      console.error('[release channel] Не удалось опубликовать обновление. Проверьте, что бот добавлен администратором канала с правом публикации:', e.message || e);
     }
   }
 
