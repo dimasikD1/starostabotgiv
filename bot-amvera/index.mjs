@@ -237,6 +237,21 @@ const STUDY_GROUP_ZAMS = Object.freeze({
   'БИ(ЭБ)2-ОЗ/Бп/КД26': '1812288553'
 });
 
+// Первый tenant платформы. Существующие группы остаются внутри него.
+// Следующие учебные заведения будут добавляться отдельными записями.
+const DEFAULT_INSTITUTION_ID = 'inst_001';
+db.institutions ||= {};
+db.institutions[DEFAULT_INSTITUTION_ID] ||= {
+  id: DEFAULT_INSTITUTION_ID,
+  name: 'Основное учебное заведение',
+  shortName: 'Основное',
+  city: '',
+  status: 'active',
+  createdAt: new Date().toISOString(),
+  faculties: {}
+};
+db.schemaVersion = Math.max(Number(db.schemaVersion) || 1, 2);
+
 bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = STUDY_GROUPS[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
@@ -418,7 +433,20 @@ function ensureStudyGroups(chat) {
  if (!chat) return [];
  chat.studyGroups ||= {};
  const names=Object.values(STUDY_GROUPS);
- const needsSave=!chat._studyGroupsMigratedV1;
+ const needsSave=!chat._studyGroupsMigratedV1 || !chat._institutionMigrationV1;
+ // Мягкая миграция: все уже существующие группы относятся к первому заведению.
+ if (!chat.institutionId) chat.institutionId=DEFAULT_INSTITUTION_ID;
+ const institutionId=String(chat.institutionId);
+ db.institutions ||= {};
+ db.institutions[institutionId] ||= {
+  id: institutionId,
+  name: institutionId===DEFAULT_INSTITUTION_ID?'Основное учебное заведение':'Учебное заведение',
+  shortName: '',
+  city: '',
+  status: 'active',
+  createdAt: new Date().toISOString(),
+  faculties: {}
+ };
  const legacyFields=['students','attendance','lessonAttendance','activeAttendanceLessons','announcements','calendarEvents','homework','todayAttendanceLessons'];
  if (!chat._studyGroupsMigratedV1) {
   const first=chat.studyGroups[names[0]] ||= {};
@@ -427,6 +455,7 @@ function ensureStudyGroups(chat) {
  }
  for (const name of names) {
   const item=chat.studyGroups[name] ||= {};
+  if (!item.institutionId) item.institutionId=institutionId;
   item.chatId=chat.chatId; item.chatTitle=chat.title || 'Общий чат';
   item.title=name; item.studyGroup=name; item.scheduleGroup=name;
   item.starostaId=STUDY_GROUP_STAROSTAS[name];
@@ -435,7 +464,11 @@ function ensureStudyGroups(chat) {
   item.activeAttendanceLessons ||= {}; item.announcements ||= [];
   item.calendarEvents ||= []; item.homework ||= [];
  }
- if (needsSave) saveDb();
+ chat._institutionMigrationV1=true;
+ if (needsSave) {
+  saveDb();
+  console.log('[institutions] Existing study groups assigned to institution:', institutionId);
+ }
  return names.map(name=>chat.studyGroups[name]);
 }
 function allStudyGroups() { return Object.values(db.groups).flatMap(chat=>ensureStudyGroups(chat)); }
