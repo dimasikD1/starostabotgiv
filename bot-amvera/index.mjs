@@ -298,7 +298,7 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
   }
   saveDb();
   await ctx.answerCbQuery('Группа сохранена');
-  await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.');
+  await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.');
 });
 
 const managerMenu = Markup.keyboard([
@@ -656,8 +656,8 @@ async function checkAutomaticAttendancePolls() {
           db.sentLessonNotices ||= {};
           if (currentMinutes >= startMinutes - 30 && currentMinutes <= startMinutes - 29 && !db.sentLessonNotices[key]) {
             await bot.telegram.sendMessage(g.chatId,
-              '⏰ <b>Напоминание о занятии</b>\\n\\nЧерез 30 минут начинается: <b>' + escapeHtml(lesson.subject) +
-              '</b>\\n🕒 Начало: ' + lesson.timeStart + (lesson.room ? '\\n🚪 Аудитория: ' + escapeHtml(lesson.room) : ''),
+              '⏰ <b>Напоминание о занятии</b>\n\nЧерез 30 минут начинается: <b>' + escapeHtml(lesson.subject) +
+              '</b>\n🕒 Начало: ' + lesson.timeStart + (lesson.room ? '\n🚪 Аудитория: ' + escapeHtml(lesson.room) : ''),
               { parse_mode: 'HTML' }
             );
             db.sentLessonNotices[key] = new Date().toISOString();
@@ -667,7 +667,7 @@ async function checkAutomaticAttendancePolls() {
           if (db.sentAttendancePolls[key]) continue;
           const sent = await bot.telegram.sendPoll(
             g.chatId,
-            '📋 Посещаемость: ' + lesson.subject + '\\nПара начинается в ' + lesson.timeStart + '. Ты будешь присутствовать?',
+            '📋 Посещаемость: ' + lesson.subject + '\nПара начинается в ' + lesson.timeStart + '. Ты будешь присутствовать?',
             ['✅ Буду', '❌ Не буду'],
             { is_anonymous: false, allows_multiple_answers: false }
           );
@@ -763,7 +763,7 @@ async function checkWeeklySchedules() {
       try {
         const built = await buildWeeklyScheduleText(range);
         let message = escapeHtml(built.text);
-        if (message.length > 3900) message = message.slice(0, 3850) + '\\n\\n… расписание сокращено.';
+        if (message.length > 3900) message = message.slice(0, 3850) + '\n\n… расписание сокращено.';
         const sent = await bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
         try {
           await bot.telegram.pinChatMessage(chatId, sent.message_id, { disable_notification: true });
@@ -1030,7 +1030,7 @@ bot.command('grant', async ctx => {
   const forever = ['forever', 'lifetime', 'навсегда', 'пожизненно'].includes((args[1] || '').toLowerCase());
   const days = args[1] === undefined ? SUBSCRIPTION_DAYS : Number(args[1]);
   if (!targetId || !/^\d+$/.test(targetId) || (!forever && (!Number.isSafeInteger(days) || days < 1 || days > 3650))) {
-    return ctx.reply('Формат: /grant TELEGRAM_ID [дней|навсегда]\\nПримеры: /grant 123456789 30 или /grant 123456789 навсегда\\nID пользователь узнаёт командой /myid.');
+    return ctx.reply('Формат: /grant TELEGRAM_ID [дней|навсегда]\nПримеры: /grant 123456789 30 или /grant 123456789 навсегда\nID пользователь узнаёт командой /myid.');
   }
   if (isOwner(targetId)) return ctx.reply('У владельца уже есть бесплатный доступ.');
   const target = normalizeUser(user(targetId));
@@ -1051,9 +1051,9 @@ bot.command('grant', async ctx => {
   const until = forever ? '' : new Date(target.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' });
   await ctx.reply(forever
     ? '♾ Пожизненная подписка выдана пользователю <code>' + targetId + '</code>.'
-    : '✅ Подписка выдана пользователю <code>' + targetId + '</code> на ' + days + ' дн.\\nДействует до: <b>' + until + ' МСК</b>.', { parse_mode: 'HTML' });
+    : '✅ Подписка выдана пользователю <code>' + targetId + '</code> на ' + days + ' дн.\nДействует до: <b>' + until + ' МСК</b>.', { parse_mode: 'HTML' });
   try {
-    await ctx.telegram.sendMessage(Number(targetId), forever ? '🎉 Тебе выдана пожизненная подписка!' : '🎉 Тебе выдана подписка на ' + days + ' дн.\\nДействует до: ' + until + ' МСК.');
+    await ctx.telegram.sendMessage(Number(targetId), forever ? '🎉 Тебе выдана пожизненная подписка!' : '🎉 Тебе выдана подписка на ' + days + ' дн.\nДействует до: ' + until + ' МСК.');
   } catch {
     await ctx.reply('ℹ️ Не удалось отправить уведомление. Пользователь должен сначала открыть бота и нажать /start.');
   }
@@ -1089,7 +1089,7 @@ bot.command('subinfo', ctx => {
   const target = normalizeUser(user(targetId));
   const active = hasActiveSubscription(target);
   const until = target.subscriptionForever ? 'бессрочно' : active ? new Date(subscriptionUntil(target)).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) + ' МСК' : 'не активна';
-  return ctx.reply('Пользователь: <code>' + targetId + '</code>\\nПодписка: <b>' + (active ? 'активна' : 'не активна') + '</b>\\nДействует до: ' + until, { parse_mode: 'HTML' });
+  return ctx.reply('Пользователь: <code>' + targetId + '</code>\nПодписка: <b>' + (active ? 'активна' : 'не активна') + '</b>\nДействует до: ' + until, { parse_mode: 'HTML' });
 });
 
 // Личная статистика доступна только владельцу в личном чате.
@@ -1133,14 +1133,14 @@ bot.command('stats', ctx => {
 });
 
 bot.command('terms', ctx => ctx.reply(
-  '📄 <b>Условия использования</b>\\n\\n' +
+  '📄 <b>Условия использования</b>\n\n' +
   'Подписка предоставляет доступ к функциям бота на оплаченный период. ' +
   'Оплата производится в Telegram Stars. Возвраты и вопросы по оплате рассматриваются через /paysupport.',
   { parse_mode: 'HTML' }
 ));
 
 bot.command('paysupport', ctx => ctx.reply(
-  '🆘 <b>Поддержка по оплате</b>\\n\\n' +
+  '🆘 <b>Поддержка по оплате</b>\n\n' +
   'Если оплата прошла, но доступ не появился, отправь сюда скриншот платежа и свой Telegram ID.',
   { parse_mode: 'HTML' }
 ));
@@ -1215,11 +1215,11 @@ bot.command('pollreport', async ctx => {
   const no = answers.filter(x => x.status === 'absent');
   const names = answers.map(x => (x.firstName || 'Студент') + (x.username ? ' (@' + x.username + ')' : '') + (x.status === 'present' ? ' — ✅ Будет' : x.status === 'absent' ? ' — ❌ Не будет' : ''));
   return ctx.reply(
-    '📊 <b>Ответы на последний опрос</b>\\n👥 ' + escapeHtml(g.title) +
-    '\\n📚 ' + escapeHtml(latest.subject) + '\\n📅 ' + latest.date + ' в ' + latest.time +
-    '\\n\\n✅ Будут: <b>' + yes.length + '</b>\\n❌ Не будут: <b>' + no.length +
-    '</b>\\n▫️ Не ответили: <b>' + Math.max(0, (g.students || []).length - answers.length) +
-    '</b>\\n\\n' + (names.length ? names.map(escapeHtml).join('\\n') : 'Ответов пока нет.'),
+    '📊 <b>Ответы на последний опрос</b>\n👥 ' + escapeHtml(g.title) +
+    '\n📚 ' + escapeHtml(latest.subject) + '\n📅 ' + latest.date + ' в ' + latest.time +
+    '\n\n✅ Будут: <b>' + yes.length + '</b>\n❌ Не будут: <b>' + no.length +
+    '</b>\n▫️ Не ответили: <b>' + Math.max(0, (g.students || []).length - answers.length) +
+    '</b>\n\n' + (names.length ? names.map(escapeHtml).join('\n') : 'Ответов пока нет.'),
     { parse_mode: 'HTML' }
   );
 });
@@ -1278,10 +1278,10 @@ bot.on('successful_payment', async ctx => {
   saveDb();
 
   await ctx.reply(
-    '🎉 <b>Подписка активирована!</b>\\n\\n' +
+    '🎉 <b>Подписка активирована!</b>\n\n' +
     'Доступ действует до: <b>' +
     new Date(u.subscriptionUntil).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', dateStyle: 'medium', timeStyle: 'short' }) +
-    ' МСК</b>.\\n\\n' +
+    ' МСК</b>.\n\n' +
     'Теперь можешь пользоваться ботом.',
     { parse_mode: 'HTML', ...menuFor(ctx) }
   );
@@ -1318,21 +1318,21 @@ bot.start(async ctx => {
 });
 
 bot.help(ctx => ctx.reply(
-  '📚 <b>Команды Староста Бота</b>\\n\\n' +
-  '📅 <b>Расписание</b>\\n' +
-  '/group НАЗВАНИЕ — сохранить учебную группу\\n' +
-  '/schedule — сегодня\\n/tomorrow — завтра\\n/week — неделя\\n\\n' +
-  '👨‍🎓 <b>Студенты и посещаемость</b>\\n' +
-  '/role — посмотреть роль\\n/students — список студентов\\n/student ИМЯ — добавить вручную\\n' +
-  '/delstudent НОМЕР — удалить из списка\\n/attendance — журнал (староста)\\n' +
-  '/mark НОМЕР present|absent — отметить вручную\\n\\n' +
-  '📢 <b>Для группы</b>\\n' +
-  '/poll Вопрос | Вариант 1 | Вариант 2 — создать опрос\\n' +
-  '/hw Предмет | Задание — отправить домашнее задание\\n' +
-  '/groups — прикреплённые группы\\n' +
-  '/myid — узнать свой Telegram ID\\n' +
-  (isOwner(ctx.from.id) ? '\\n👑 <b>Панель владельца</b>\\n/admin — все команды владельца\\n/stats — статистика\\n/grant ID [дней|навсегда] — выдать подписку\\n/revoke ID — отозвать подписку\\n/subinfo ID — проверить подписку\\n/setsubgroup — назначить группу с пожизненным доступом (в группе)\\n/attach и /detach — прикрепить/открепить группу (в группе)\\n' : '') +
-  '\\n💛 /donate — добровольно поддержать оплату нового хостинга',
+  '📚 <b>Команды Староста Бота</b>\n\n' +
+  '📅 <b>Расписание</b>\n' +
+  '/group НАЗВАНИЕ — сохранить учебную группу\n' +
+  '/schedule — сегодня\n/tomorrow — завтра\n/week — неделя\n\n' +
+  '👨‍🎓 <b>Студенты и посещаемость</b>\n' +
+  '/role — посмотреть роль\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
+  '/delstudent НОМЕР — удалить из списка\n/attendance — журнал (староста)\n' +
+  '/mark НОМЕР present|absent — отметить вручную\n\n' +
+  '📢 <b>Для группы</b>\n' +
+  '/poll Вопрос | Вариант 1 | Вариант 2 — создать опрос\n' +
+  '/hw Предмет | Задание — отправить домашнее задание\n' +
+  '/groups — прикреплённые группы\n' +
+  '/myid — узнать свой Telegram ID\n' +
+  (isOwner(ctx.from.id) ? '\n👑 <b>Панель владельца</b>\n/admin — все команды владельца\n/stats — статистика\n/grant ID [дней|навсегда] — выдать подписку\n/revoke ID — отозвать подписку\n/subinfo ID — проверить подписку\n/setsubgroup — назначить группу с пожизненным доступом (в группе)\n/attach и /detach — прикрепить/открепить группу (в группе)\n' : '') +
+  '\n💛 /donate — добровольно поддержать оплату нового хостинга',
   { parse_mode: 'HTML', ...menuFor(ctx) }
 ));
 
@@ -1415,7 +1415,7 @@ bot.command('setgroup', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Команду нужно выполнить в учебной группе Telegram.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Указать учебную группу может только администратор чата.');
   const scheduleGroup = (ctx.message.text || '').trim().split(' ').filter(Boolean).slice(1).join(' ');
-  if (!scheduleGroup) return ctx.reply('Формат: /setgroup ИСП-21\\nУкажи точное название группы из расписания.');
+  if (!scheduleGroup) return ctx.reply('Формат: /setgroup ИСП-21\nУкажи точное название группы из расписания.');
   registerGroup(ctx);
   const selected=ensureStudyGroups(db.groups[String(ctx.chat.id)]).find(g=>g.studyGroup===scheduleGroup);
   if(!selected)return ctx.reply('❌ Укажи одну из двух учебных групп: '+Object.values(STUDY_GROUPS).join(' или ')+'.');
@@ -1499,7 +1499,7 @@ bot.action('studentimport:confirm', async ctx => {
   delete u.pendingStudentImportReview;
   saveDb();
   await ctx.answerCbQuery('Список сохранён!');
-  const result='✅ <b>Список студентов создан!</b>\\n\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Студентов: <b>'+g.students.length+'</b>\\n\\nОткрыть список: /students\\nПосещаемость: /attendance';
+  const result='✅ <b>Список студентов создан!</b>\n\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\n👨‍🎓 Студентов: <b>'+g.students.length+'</b>\n\nОткрыть список: /students\nПосещаемость: /attendance';
   try { await ctx.editMessageText(result,{parse_mode:'HTML'}); }
   catch(e) { console.error('[student import confirm edit]',e.message||e); await ctx.reply(result,{parse_mode:'HTML'}); }
  } catch(e) {
@@ -1528,8 +1528,8 @@ bot.on('text', async (ctx,next) => {
   const names=parseStudentNames(raw);
   if(!names.length)return ctx.reply('Не удалось распознать ФИО. Ответь на сообщение бота списком: по одному ФИО на строку.');
   u.pendingStudentImport=false;u.pendingStudentImportReview=names;saveDb();
-  const preview=names.map((name,i)=>(i+1)+'. '+escapeHtml(name)).join('\\n');
-  return ctx.reply('📝 <b>Проверь список студентов</b>\\n👥 Группа: <b>'+escapeHtml(group.title)+'</b>\\n👨‍🎓 Найдено: <b>'+names.length+'</b>\\n\\n'+preview+'\\n\\nПосле подтверждения текущий список группы будет заменён.',{parse_mode:'HTML',...importPreviewKeyboard()});
+  const preview=names.map((name,i)=>(i+1)+'. '+escapeHtml(name)).join('\n');
+  return ctx.reply('📝 <b>Проверь список студентов</b>\n👥 Группа: <b>'+escapeHtml(group.title)+'</b>\n👨‍🎓 Найдено: <b>'+names.length+'</b>\n\n'+preview+'\n\nПосле подтверждения текущий список группы будет заменён.',{parse_mode:'HTML',...importPreviewKeyboard()});
  }
  if(!isPrivate(ctx))return next();
  if (u.pendingFullName && !raw.startsWith('/')) {
@@ -1544,7 +1544,7 @@ bot.on('text', async (ctx,next) => {
   saveDb();
   if (verificationChatId) {
    return ctx.reply(
-    '✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>\\n\\nТеперь выбери свою учебную группу:',
+    '✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>\n\nТеперь выбери свою учебную группу:',
     { parse_mode: 'HTML', ...Markup.inlineKeyboard([
       [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
       [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')]
@@ -1579,10 +1579,10 @@ bot.on('text', async (ctx,next) => {
  const g=managedGroup(ctx.from.id);
  if(!g){delete u.pendingStudentImport;saveDb();return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');}
  const names=parseStudentNames(raw);
- if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\\nИванов Иван Иванович\\nПетров Пётр Сергеевич');
+ if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\nИванов Иван Иванович\nПетров Пётр Сергеевич');
  u.pendingStudentImportReview=names;u.pendingStudentImport=false;saveDb();
- const preview=names.map(name=>escapeHtml(name)).join('\\n');
- return ctx.reply('📝 <b>Проверь список студентов</b>\\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Найдено: <b>'+names.length+'</b>\\n\\n'+preview+'\\n\\nПосле подтверждения текущий список группы будет заменён этим списком.',{parse_mode:'HTML',...importPreviewKeyboard()});
+ const preview=names.map(name=>escapeHtml(name)).join('\n');
+ return ctx.reply('📝 <b>Проверь список студентов</b>\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\n👨‍🎓 Найдено: <b>'+names.length+'</b>\n\n'+preview+'\n\nПосле подтверждения текущий список группы будет заменён этим списком.',{parse_mode:'HTML',...importPreviewKeyboard()});
 });
 
 function studentListKeyboard(g,page=0){
@@ -1605,7 +1605,7 @@ function studentCardText(g,i){
  const username=typeof s==='object'&&s?.username?'@'+String(s.username).replace(/^@/,''):'не указан';
  const phone=typeof s==='object'&&s?.phone?String(s.phone):'не указан';
  const id=typeof s==='object'&&s?.telegramId?String(s.telegramId):'не указан';
- return '👤 <b>'+escapeHtml(name)+'</b>\\n\\n🔹 Username: '+escapeHtml(username)+'\\n📞 Телефон: <code>'+escapeHtml(phone)+'</code>\\n🆔 Telegram ID: <code>'+escapeHtml(id)+'</code>';
+ return '👤 <b>'+escapeHtml(name)+'</b>\n\n🔹 Username: '+escapeHtml(username)+'\n📞 Телефон: <code>'+escapeHtml(phone)+'</code>\n🆔 Telegram ID: <code>'+escapeHtml(id)+'</code>';
 }
 function studentCardKeyboard(i){
  return Markup.inlineKeyboard([
@@ -1615,7 +1615,7 @@ function studentCardKeyboard(i){
  ]);
 }
 function formatStudentList(g) {
- return '👥 <b>'+escapeHtml(g.title)+'</b>\\n👨‍🎓 Всего студентов: <b>'+(g.students||[]).length+'</b>\\n\\nНажми на студента, чтобы открыть карточку и изменить контакты.';
+ return '👥 <b>'+escapeHtml(g.title)+'</b>\n👨‍🎓 Всего студентов: <b>'+(g.students||[]).length+'</b>\n\nНажми на студента, чтобы открыть карточку и изменить контакты.';
 }
 bot.command('students',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
@@ -1680,7 +1680,7 @@ bot.command('zam', async ctx => {
   if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначить заместителя может владелец бота или администратор группы.');
   const args=String(ctx.message.text||'').trim().split(' ').filter(Boolean).slice(1);
   const groupNumber=args[0];
-  if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи номер учебной группы и ответь на сообщение будущего заместителя:\\n/zam 1 — заместитель 1 группы\\n/zam 2 — заместитель 2 группы');
+  if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи номер учебной группы и ответь на сообщение будущего заместителя:\n/zam 1 — заместитель 1 группы\n/zam 2 — заместитель 2 группы');
   const target = ctx.message.reply_to_message?.from || ctx.from;
   const groupName=STUDY_GROUPS[groupNumber];
   const chat=db.groups[String(ctx.chat.id)];
@@ -1736,7 +1736,7 @@ bot.command('setstudent', async ctx => {
 bot.command('app', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Открой личный чат с ботом и отправь /app.');
   if (!WEBAPP_URL) return ctx.reply('⚙️ Веб-кабинет почти готов. Владельцу нужно указать публичный HTTPS-адрес в переменной WEBAPP_URL в настройках Amvera.');
-  return ctx.reply('🖥️ <b>Кабинет старосты</b>\\nОткрой мини-приложение, чтобы управлять посещаемостью и смотреть группу.', {
+  return ctx.reply('🖥️ <b>Кабинет старосты</b>\nОткрой мини-приложение, чтобы управлять посещаемостью и смотреть группу.', {
     parse_mode:'HTML',
     ...Markup.inlineKeyboard([[Markup.button.webApp('🚀 Открыть кабинет', WEBAPP_URL)]])
   });
@@ -1765,7 +1765,7 @@ bot.command('attendanceweb', async ctx => {
  u.pendingAttendanceHtml = true;
  saveDb();
  return ctx.reply(
-  '📄 <b>Сформировать файл посещаемости?</b>\\n\\nБот отправит HTML-файл со всеми сохранёнными датами и отметками только в этот личный чат. Файл не будет опубликован в интернете. Убедись, что имеешь право хранить и использовать данные студентов.',
+  '📄 <b>Сформировать файл посещаемости?</b>\n\nБот отправит HTML-файл со всеми сохранёнными датами и отметками только в этот личный чат. Файл не будет опубликован в интернете. Убедись, что имеешь право хранить и использовать данные студентов.',
   { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('✅ Создать HTML-файл', 'attendanceweb:confirm')], [Markup.button.callback('❌ Отмена', 'attendanceweb:cancel')]]) }
  );
 });
@@ -1829,11 +1829,11 @@ bot.command('hw', startHomework);
 bot.command('homework', startHomework);
 function homeworkMessage(records,userId,ctx) {
   const keyboard=[];
-  const text='📚 <b>Домашние задания</b>\\n\\n'+records.map((h,i)=>{
+  const text='📚 <b>Домашние задания</b>\n\n'+records.map((h,i)=>{
     const done=Boolean(h.completedBy?.[String(userId)]);
     if(h.id&&!done)keyboard.push([Markup.button.callback('✅ Выполнено: '+String(h.subject||'ДЗ').slice(0,35),'hwcomplete:'+h.id)]);
-    return (i+1)+'. <b>'+escapeHtml(h.subject)+'</b> — '+escapeHtml(h.groupTitle)+'\\n'+escapeHtml(h.homework)+'\\n'+escapeHtml(h.createdAt||'')+'\\n'+(done?'✅ Выполнение отмечено':'▫️ Ещё не отмечено');
-  }).join('\\n\\n');
+    return (i+1)+'. <b>'+escapeHtml(h.subject)+'</b> — '+escapeHtml(h.groupTitle)+'\n'+escapeHtml(h.homework)+'\n'+escapeHtml(h.createdAt||'')+'\n'+(done?'✅ Выполнение отмечено':'▫️ Ещё не отмечено');
+  }).join('\n\n');
   return {text,extra:{parse_mode:'HTML',...(keyboard.length?Markup.inlineKeyboard(keyboard):{})}};
 }
 async function sendHomeworkAttachments(ctx, records) {
@@ -1907,7 +1907,7 @@ bot.action(/^studentedit:(username|phone):(\d+)$/,async ctx=>{
  const type=ctx.match[1],i=Number(ctx.match[2]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
  const u=normalizeUser(user(ctx.from.id));u.pendingStudentField={type,index:i};saveDb();
  await ctx.answerCbQuery();
- return ctx.reply(type==='username'?'✏️ Отправь username студента (например, @username). Чтобы очистить — отправь прочерк.':'📞 Отправь номер телефона в международном формате (например, +37255555555). Чтобы очистить — отправь прочерк.\\nУказывай номер только если студент сам согласился его передать.\\nДля отмены: /cancel');
+ return ctx.reply(type==='username'?'✏️ Отправь username студента (например, @username). Чтобы очистить — отправь прочерк.':'📞 Отправь номер телефона в международном формате (например, +37255555555). Чтобы очистить — отправь прочерк.\nУказывай номер только если студент сам согласился его передать.\nДля отмены: /cancel');
 });
 bot.action('studentback',async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery();
@@ -1922,7 +1922,7 @@ bot.action(/^studentpage:(\d+)$/,async ctx=>{
 bot.action(/^attstudent:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');await ctx.answerCbQuery('Выбери статус');
- await ctx.editMessageText('📋 <b>'+escapeHtml(g.title)+'</b>\\n\\n'+escapeHtml(studentName(g.students[i])),{parse_mode:'HTML',...attendanceStatusButtons(i)});
+ await ctx.editMessageText('📋 <b>'+escapeHtml(g.title)+'</b>\n\n'+escapeHtml(studentName(g.students[i])),{parse_mode:'HTML',...attendanceStatusButtons(i)});
 });
 bot.action(/^attlesson:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
@@ -2404,7 +2404,7 @@ async function handleMiniAppApi(req,res,url) {
       saveDb();
       if (g.chatId) {
         const typeLabels={exam:'Экзамен',test:'Зачёт',control:'Контрольная',event:'Мероприятие',other:'Событие'};
-        const notice='📌 <b>Добавлено событие в календарь</b>\\n\\n<b>'+escapeHtml(event.title)+'</b>\\n📅 '+escapeHtml(event.date)+(event.time?' · '+escapeHtml(event.time):'')+'\\n'+(typeLabels[event.type]||'Событие')+(event.description?'\\n'+escapeHtml(event.description):'');
+        const notice='📌 <b>Добавлено событие в календарь</b>\n\n<b>'+escapeHtml(event.title)+'</b>\n📅 '+escapeHtml(event.date)+(event.time?' · '+escapeHtml(event.time):'')+'\n'+(typeLabels[event.type]||'Событие')+(event.description?'\n'+escapeHtml(event.description):'');
         try { await bot.telegram.sendMessage(g.chatId,notice,{parse_mode:'HTML'}); }
         catch(e) { console.error('[calendar event notify]',e?.message||e); }
       }
@@ -2526,10 +2526,10 @@ async function main() {
   // Отправляем список изменений и уведомление о перезапуске всем владельцам.
   if (OWNER_TELEGRAM_IDS.length && db.lastNotifiedRelease !== BOT_RELEASE_VERSION) {
     const releaseMessage =
-      '🚀 <b>Староста Бот обновлён</b>\\n' +
-      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\\n\\n' +
-      '<b>Что нового:</b>\\n' +
-      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\\n');
+      '🚀 <b>Староста Бот обновлён</b>\n' +
+      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\n\n' +
+      '<b>Что нового:</b>\n' +
+      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\n');
     let releaseSent = false;
     for (const ownerId of OWNER_TELEGRAM_IDS) {
       try {
@@ -2550,7 +2550,7 @@ async function main() {
     try {
       await bot.telegram.sendMessage(
         ownerId,
-        '🔄 <b>Староста Бот перезапущен</b>\\nБот снова работает и готов принимать команды.',
+        '🔄 <b>Староста Бот перезапущен</b>\nБот снова работает и готов принимать команды.',
         { parse_mode: 'HTML' }
       );
       console.log('[startup] Уведомление о перезапуске отправлено владельцу: ' + ownerId);
