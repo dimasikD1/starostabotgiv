@@ -1480,7 +1480,7 @@ bot.on('photo', async (ctx, next) => {
   if (!inPrivateImport && !inGroupImport) return next();
   if (inGroupImport) {
     const group = db.groups[String(ctx.chat.id)];
-    if (!group || (!isOwner(ctx.from.id) && String(group.starostaId || '') !== String(ctx.from.id) && String(group.zamId || '') !== String(ctx.from.id))) {
+    if (!group || (!isOwner(ctx.from.id) && !isInstitutionAdmin(ctx.from.id, group.institutionId) && String(group.starostaId || '') !== String(ctx.from.id) && String(group.zamId || '') !== String(ctx.from.id))) {
       return ctx.reply('❌ Нет прав импортировать список в эту группу.');
     }
   }
@@ -1497,7 +1497,7 @@ bot.command('importstudents',async ctx=>{
  if(!['group','supergroup'].includes(ctx.chat.type))return;
  const group=db.groups[String(ctx.chat.id)];
  if(!group)return ctx.reply('Сначала прикрепи эту группу командой /attach.');
- if(!isOwner(ctx.from.id)&&String(group.starostaId||'')!==String(ctx.from.id)&&String(group.zamId||'')!==String(ctx.from.id))
+ if(!isOwner(ctx.from.id)&&!isInstitutionAdmin(ctx.from.id,group.institutionId)&&String(group.starostaId||'')!==String(ctx.from.id)&&String(group.zamId||'')!==String(ctx.from.id))
   return ctx.reply('❌ Импортировать список может только староста или заместитель этой группы.');
  u.pendingStudentImport=true;u.pendingStudentImportChatId=String(ctx.chat.id);delete u.pendingStudentImportReview;saveDb();
  return ctx.reply('📋 Отправь список ФИО ответом на это сообщение (по одному человеку на строку) или прикрепи фото списка ответом на это сообщение. Для отмены: /cancel.');
@@ -1518,7 +1518,7 @@ bot.action('studentimport:confirm', async ctx => {
   const list=u.pendingStudentImportReview;
   if(!Array.isArray(list)||!list.length){await ctx.answerCbQuery('Список не найден. Начни импорт заново: /importstudents');return;}
   const g=groupId ? db.groups[groupId] : managedGroup(ctx.from.id);
-  if(groupId && g && !isOwner(ctx.from.id) && String(g.starostaId||'')!==String(ctx.from.id) && String(g.zamId||'')!==String(ctx.from.id)) { await ctx.answerCbQuery('Нет прав для подтверждения.'); return; }
+  if(groupId && g && !isOwner(ctx.from.id) && !isInstitutionAdmin(ctx.from.id,g.institutionId) && String(g.starostaId||'')!==String(ctx.from.id) && String(g.zamId||'')!==String(ctx.from.id)) { await ctx.answerCbQuery('Нет прав для подтверждения.'); return; }
   if(!g){await ctx.answerCbQuery('Группа не найдена.');return;}
   g.students=list.slice(0,100);
   g.attendance||={};
