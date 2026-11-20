@@ -1746,12 +1746,12 @@ bot.hears('👨‍🎓 Список студентов', ctx => ctx.reply('Ис�
 
 async function showRole(ctx) {
   if (!isPrivate(ctx)) return ctx.reply('📩 Роли учебных групп проверяются в личных сообщениях.');
-  const value = (ctx.message?.text || '').replace(/^\\/(?:role|roles)(?:@\\S+)?/i, '').trim().toLowerCase();
+  const value = String(ctx.message?.text || '').trim().split(/\s+/).slice(1).join(' ').toLowerCase();
   const id=String(ctx.from.id);
   const assignments=allStudyGroups().filter(g=>String(g.starostaId||'')===id||String(g.zamId||'')===id);
   if (!value) {
     const lines=assignments.map(g=>'• '+(String(g.starostaId||'')===id?'👑 Староста':'⭐ Заместитель')+' — '+escapeHtml(g.studyGroup)+' ('+escapeHtml(db.institutions?.[String(g.institutionId||'')]?.name||g.institutionId||'учебное заведение')+')');
-    return ctx.reply(lines.length?'👤 <b>Твои назначения</b>\\n\\n'+lines.join('\\n'):'👨‍🎓 У тебя нет назначенных управленческих ролей.\\n\\nНазначение выполняет администратор соответствующей учебной группы.',{parse_mode:'HTML'});
+    return ctx.reply(lines.length?'👤 <b>Твои назначения</b>\n\n'+lines.join('\n'):'👨‍🎓 У тебя нет назначенных управленческих ролей.\n\nНазначение выполняет администратор соответствующей учебной группы.',{parse_mode:'HTML'});
   }
   if (value !== 'student') return ctx.reply('❌ Управленческую роль назначает администратор конкретной учебной группы.');
   for(const g of allStudyGroups()) {
@@ -1762,7 +1762,6 @@ async function showRole(ctx) {
   saveDb();
   await ctx.reply('✅ Ты снял(а) с себя все назначения старосты и заместителя.',menuFor(ctx));
 }
-
 bot.command('role', showRole);
 bot.command('roles', showRole);
 
