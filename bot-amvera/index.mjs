@@ -2208,6 +2208,52 @@ bot.command('addcourse', async ctx => {
   return ctx.reply('✅ Курс добавлен.\n\n📚 ' + escapeHtml(direction.name) + '\n🎓 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
 });
 
+bot.command('linkgroup', async ctx => {
+  if (!ctx.chat || ctx.chat.type === 'private') return ctx.reply('📌 Команду используй в общем чате, где добавлен бот.');
+  const args = structureParts(ctx, 'linkgroup');
+  const groupNumber = String(args[0] || '').trim();
+  const courseId = String(args[1] || '').trim();
+  if (!['1', '2'].includes(groupNumber) || !courseId) {
+    return ctx.reply('Формат: /linkgroup 1 | ID_КУРСА\nДля второй группы укажи /linkgroup 2 | ID_КУРСА. ID курса смотри через /structure inst_001 в личке с ботом.');
+  }
+  const groupName = STUDY_GROUPS[groupNumber];
+  const chat = db.groups?.[String(ctx.chat.id)];
+  if (!chat) return ctx.reply('❌ Этот чат ещё не зарегистрирован. Сначала добавь бота в учебный чат и пройди настройку.');
+  const studyGroup = ensureStudyGroups(chat).find(g => g.studyGroup === groupName);
+  if (!studyGroup) return ctx.reply('❌ Учебная группа не найдена в этом чате.');
+  if (!canManageGroup(ctx.from.id, studyGroup)) return ctx.reply('❌ Нет прав на изменение структуры этой учебной группы.');
+  const institution = db.institutions?.[String(studyGroup.institutionId || DEFAULT_INSTITUTION_ID)];
+  const course = Object.values(institution?.faculties || {}).flatMap(f =>
+    Object.values(f.directions || {}).flatMap(d =>
+      Object.values(d.courses || {}).map(c => ({ faculty: f, direction: d, course: c }))
+    )
+  ).find(x => String(x.course.id) === courseId);
+  if (!course) return ctx.reply('❌ Курс не найден в структуре учебного заведения этой группы. Проверь /structure.');
+  const linkId = String(studyGroup.chatId) + '::' + String(studyGroup.studyGroup);
+  course.course.groups ||= {};
+  // Store a reference and display metadata; all live student/attendance data stays on the original studyGroup object.
+  course.course.groups[linkId] = {
+    id: linkId,
+    name: studyGroup.studyGroup,
+    studyGroup: studyGroup.studyGroup,
+    chatId: String(studyGroup.chatId),
+    institutionId: String(studyGroup.institutionId),
+    facultyId: String(course.faculty.id),
+    directionId: String(course.direction.id),
+    courseId: String(course.course.id),
+    linkedAt: new Date().toISOString()
+  };
+  studyGroup.facultyId = String(course.faculty.id);
+  studyGroup.directionId = String(course.direction.id);
+  studyGroup.courseId = String(course.course.id);
+  saveDb();
+  console.log('[institution-structure] Study group linked:', linkId, 'course:', courseId);
+  return ctx.reply('✅ Учебная группа привязана к структуре.\n\n🎓 ' + escapeHtml(course.faculty.name) +
+    '\n📚 ' + escapeHtml(course.direction.name) + '\n🧑‍🎓 ' + escapeHtml(course.course.name) +
+    '\n👥 ' + escapeHtml(studyGroup.studyGroup) +
+    '\n\nСуществующие студенты, посещаемость, расписание и роли сохранены.', { parse_mode: 'HTML' });
+});
+
 bot.command('structure', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Структура доступна в личке с ботом.');
   const institutionId = String(ctx.message?.text || '').replace(/^\/structure(?:@\S+)?/i, '').trim();
