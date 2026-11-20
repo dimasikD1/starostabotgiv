@@ -519,7 +519,7 @@ function ensureStudyGroups(chat) {
  }
  for (const name of names) {
   const item=chat.studyGroups[name] ||= {};
-  if (!item.institutionId) item.institutionId=institutionId;
+  item.institutionId=institutionId; // The parent Telegram chat is the source of truth for tenant ownership.
   item.chatId=chat.chatId; item.chatTitle=chat.title || 'Общий чат';
   item.title=name; item.studyGroup=name; item.scheduleGroup=name;
   if (!item._roleAssignmentsInitialized) {
