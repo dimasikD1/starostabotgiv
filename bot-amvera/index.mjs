@@ -523,6 +523,14 @@ function ensureStudyGroups(chat) {
   item.activeAttendanceLessons ||= {}; item.announcements ||= [];
   item.calendarEvents ||= []; item.homework ||= [];
  }
+ // Migrate the former chat-wide /starosta appointment to the first legacy cohort once.
+ if (!chat._groupRoleScopeV1 && chat.starostaId) {
+  const first=chat.studyGroups[names[0]];
+  if (first && (!first.starostaId || String(first.starostaId)===String(STUDY_GROUP_STAROSTAS[names[0]]))) {
+   first.starostaId=String(chat.starostaId);
+   first._roleAssignmentsInitialized=true;
+  }
+ }
  chat._institutionMigrationV1=true;
  chat._groupRoleScopeV1=true;
  if (needsSave) {
@@ -541,11 +549,12 @@ function managedStudyGroups(userId) {
  return allStudyGroups().filter(g=>canManageGroup(userId,g));
 }
 function canManageChat(userId,chatId) {
- return allStudyGroups().some(g=>String(g.chatId)===String(chatId)&&canManageGroup(userId,g));
+ const groups=allStudyGroups().filter(g=>String(g.chatId)===String(chatId));
+ // Telegram messages and the legacy chat-level roster affect every cohort in that chat.
+ return groups.length>0 && groups.every(g=>canManageGroup(userId,g));
 }
 function managedChats(userId) {
- const allowed=new Set(managedStudyGroups(userId).map(g=>String(g.chatId)));
- return Object.values(db.groups).filter(chat=>allowed.has(String(chat.chatId)));
+ return Object.values(db.groups).filter(chat=>canManageChat(userId,chat.chatId));
 }
 function studyGroupForUser(chatId,userId) {
  const chat=db.groups[String(chatId)]; if(!chat)return null;
@@ -1052,6 +1061,7 @@ async function startHomework(ctx) {
   if (subject.length > 100) return ctx.reply('❌ Название предмета слишком длинное.');
   if (homework.length > 3500) return ctx.reply('❌ Текст ДЗ слишком длинный (максимум 3500 символов).');
 
+  if (!managedChats(ctx.from.id).length) return ctx.reply('❌ В этом Telegram-чате несколько учебных групп. Для общей публикации нужны права на все группы чата.');
   const u = user(ctx.from.id);
   u.pendingHomework = { subject, homework };
   saveDb();
@@ -1088,6 +1098,7 @@ async function startPoll(ctx) {
   if (options.some(x => x.length > 100)) return ctx.reply('❌ Один из вариантов длиннее 100 символов.');
   if (options.length < 2) return ctx.reply('❌ Нужно минимум два варианта ответа.');
 
+  if (!managedChats(ctx.from.id).length) return ctx.reply('❌ В этом Telegram-чате несколько учебных групп. Для общей публикации нужны права на все группы чата.');
   const u = user(ctx.from.id);
   u.pendingPoll = { question, options };
   saveDb();
@@ -1806,13 +1817,8 @@ bot.command('setstarosta', async ctx => {
 
 bot.command('appointstarosta', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях боту.');
-  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу бота.');
-  const targetId = (ctx.message.text || '').replace(/^\/appointstarosta(?:@\S+)?/i, '').trim().split(/\s+/)[0];
-  if (!/^\d+$/.test(targetId || '')) return ctx.reply('Формат: /appointstarosta TELEGRAM_ID\nНапример: /appointstarosta 123456789');
-  const target = normalizeUser(user(Number(targetId)));
-  target.role = 'starosta';
-  saveDb();
-  await ctx.reply('👑 Пользователь ' + targetId + ' назначен старостой. Для доступа к личному журналу он должен открыть бота и отправить /start.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу платформы.');
+  return ctx.reply('Назначение без конкретной группы отключено. Используй /setstarosta 1 или /setstarosta 2 ответом на сообщение пользователя в нужном учебном чате.');
 });
 
 bot.command('setstudent', async ctx => {
