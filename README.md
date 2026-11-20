@@ -6,7 +6,6 @@
 
 - **Telegram-бот:** [@starostagivbot](https://t.me/starostagivbot)
 - **Канал обновлений:** [@starostabotgiv](https://t.me/starostabotgiv)
-- **Mini App:** https://starostabotgiv-givenchy06.msk1.amvera.tech/app
 
 ## История проекта
 
