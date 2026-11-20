@@ -10,15 +10,50 @@ const USERS_FILE = path.join(DATA_DIR, 'users.json');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function readUsers() {
-  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')); }
-  catch { return { users: {}, groups: {} }; }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        (parsed.users != null && (typeof parsed.users !== 'object' || Array.isArray(parsed.users))) ||
+        (parsed.groups != null && (typeof parsed.groups !== 'object' || Array.isArray(parsed.groups)))) {
+      throw new Error('Некорректная структура users.json.');
+    }
+    return parsed;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { users: {}, groups: {} };
+    console.error('[storage] Не удалось прочитать users.json. Запуск остановлен, чтобы не перезаписать данные пустой базой:', error?.message || error);
+    throw error;
+  }
 }
 const db = readUsers();
 db.users ||= {};
 db.groups ||= {};
 
 function saveDb() {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(db, null, 2), 'utf8');
+  const serialized = JSON.stringify(db, null, 2);
+  const tempFile = USERS_FILE + '.' + process.pid + '.' + crypto.randomUUID() + '.tmp';
+  const backupFile = USERS_FILE + '.bak';
+  let fd;
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      fs.copyFileSync(USERS_FILE, backupFile);
+      try { fs.chmodSync(backupFile, 0o600); } catch {}
+    }
+    fd = fs.openSync(tempFile, 'w', 0o600);
+    fs.writeFileSync(fd, serialized, 'utf8');
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tempFile, USERS_FILE);
+    try { fs.chmodSync(USERS_FILE, 0o600); } catch {}
+    try {
+      const dirFd = fs.openSync(DATA_DIR, 'r');
+      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
+    } catch {}
+  } catch (error) {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch {}
+    try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch {}
+    throw error;
+  }
 }
 
 const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
@@ -349,7 +384,7 @@ function isManagerRole(u) {
   return ['starosta', 'zam'].includes(u?.role);
 }
 function canManageAttendance(u, id) {
-  return isOwner(id) || isManagerRole(u);
+  return isOwner(id) || accessibleGroups(id).length > 0;
 }
 function getMenu(id) {
   return canManageAttendance(user(id), id) ? managerMenu : studentMenu;
@@ -451,7 +486,7 @@ function ensureStudyGroups(chat) {
  if (!chat) return [];
  chat.studyGroups ||= {};
  const names=Object.values(STUDY_GROUPS);
- const needsSave=!chat._studyGroupsMigratedV1 || !chat._institutionMigrationV1;
+ const needsSave=!chat._studyGroupsMigratedV1 || !chat._institutionMigrationV1 || !chat._groupRoleScopeV1;
  // Мягкая миграция: все уже существующие группы относятся к первому заведению.
  if (!chat.institutionId) chat.institutionId=DEFAULT_INSTITUTION_ID;
  const institutionId=String(chat.institutionId);
@@ -476,13 +511,20 @@ function ensureStudyGroups(chat) {
   if (!item.institutionId) item.institutionId=institutionId;
   item.chatId=chat.chatId; item.chatTitle=chat.title || 'Общий чат';
   item.title=name; item.studyGroup=name; item.scheduleGroup=name;
-  item.starostaId=STUDY_GROUP_STAROSTAS[name];
-  if (STUDY_GROUP_ZAMS[name]) item.zamId=STUDY_GROUP_ZAMS[name];
+  if (!item._roleAssignmentsInitialized) {
+   // Seed the original RUK appointments once; preserve later group-specific changes.
+   if (institutionId === DEFAULT_INSTITUTION_ID) {
+    if (!item.starostaId && STUDY_GROUP_STAROSTAS[name]) item.starostaId=String(STUDY_GROUP_STAROSTAS[name]);
+    if (!item.zamId && STUDY_GROUP_ZAMS[name]) item.zamId=String(STUDY_GROUP_ZAMS[name]);
+   }
+   item._roleAssignmentsInitialized=true;
+  }
   item.students ||= []; item.attendance ||= {}; item.lessonAttendance ||= {};
   item.activeAttendanceLessons ||= {}; item.announcements ||= [];
   item.calendarEvents ||= []; item.homework ||= [];
  }
  chat._institutionMigrationV1=true;
+ chat._groupRoleScopeV1=true;
  if (needsSave) {
   saveDb();
   console.log('[institutions] Existing study groups assigned to institution:', institutionId);
@@ -490,22 +532,36 @@ function ensureStudyGroups(chat) {
  return names.map(name=>chat.studyGroups[name]);
 }
 function allStudyGroups() { return Object.values(db.groups).flatMap(chat=>ensureStudyGroups(chat)); }
+function canManageGroup(userId,g) {
+ const id=String(userId);
+ return Boolean(g && (isOwner(id) || isInstitutionAdmin(id,g.institutionId) ||
+  String(g.starostaId||'')===id || String(g.zamId||'')===id));
+}
+function managedStudyGroups(userId) {
+ return allStudyGroups().filter(g=>canManageGroup(userId,g));
+}
+function canManageChat(userId,chatId) {
+ return allStudyGroups().some(g=>String(g.chatId)===String(chatId)&&canManageGroup(userId,g));
+}
+function managedChats(userId) {
+ const allowed=new Set(managedStudyGroups(userId).map(g=>String(g.chatId)));
+ return Object.values(db.groups).filter(chat=>allowed.has(String(chat.chatId)));
+}
 function studyGroupForUser(chatId,userId) {
  const chat=db.groups[String(chatId)]; if(!chat)return null;
  const id=String(userId);
  return ensureStudyGroups(chat).find(g=>String(g.starostaId||'')===id||String(g.zamId||'')===id)||null;
 }
 function accessibleGroups(userId) {
- const id=String(userId),u=normalizeUser(user(id));
- const groups=allStudyGroups().filter(g=>isOwner(id)||isInstitutionAdmin(id,g.institutionId)||String(g.starostaId||'')===id||String(g.zamId||'')===id||
-  (isManagerRole(u)&&(g.title===u.group||g.studyGroup===u.group)));
+ const id=String(userId);
+ const groups=managedStudyGroups(id);
  // Prefer the group where this user is explicitly appointed, even if they are also the bot owner.
  groups.sort((a,b)=>{
   const ownA=String(a.starostaId||'')===id||String(a.zamId||'')===id;
   const ownB=String(b.starostaId||'')===id||String(b.zamId||'')===id;
   return Number(ownB)-Number(ownA);
  });
- return groups.map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId)}));
+ return groups.map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId),institutionId:String(g.institutionId||'')}));
 }
 function managedGroup(userId,selectedGroupId='') {
  const allowed=accessibleGroups(userId);
@@ -952,13 +1008,13 @@ function attendanceStatusButtons(index) {
   ]);
 }
 
-function studentButtons() {
-  const groups = Object.values(db.groups);
+function studentButtons(userId) {
+  const groups = managedChats(userId);
   return groups.map(g => [Markup.button.callback('👨‍🎓 ' + String(g.title).slice(0, 45), 'students:' + String(g.chatId))]);
 }
 
-function groupButtons() {
-  const groups = Object.values(db.groups);
+function groupButtons(userId) {
+  const groups = managedChats(userId);
   const buttons = groups.map(g => [
     Markup.button.callback('📢 ' + String(g.title).slice(0, 45), 'pollsend:' + String(g.chatId))
   ]);
@@ -966,8 +1022,8 @@ function groupButtons() {
   return buttons;
 }
 
-function homeworkButtons() {
-  const groups = Object.values(db.groups);
+function homeworkButtons(userId) {
+  const groups = managedChats(userId);
   const buttons = groups.map(g => [
     Markup.button.callback('📚 ' + String(g.title).slice(0, 45), 'hwsend:' + String(g.chatId))
   ]);
@@ -1005,7 +1061,7 @@ async function startHomework(ctx) {
     return ctx.reply('❌ Нет прикреплённых групп. Добавь бота в нужную группу, сделай себя администратором и выполни там /attach.');
   }
 
-  await ctx.reply('📚 ДЗ создано. Выбери, в какую группу его отправить:', Markup.inlineKeyboard(homeworkButtons()));
+  await ctx.reply('📚 ДЗ создано. Выбери, в какую группу его отправить:', Markup.inlineKeyboard(homeworkButtons(ctx.from.id)));
 }
 
 async function startPoll(ctx) {
@@ -1044,7 +1100,7 @@ async function startPoll(ctx) {
     );
   }
 
-  await ctx.reply('📊 Опрос создан. Выбери, куда его отправить:', Markup.inlineKeyboard(groupButtons()));
+  await ctx.reply('📊 Опрос создан. Выбери, куда его отправить:', Markup.inlineKeyboard(groupButtons(ctx.from.id)));
 }
 
 // Управление подписками доступно только владельцу и только в личном чате с ботом.
@@ -2525,10 +2581,11 @@ function verifyMiniAppInitData(initData) {
   const a = Buffer.from(receivedHash, 'hex'), b = Buffer.from(expectedHash, 'hex');
   if (a.length !== b.length || !crypto.timingSafeEqual(a,b)) throw new Error('Не удалось подтвердить аккаунт Telegram.');
   const authDate = Number(params.get('auth_date') || 0);
-  if (!authDate || Math.abs(Date.now()/1000-authDate) > 86400) throw new Error('Сессия устарела. Закрой и снова открой мини-приложение.');
+  const ageSeconds = Date.now()/1000 - authDate;
+  if (!Number.isFinite(authDate) || ageSeconds < -30 || ageSeconds > 3600) throw new Error('Сессия устарела. Закрой и снова открой мини-приложение.');
   let tgUser;
   try { tgUser = JSON.parse(params.get('user') || 'null'); } catch {}
-  if (!tgUser?.id) throw new Error('Telegram не передал данные пользователя.');
+  if (!tgUser?.id || !/^\\d+$/.test(String(tgUser.id))) throw new Error('Telegram не передал корректные данные пользователя.');
   return tgUser;
 }
 function sendJson(res, status, data) {
