@@ -17,9 +17,15 @@ function readUsers() {
         (parsed.groups != null && (typeof parsed.groups !== 'object' || Array.isArray(parsed.groups)))) {
       throw new Error('Некорректная структура users.json.');
     }
+    try { fs.chmodSync(USERS_FILE, 0o600); } catch {}
     return parsed;
   } catch (error) {
-    if (error?.code === 'ENOENT') return { users: {}, groups: {} };
+    if (error?.code === 'ENOENT') {
+      if (fs.existsSync(USERS_FILE + '.bak')) {
+        throw new Error('Основной users.json отсутствует, но найдена резервная копия users.json.bak. Запуск остановлен для ручного восстановления.');
+      }
+      return { users: {}, groups: {} };
+    }
     console.error('[storage] Не удалось прочитать users.json. Запуск остановлен, чтобы не перезаписать данные пустой базой:', error?.message || error);
     throw error;
   }
@@ -1739,16 +1745,22 @@ bot.command('delstudent',async ctx=>{
 bot.hears('👨‍🎓 Список студентов', ctx => ctx.reply('Используй /students. Добавить с username: ответь в группе на сообщение студента командой /student.'));
 
 async function showRole(ctx) {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Роль настраивается в личных сообщениях или через администратора группы.');
-  const value = (ctx.message?.text || '').replace(/^\/(?:role|roles)(?:@\S+)?/i, '').trim().toLowerCase();
-  const u = normalizeUser(user(ctx.from.id));
+  if (!isPrivate(ctx)) return ctx.reply('📩 Роли учебных групп проверяются в личных сообщениях.');
+  const value = (ctx.message?.text || '').replace(/^\\/(?:role|roles)(?:@\\S+)?/i, '').trim().toLowerCase();
+  const id=String(ctx.from.id);
+  const assignments=allStudyGroups().filter(g=>String(g.starostaId||'')===id||String(g.zamId||'')===id);
   if (!value) {
-    return ctx.reply('👤 Твоя роль: ' + roleLabel(u.role) + '\n\n👑 Назначить старостой тебя может только администратор группы.');
+    const lines=assignments.map(g=>'• '+(String(g.starostaId||'')===id?'👑 Староста':'⭐ Заместитель')+' — '+escapeHtml(g.studyGroup)+' ('+escapeHtml(db.institutions?.[String(g.institutionId||'')]?.name||g.institutionId||'учебное заведение')+')');
+    return ctx.reply(lines.length?'👤 <b>Твои назначения</b>\\n\\n'+lines.join('\\n'):'👨‍🎓 У тебя нет назначенных управленческих ролей.\\n\\nНазначение выполняет администратор соответствующей учебной группы.',{parse_mode:'HTML'});
   }
-  if (value !== 'student') return ctx.reply('❌ Самостоятельно назначить себя старостой нельзя. Это делает администратор группы.');
-  u.role = 'student';
+  if (value !== 'student') return ctx.reply('❌ Управленческую роль назначает администратор конкретной учебной группы.');
+  for(const g of allStudyGroups()) {
+    if(String(g.starostaId||'')===id) g.starostaId='';
+    if(String(g.zamId||'')===id) g.zamId='';
+  }
+  const u=normalizeUser(user(id));u.role='student';
   saveDb();
-  await ctx.reply('✅ Роль установлена: 👨‍🎓 Студент', menuFor(ctx));
+  await ctx.reply('✅ Ты снял(а) с себя все назначения старосты и заместителя.',menuFor(ctx));
 }
 
 bot.command('role', showRole);
