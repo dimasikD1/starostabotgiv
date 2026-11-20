@@ -1,12 +1,24 @@
 import * as cheerio from 'cheerio';
 
+function resolveTimeZone(value, fallback = 'Europe/Moscow') {
+  const zone = String(value || '').trim() || fallback;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: zone });
+    return zone;
+  } catch {
+    return fallback;
+  }
+}
+
+const TIME_ZONE = resolveTimeZone(process.env.TIME_ZONE);
+
 const DEFAULT_URL = 'https://schedule.ruc.su/';
 const DEFAULT_NEW_URL = 'https://new-schedule.ruc.su/schedule';
 
 const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 function isoToday(offset = 0) {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map(p => [p.type, p.value]));
   const d = new Date(values.year + '-' + values.month + '-' + values.day + 'T12:00:00Z');
   d.setUTCDate(d.getUTCDate() + offset);
@@ -166,8 +178,8 @@ async function getLegacySchedule(group, days, timeout, startDate = isoToday(0)) 
     if (!kitSelect.length) continue;
 
     const kits = kitSelect.find('option').map((_i, el) => ({
-      value: $(el).attr('value') || '',
-      text: clean($(el).text())
+      value: branch$(el).attr('value') || '',
+      text: clean(branch$(el).text())
     })).get().filter(x => x.value);
 
     const kitCandidates = wantedKit
@@ -190,8 +202,8 @@ async function getLegacySchedule(group, days, timeout, startDate = isoToday(0)) 
       if (!groupSelect.length) continue;
 
       const groups = groupSelect.find('option').map((_i, el) => ({
-        value: $(el).attr('value') || '',
-        text: clean($(el).text())
+        value: groups$(el).attr('value') || '',
+        text: clean(groups$(el).text())
       })).get().filter(x => x.value);
 
       const match =
@@ -298,7 +310,7 @@ function normalizeJson(data, days, startDate = isoToday(0)) {
       item.date || item.day || item.start || ''
     ).slice(0, 10);
 
-    const d = new Date(date + 'T00:00:00');
+    const d = new Date(date + 'T00:00:00Z');
     const dayOffset = Math.round((d - base) / 86400000);
 
     return {

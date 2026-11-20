@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node bot-amvera/index.mjs",
     "dev": "node --watch bot-amvera/index.mjs",
-    "check": "node --check bot-amvera/index.mjs"
+    "check": "node --check bot-amvera/index.mjs && node --check bot-amvera/schedule/ruc.mjs",
+    "test": "node --test \"bot-amvera/test/**/*.test.mjs\""
   },
   "dependencies": {
     "cheerio": "^1.0.0",

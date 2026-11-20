@@ -1,14 +1,29 @@
 # Starosta Bot
 
-Telegram-бот с расписанием.
+Telegram-бот с расписанием и Mini App.
 
-Команды: /start, /help, /group, /schedule, /tomorrow, /week.
+Команды: /start, /help, /group, /schedule, /tomorrow, /week, /app.
 
 Токен задаётся через TELEGRAM_BOT_TOKEN.
-Данные пользователей сохраняются в /data/users.json.
+Данные пользователей сохраняются в /data/users.json (каталог можно изменить через DATA_DIR).
 
 Источник расписания:
 https://new-schedule.ruc.su/schedule
+
+## Полезные переменные
+
+- `TIME_ZONE` — часовой пояс расписания, по умолчанию `Europe/Moscow`.
+- `WEBAPP_URL` — HTTPS-адрес Mini App для кнопки «Открыть кабинет».
+- `DB_BACKUP_INTERVAL_MS` — интервал резервного копирования базы, по умолчанию 60 секунд.
+
+## Проверка
+
+```bash
+npm run check
+npm test
+```
+
+`GET /healthz` возвращает состояние процесса, версию и uptime.
 
 
 ## Бесплатный доступ владельца

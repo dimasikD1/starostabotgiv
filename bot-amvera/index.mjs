@@ -2,12 +2,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc.mjs';
 
+// Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
+// Можно переопределить через переменную окружения TIME_ZONE.
+function resolveTimeZone(value, fallback = 'Europe/Moscow') {
+  const zone = String(value || '').trim() || fallback;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: zone });
+    return zone;
+  } catch {
+    console.warn('[time] Неизвестный часовой пояс «' + zone + '», использую ' + fallback);
+    return fallback;
+  }
+}
+const TIME_ZONE = resolveTimeZone(process.env.TIME_ZONE);
+
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
-fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+} catch (error) {
+  console.error('[storage] Не удалось создать каталог данных ' + DATA_DIR + ':', error?.message || error);
+  process.exit(1);
+}
 
 function readUsers() {
   try {
@@ -34,15 +54,24 @@ const db = readUsers();
 db.users ||= {};
 db.groups ||= {};
 
+// Резервная копия нужна для восстановления, но копировать весь файл
+// при каждой отметке посещаемости слишком дорого. Делаем не чаще раза в минуту.
+const BACKUP_INTERVAL_MS = (() => {
+  const raw = Number(process.env.DB_BACKUP_INTERVAL_MS);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 60000;
+})();
+let lastBackupAt = 0;
+
 function saveDb() {
   const serialized = JSON.stringify(db, null, 2);
   const tempFile = USERS_FILE + '.' + process.pid + '.' + crypto.randomUUID() + '.tmp';
   const backupFile = USERS_FILE + '.bak';
   let fd;
   try {
-    if (fs.existsSync(USERS_FILE)) {
+    if (fs.existsSync(USERS_FILE) && Date.now() - lastBackupAt >= BACKUP_INTERVAL_MS) {
       fs.copyFileSync(USERS_FILE, backupFile);
       try { fs.chmodSync(backupFile, 0o600); } catch {}
+      lastBackupAt = Date.now();
     }
     fd = fs.openSync(tempFile, 'w', 0o600);
     fs.writeFileSync(fd, serialized, 'utf8');
@@ -80,7 +109,7 @@ const OWNER_TELEGRAM_IDS = [...new Set([OWNER_TELEGRAM_ID, '6892907787'].filter(
 
 // Версия и список изменений для уведомления владельца после обновления.
 // При каждом следующем обновлении меняй версию и дополняй список.
-const BOT_RELEASE_VERSION = '2026.11.20.02';
+const BOT_RELEASE_VERSION = '2026.11.20.03';
 const RELEASE_CHANNEL = '@starostabotgiv';
 const BOT_RELEASE_NOTES = [
   'Разделены данные двух учебных групп; добавлены роли старост, заместителей и двух владельцев.',
@@ -90,8 +119,11 @@ const BOT_RELEASE_NOTES = [
   'Добавлены статистика посещаемости и ДЗ, а также HTML-отчёты.',
   'Улучшены загрузка Mini App, обновление данных и стабильность работы.',
   'Добавлена структура учебных заведений: факультеты, направления и курсы.',
-  'OCR временно отключён; бот и Mini App доступны бесплатно.'
-];;
+  'OCR временно отключён; бот и Mini App доступны бесплатно.',
+  'Mini App: мгновенный показ сохранённых данных, таймер до пары, исправлено дублирование объявлений.',
+  'Сервер: защита от зависших запросов, ограничение частоты, gzip и health-check /healthz.',
+  'Исправлен часовой пояс расписания и чтение списков филиалов/групп.'
+];
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
 function isOwner(userId) {
@@ -357,7 +389,7 @@ function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.ca
 
 // OCR временно отключён: импорт списка выполняется текстом.
 
-function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Tallinn' }).format(new Date()); }
+function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date()); }
 function attendanceLessonKey(lesson) {
  return [lesson.date||attendanceDate(),lesson.timeStart||lesson.time||'',lesson.timeEnd||'',lesson.subject||'Занятие'].join('|');
 }
@@ -583,7 +615,7 @@ function createAttendanceHtml(g, period='all') {
  const attendance=g.attendance||{},lessonAttendance=g.lessonAttendance||{},students=g.students||[];
  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const labels={week:'за последние 7 дней',month:'за последние 30 дней',all:'за весь период'};
- const today=tallinnParts().year+'-'+tallinnParts().month+'-'+tallinnParts().day;
+ const today=timeZoneParts().year+'-'+timeZoneParts().month+'-'+timeZoneParts().day;
  const days=period==='week'?7:period==='month'?30:0;
  const cutoff=days?new Date(Date.UTC(+today.slice(0,4),+today.slice(5,7)-1,+today.slice(8,10))-((days-1)*86400000)).toISOString().slice(0,10):'';
  const inPeriod=date=>!cutoff||String(date)>=cutoff;
@@ -595,7 +627,7 @@ function createAttendanceHtml(g, period='all') {
  const legacyDates=[...new Set(Object.values(attendance).flatMap(v=>Object.keys(v||{})))].filter(inPeriod).sort();
  if(legacyDates.length)sections+='<h2>Старые записи (без привязки к паре)</h2>'+legacyDates.map(date=>{const present=[],absent=[],unmarked=[];for(const student of students){const name=studentName(student),status=attendance[attendanceKey(student)]?.[date];if(status==='present')present.push(name);else if(status==='absent')absent.push(name);else unmarked.push(name)}return '<section><h2>'+esc(date)+'</h2>'+list('Были',present,'✅')+list('Не были',absent,'❌')+list('Не отмечены',unmarked,'▫️')+'</section>'}).join('');
  if(!sections)sections='<p>За выбранный период сохранённых отметок нет.</p>';
- return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:950px;margin:32px auto;padding:0 16px;color:#222}h1,h2{color:#245}section{border-top:1px solid #ddd;padding:12px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid #ddd}@media print{body{margin:0;max-width:none}}</style></head><body><h1>Журнал посещаемости по парам</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Период: <b>'+esc(labels[period]||labels.all)+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:'Europe/Tallinn'}))+'</p>'+summary+sections+'</body></html>';
+ return '<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Посещаемость — '+esc(g.title||'Группа')+'</title><style>body{font:16px/1.5 Arial,sans-serif;max-width:950px;margin:32px auto;padding:0 16px;color:#222}h1,h2{color:#245}section{border-top:1px solid #ddd;padding:12px 0}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid #ddd}@media print{body{margin:0;max-width:none}}</style></head><body><h1>Журнал посещаемости по парам</h1><p>Группа: <b>'+esc(g.title||'Без названия')+'</b></p><p>Период: <b>'+esc(labels[period]||labels.all)+'</b></p><p>Сформировано: '+esc(new Date().toLocaleString('ru-RU',{timeZone:TIME_ZONE}))+'</p>'+summary+sections+'</body></html>';
 }
 function format(items, group) {
   if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
@@ -641,9 +673,9 @@ async function show(ctx, days, offset) {
   }
 }
 
-function tallinnParts(date = new Date()) {
+function timeZoneParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Tallinn', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
   }).formatToParts(date);
   return Object.fromEntries(parts.map(p => [p.type, p.value]));
@@ -654,7 +686,7 @@ async function checkCalendarEventReminders() {
   if (calendarReminderCheckRunning) return;
   calendarReminderCheckRunning = true;
   try {
-    const now=tallinnParts();
+    const now=timeZoneParts();
     const nowStamp=Date.UTC(+now.year,+now.month-1,+now.day,+now.hour,+now.minute);
     db.sentCalendarReminders ||= {};
     for (const g of Object.values(db.groups)) {
@@ -684,7 +716,7 @@ async function checkAutomaticAttendancePolls() {
   if (attendancePollCheckRunning) return;
   attendancePollCheckRunning = true;
   try {
-    const now = tallinnParts();
+    const now = timeZoneParts();
     const today = now.year + '-' + now.month + '-' + now.day;
     const currentMinutes = Number(now.hour) * 60 + Number(now.minute);
     db.sentAttendancePolls ||= {};
@@ -792,8 +824,8 @@ async function buildWeeklyScheduleText(range) {
 
 async function checkWeeklySchedules() {
   if (weeklyScheduleCheckRunning) return;
-  const now = tallinnParts();
-  // Публикуем расписание по воскресеньям начиная с 18:00 по Таллину.
+  const now = timeZoneParts();
+  // Публикуем расписание по воскресеньям начиная с 18:00 по часовому поясу TIME_ZONE.
   if (new Date(now.year + '-' + now.month + '-' + now.day + 'T12:00:00Z').getUTCDay() !== 0 ||
       Number(now.hour) < 18) return;
 
@@ -2776,22 +2808,26 @@ bot.hears('💛 Поддержать хостинг', ctx => {
   return ctx.reply('💛 <b>Поддержать Староста Бот</b>\n\nСобираю средства на новый хостинг. Пожертвование добровольное и не даёт дополнительных функций. Выбери сумму:', { parse_mode: 'HTML', ...donationKeyboard() });
 });
 
+function helpMessage(ctx) {
+  return ctx.reply(
+    '🤖 <b>Что умеет Староста Бот</b>\n\n' +
+    '📅 <b>Расписание</b> — пары на сегодня, завтра и всю неделю.\n' +
+    '👥 <b>Моя группа</b> — посмотреть выбранную учебную группу.\n' +
+    '📚 <b>Домашние задания</b> — смотреть задания и отмечать выполнение.\n\n' +
+    (canManageAttendance(user(ctx.from.id), ctx.from.id)
+      ? '⭐ <b>Возможности старосты</b>\n' +
+        '• список студентов и управление им;\n' +
+        '• посещаемость по отдельным парам и отчёты;\n' +
+        '• создание опросов и домашних заданий;\n' +
+        '• объявления и календарь важных дат в Mini App.\n\n'
+      : '📱 <b>Mini App</b> — удобный кабинет с расписанием, объявлениями и календарём.\n\n') +
+    'Выбирай нужный раздел кнопками внизу. Если бот только что добавили в группу, сначала подтверди ФИО и выбери свою учебную группу.',
+    { parse_mode: 'HTML', ...menuFor(ctx) }
+  );
+}
+bot.command('help', helpMessage);
 bot.hears('🔄 Обновить', ctx => show(ctx, 1, 0));
-bot.hears('❔ Что умеет бот', ctx => ctx.reply(
-  '🤖 <b>Что умеет Староста Бот</b>\n\n' +
-  '📅 <b>Расписание</b> — пары на сегодня, завтра и всю неделю.\n' +
-  '👥 <b>Моя группа</b> — посмотреть выбранную учебную группу.\n' +
-  '📚 <b>Домашние задания</b> — смотреть задания и отмечать выполнение.\n\n' +
-  (canManageAttendance(user(ctx.from.id), ctx.from.id)
-    ? '⭐ <b>Возможности старосты</b>\n' +
-      '• список студентов и управление им;\n' +
-      '• посещаемость по отдельным парам и отчёты;\n' +
-      '• создание опросов и домашних заданий;\n' +
-      '• объявления и календарь важных дат в Mini App.\n\n'
-    : '📱 <b>Mini App</b> — удобный кабинет с расписанием, объявлениями и календарём.\n\n') +
-  'Выбирай нужный раздел кнопками внизу. Если бот только что добавили в группу, сначала подтверди ФИО и выбери свою учебную группу.',
-  { parse_mode: 'HTML', ...menuFor(ctx) }
-));
+bot.hears('❔ Что умеет бот', helpMessage);
 bot.hears('ℹ️ Помощь', ctx => ctx.reply('Нажми «❔ Что умеет бот», чтобы посмотреть возможности.', menuFor(ctx)));
 
 bot.catch(e => console.error('[bot]', e));
@@ -2816,9 +2852,40 @@ function verifyMiniAppInitData(initData) {
   if (!tgUser?.id || !/^\d+$/.test(String(tgUser.id))) throw new Error('Telegram не передал корректные данные пользователя.');
   return tgUser;
 }
-function sendJson(res, status, data) {
-  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+function sendJson(res, status, data, headers = {}) {
+  res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff', ...headers});
   res.end(JSON.stringify(data));
+}
+
+// Простое ограничение частоты запросов Mini App на пользователя.
+// Защищает сервер и Telegram API от случайных циклов и злоупотреблений.
+const API_WINDOW_MS = 60_000;
+const API_READ_LIMIT = 120;
+const API_WRITE_LIMIT = 60;
+const apiRateBuckets = new Map();
+
+function checkApiRate(userId, method) {
+  const key = String(userId);
+  const now = Date.now();
+  let bucket = apiRateBuckets.get(key);
+  if (!bucket || now - bucket.startedAt >= API_WINDOW_MS) {
+    bucket = { startedAt: now, reads: 0, writes: 0 };
+    apiRateBuckets.set(key, bucket);
+  }
+  const isWrite = method !== 'GET' && method !== 'HEAD';
+  if (isWrite) bucket.writes += 1;
+  else bucket.reads += 1;
+  const used = isWrite ? bucket.writes : bucket.reads;
+  const limit = isWrite ? API_WRITE_LIMIT : API_READ_LIMIT;
+  if (used > limit) {
+    return { limited: true, retryAfter: Math.max(1, Math.ceil((bucket.startedAt + API_WINDOW_MS - now) / 1000)) };
+  }
+  if (apiRateBuckets.size > 5000) {
+    for (const [id, value] of apiRateBuckets) {
+      if (now - value.startedAt >= API_WINDOW_MS) apiRateBuckets.delete(id);
+    }
+  }
+  return { limited: false };
 }
 async function readJsonBody(req, maxBytes=32768) {
   const chunks=[];let size=0;
@@ -2845,6 +2912,8 @@ async function handleMiniAppApi(req,res,url) {
   try { tgUser=verifyMiniAppInitData(req.headers['x-telegram-init-data']); }
   catch(e) { return sendJson(res,401,{error:e.message}); }
   const u=normalizeUser(user(tgUser.id));
+  const rate=checkApiRate(tgUser.id,req.method);
+  if(rate.limited) return sendJson(res,429,{error:'Слишком много запросов. Подожди '+rate.retryAfter+' с и попробуй снова.'},{'Retry-After':String(rate.retryAfter)});
   // Подписка временно отключена: Mini App доступен без оплаты.
   if(req.method==='GET' && url.pathname==='/api/groups') {
     const groups=accessibleGroups(tgUser.id);
@@ -3008,7 +3077,7 @@ async function handleMiniAppApi(req,res,url) {
       const body=await readJsonBody(req,12*1024*1024),fileName=String(body.fileName||'attachment').slice(0,120),mimeType=String(body.mimeType||'').toLowerCase();
       const imageTypes=['image/jpeg','image/png'],videoTypes=['video/mp4'];
       const type=imageTypes.includes(mimeType)?'photo':videoTypes.includes(mimeType)?'video':'';
-      if(!type)return sendJson(res,400,{error:'Поддерживаются JPG, PNG, WebP, MP4, WebM и MOV.'});
+      if(!type)return sendJson(res,400,{error:'Поддерживаются JPG, PNG и MP4.'});
       const encoded=String(body.data||'').replace(/^data:[^;]+;base64,/,'');
       if(!encoded||encoded.length>11*1024*1024)return sendJson(res,413,{error:'Файл слишком большой. Максимум 8 МБ.'});
       const buffer=Buffer.from(encoded,'base64');
@@ -3019,7 +3088,7 @@ async function handleMiniAppApi(req,res,url) {
       try{await bot.telegram.deleteMessage(String(tgUser.id),message.message_id)}catch(e){console.warn('[homework media cleanup]',e?.message||e)}
       g.pendingHomeworkMedia||={};const ownerKey=String(tgUser.id),pending=g.pendingHomeworkMedia[ownerKey]||{};
       for(const [key,value] of Object.entries(pending))if(Date.now()-Number(value.createdAt||0)>2*60*60*1000)delete pending[key];
-      const id=crypto.randomUUID();pending[id]={fileId,type,fileName,mimeType:type==='photo'?'image/jpeg':mimeType,createdAt:Date.now()};g.pendingHomeworkMedia[ownerKey]=pending;saveDb();
+      const id=crypto.randomUUID();pending[id]={fileId,type,fileName,mimeType:type==='photo'?(mimeType||'image/jpeg'):mimeType,createdAt:Date.now()};g.pendingHomeworkMedia[ownerKey]=pending;saveDb();
       return sendJson(res,200,{ok:true,attachment:{id,type,fileName}});
     } catch(e) {console.error('[miniapp homework media upload]',e?.message||e);return sendJson(res,400,{error:'Не удалось загрузить вложение. Проверь размер файла и доступ бота к личным сообщениям.'});}
   }
@@ -3181,6 +3250,47 @@ async function handleMiniAppApi(req,res,url) {
 
 const port = Number(process.env.PORT || 80);
 const webappFile = new URL('./webapp/index.html', import.meta.url);
+
+// Mini App открывается внутри Telegram, поэтому inline-стили и скрипты разрешены,
+// а внешние источники — только собственный origin.
+const APP_SECURITY_HEADERS = {
+  'Referrer-Policy': 'no-referrer',
+  'Permissions-Policy': 'geolocation=(), microphone=(), camera=()',
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline'",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
+  ].join('; ')
+};
+
+let webappCache = { mtimeMs: 0, raw: '', gzip: null };
+function readWebapp() {
+  const stat = fs.statSync(webappFile);
+  if (webappCache.mtimeMs !== stat.mtimeMs) {
+    const raw = fs.readFileSync(webappFile, 'utf8');
+    webappCache = { mtimeMs: stat.mtimeMs, raw, gzip: zlib.gzipSync(raw, { level: 9 }) };
+  }
+  return webappCache;
+}
+
+function sendText(req, res, status, text, headers = {}) {
+  const body = Buffer.from(String(text), 'utf8');
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Length': body.length,
+    'X-Content-Type-Options': 'nosniff',
+    ...headers
+  });
+  if (req.method === 'HEAD') return res.end();
+  return res.end(body);
+}
+
 const healthServer = http.createServer(async (req, res) => {
   const startedAt = Date.now();
   const url = new URL(req.url || '/', 'http://localhost');
@@ -3190,7 +3300,29 @@ const healthServer = http.createServer(async (req, res) => {
       console.log('[http timing]', req.method, url.pathname, res.statusCode, Date.now() - startedAt + 'ms');
     }
   });
-  if (url.pathname.startsWith('/api/')) return handleMiniAppApi(req,res,url);
+  if (url.pathname.startsWith('/api/')) {
+    // Без этого обработчика любое необработанное исключение оставляло запрос
+    // висеть до таймаута клиента.
+    try {
+      await handleMiniAppApi(req,res,url);
+    } catch (e) {
+      console.error('[http api]', e?.stack || e?.message || e);
+      if (!res.headersSent) sendJson(res,500,{error:'Внутренняя ошибка сервера. Попробуй ещё раз позже.'});
+      else try { res.end(); } catch {}
+    }
+    return;
+  }
+  if (!['GET', 'HEAD'].includes(req.method || 'GET')) {
+    return sendText(req, res, 405, 'Method Not Allowed', { Allow: 'GET, HEAD' });
+  }
+  if (url.pathname === '/healthz') {
+    return sendJson(res, 200, {
+      ok: true,
+      uptime: Math.round(process.uptime()),
+      version: BOT_RELEASE_VERSION,
+      time: new Date().toISOString()
+    });
+  }
   if (url.pathname === '/telegram-web-app.js') {
     try {
       const sdkFile = new URL('./webapp/telegram-web-app.js', import.meta.url);
@@ -3200,25 +3332,41 @@ const healthServer = http.createServer(async (req, res) => {
         'Cache-Control': 'public, max-age=3600',
         'X-Content-Type-Options': 'nosniff'
       });
+      if (req.method === 'HEAD') return res.end();
       return res.end(sdk);
     } catch (e) {
       console.error('[miniapp sdk]', e.message || e);
-      res.writeHead(500, {'Content-Type':'text/plain; charset=utf-8'});
-      return res.end('Telegram WebApp SDK не найден.');
+      return sendText(req, res, 500, 'Telegram WebApp SDK не найден.');
     }
   }
   if (url.pathname === '/app' || url.pathname === '/app/') {
     try {
-      const html=fs.readFileSync(webappFile,'utf8');
-      res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
-      return res.end(html);
-    } catch {
-      res.writeHead(500,{'Content-Type':'text/plain; charset=utf-8'});
-      return res.end('Mini App не найден.');
+      const { raw, gzip } = readWebapp();
+      const useGzip = /\bgzip\b/i.test(String(req.headers['accept-encoding'] || '')) && gzip;
+      const body = useGzip ? gzip : Buffer.from(raw, 'utf8');
+      const headers = {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': body.length,
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+        ...APP_SECURITY_HEADERS
+      };
+      if (useGzip) {
+        headers['Content-Encoding'] = 'gzip';
+        headers['Vary'] = 'Accept-Encoding';
+      }
+      res.writeHead(200, headers);
+      if (req.method === 'HEAD') return res.end();
+      return res.end(body);
+    } catch (e) {
+      console.error('[miniapp app]', e?.message || e);
+      return sendText(req, res, 500, 'Mini App не найден.');
     }
   }
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('OK');
+  if (url.pathname === '/' || url.pathname === '/health') {
+    return sendText(req, res, 200, 'OK');
+  }
+  return sendText(req, res, 404, 'Not Found');
 });
 
 
@@ -3290,8 +3438,9 @@ async function main() {
   }
 
 
-  // Публикуем каждую новую версию в канал отдельно от личных уведомлений владельцам.
-  if (RELEASE_CHANNEL && db.lastPublishedRelease !== BOT_RELEASE_VERSION) {
+  // Приветственный пост в канал публикуем один раз, а не при каждом обновлении версии.
+  // Уведомления о новой версии владельцам отправляются отдельно выше (lastNotifiedRelease).
+  if (RELEASE_CHANNEL && !db.welcomePublished && !db.lastPublishedRelease) {
     const channelReleaseMessage =
       '🚀 <b>Привет! Я — «Староста Бот». И у меня есть своя история.</b>\n\n' +
       'Мой путь начался с идеи одного выпускника Краснодарского кооперативного института (ККИ РУК), направления ИСП. Это самостоятельный образовательный IT-проект, который вырос из реальных задач студенческой жизни.\n\n' +
@@ -3311,6 +3460,7 @@ async function main() {
           ]]
         }
       });
+      db.welcomePublished = true;
       db.lastPublishedRelease = BOT_RELEASE_VERSION;
       saveDb();
       console.log('[release channel] Приветственная публикация отправлена: ' + BOT_RELEASE_VERSION);
@@ -3348,7 +3498,8 @@ async function main() {
     { command: 'students', description: 'Список студентов группы' },
     { command: 'importstudents', description: 'Импорт списка студентов из текста' },
     { command: 'pollreport', description: 'Ответы на последний опрос' },
-    { command: 'events', description: 'Предстоящие события группы' }
+    { command: 'events', description: 'Предстоящие события группы' },
+    { command: 'help', description: 'Что умеет бот' }
   ], { scope: { type: 'all_private_chats' } }));
 
   await telegramStartupRequest('setMyCommands groups', () => bot.telegram.setMyCommands([], { scope: { type: 'all_group_chats' } }));

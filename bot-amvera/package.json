@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node index.mjs",
     "dev": "node --watch index.mjs",
-    "check": "node --check index.mjs"
+    "check": "node --check index.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {
     "cheerio": "^1.0.0",
