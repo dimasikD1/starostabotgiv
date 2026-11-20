@@ -1537,7 +1537,7 @@ bot.on('photo', async (ctx, next) => {
   if (!inPrivateImport && !inGroupImport) return next();
   if (inGroupImport) {
     const group = db.groups[String(ctx.chat.id)];
-    if (!group || (!isOwner(ctx.from.id) && !isInstitutionAdmin(ctx.from.id, group.institutionId) && String(group.starostaId || '') !== String(ctx.from.id) && String(group.zamId || '') !== String(ctx.from.id))) {
+    if (!group || !canManageChat(ctx.from.id,ctx.chat.id)) {
       return ctx.reply('❌ Нет прав импортировать список в эту группу.');
     }
   }
@@ -1554,7 +1554,7 @@ bot.command('importstudents',async ctx=>{
  if(!['group','supergroup'].includes(ctx.chat.type))return;
  const group=db.groups[String(ctx.chat.id)];
  if(!group)return ctx.reply('Сначала прикрепи эту группу командой /attach.');
- if(!isOwner(ctx.from.id)&&!isInstitutionAdmin(ctx.from.id,group.institutionId)&&String(group.starostaId||'')!==String(ctx.from.id)&&String(group.zamId||'')!==String(ctx.from.id))
+ if(!canManageChat(ctx.from.id,ctx.chat.id))
   return ctx.reply('❌ Импортировать список может только староста или заместитель этой группы.');
  u.pendingStudentImport=true;u.pendingStudentImportChatId=String(ctx.chat.id);delete u.pendingStudentImportReview;saveDb();
  return ctx.reply('📋 Отправь список ФИО ответом на это сообщение (по одному человеку на строку) или прикрепи фото списка ответом на это сообщение. Для отмены: /cancel.');
@@ -1575,7 +1575,7 @@ bot.action('studentimport:confirm', async ctx => {
   const list=u.pendingStudentImportReview;
   if(!Array.isArray(list)||!list.length){await ctx.answerCbQuery('Список не найден. Начни импорт заново: /importstudents');return;}
   const g=groupId ? db.groups[groupId] : managedGroup(ctx.from.id);
-  if(groupId && g && !isOwner(ctx.from.id) && !isInstitutionAdmin(ctx.from.id,g.institutionId) && String(g.starostaId||'')!==String(ctx.from.id) && String(g.zamId||'')!==String(ctx.from.id)) { await ctx.answerCbQuery('Нет прав для подтверждения.'); return; }
+  if(groupId && g && !canManageChat(ctx.from.id,groupId)) { await ctx.answerCbQuery('Нет прав для подтверждения.'); return; }
   if(!g){await ctx.answerCbQuery('Группа не найдена.');return;}
   g.students=list.slice(0,100);
   g.attendance||={};
@@ -1609,7 +1609,7 @@ bot.on('text', async (ctx,next) => {
   const waiting=u.pendingStudentImport && String(u.pendingStudentImportChatId||'')===groupId;
   const isReply=String(ctx.message.reply_to_message?.from?.id||'')===String(ctx.botInfo.id);
   if (!waiting || !isReply || raw.startsWith('/')) return next();
-  if (!group || (!isOwner(ctx.from.id) && String(group.starostaId||'')!==String(ctx.from.id) && String(group.zamId||'')!==String(ctx.from.id)))
+  if (!group || !canManageChat(ctx.from.id,groupId))
    return ctx.reply('❌ Нет прав импортировать список в эту группу.');
   const names=parseStudentNames(raw);
   if(!names.length)return ctx.reply('Не удалось распознать ФИО. Ответь на сообщение бота списком: по одному ФИО на строку.');
@@ -2343,7 +2343,7 @@ bot.on('callback_query', async ctx => {
     if (!isPrivate(ctx)) { await ctx.answerCbQuery('Только в личке.'); return; }
     const groupId = data.slice('students:'.length);
     const g = db.groups[groupId];
-    if (!g) { await ctx.answerCbQuery('Группа не найдена.'); return; }
+    if (!g || !canManageChat(ctx.from.id,groupId)) { await ctx.answerCbQuery('Нет доступа к этой группе.'); return; }
     const students=g.students||[];if(!students.length){await ctx.answerCbQuery('Список группы пуст.');return;}
     await ctx.answerCbQuery('Готово');await ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g)});
     return;
@@ -2361,7 +2361,7 @@ bot.on('callback_query', async ctx => {
   }
 
   const target = data.slice(isHomework ? 'hwsend:'.length : 'pollsend:'.length);
-  const groups = Object.values(db.groups);
+  const groups = managedChats(ctx.from.id);
   const targets = target === 'all' ? groups : groups.filter(g => String(g.chatId) === target);
 
   if (!targets.length) {
@@ -2624,7 +2624,18 @@ async function handleMiniAppApi(req,res,url) {
   }
   const selectedGroupId=String(url.searchParams.get('groupId')||'');
   const g=managedGroup(tgUser.id,selectedGroupId);
-  if(!g) return sendJson(res,403,{error:'Нет доступа к выбранной группе. Обнови список групп.'});
+  if(!g || !canManageGroup(tgUser.id,g)) return sendJson(res,403,{error:'Нет доступа к выбранной группе. Обнови список групп.'});
+  const managerWriteRoutes = new Set([
+    'DELETE /api/students',
+    'POST /api/announcements',
+    'POST /api/homework-media-upload',
+    'POST /api/homework','PUT /api/homework','DELETE /api/homework',
+    'POST /api/events','PUT /api/events','DELETE /api/events',
+    'POST /api/attendance'
+  ]);
+  if (managerWriteRoutes.has(req.method+' '+url.pathname) && !canManageGroup(tgUser.id,g)) {
+    return sendJson(res,403,{error:'Недостаточно прав для изменения данных этой учебной группы.'});
+  }
   if(req.method==='GET' && url.pathname==='/api/data') {
     let scheduleItems=[],scheduleError='',scheduleLoading=false;
     try {
