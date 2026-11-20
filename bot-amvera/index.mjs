@@ -1751,14 +1751,18 @@ bot.command('starosta', async ctx => {
   if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) {
     return ctx.reply('❌ Назначить себя старостой может владелец бота или администратор этой группы.');
   }
-  const u = normalizeUser(user(ctx.from.id));
-  u.role = 'starosta';
-  u.username = ctx.from.username || u.username || '';
-  u.group = ctx.chat.title || u.group;
+  const groupNumber=String(ctx.message?.text||'').trim().split(/\s+/)[1]||'';
+  if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи учебную группу: /starosta 1 или /starosta 2.');
   registerGroup(ctx);
-  db.groups[String(ctx.chat.id)].starostaId = ctx.from.id;
+  const chat=db.groups[String(ctx.chat.id)];
+  const studyGroup=ensureStudyGroups(chat).find(g=>g.studyGroup===STUDY_GROUPS[groupNumber]);
+  if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
+  studyGroup.starostaId=String(ctx.from.id);studyGroup._roleAssignmentsInitialized=true;
+  const u = normalizeUser(user(ctx.from.id));
+  u.role='starosta';u.username=ctx.from.username||u.username||'';
+  u.group=studyGroup.studyGroup;u.groupChatId=String(ctx.chat.id);u.institutionId=String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID);
   saveDb();
-  return ctx.reply('👑 ' + (ctx.from.first_name || 'Пользователь') + ' назначил(а) себя старостой этой группы. Теперь доступны команды посещаемости.', studentMenu);
+  return ctx.reply('👑 Ты назначен старостой учебной группы «'+escapeHtml(studyGroup.studyGroup)+'».', studentMenu);
 });
 
 bot.command('zam', async ctx => {
@@ -1776,7 +1780,8 @@ bot.command('zam', async ctx => {
   if(String(studyGroup.starostaId||'')===String(target.id)) return ctx.reply('Этот пользователь уже назначен старостой выбранной группы.');
   const u=normalizeUser(user(target.id));
   u.role='zam';u.username=target.username||u.username||'';u.group=groupName;
-  studyGroup.zamId=String(target.id);
+  u.groupChatId=String(ctx.chat.id);u.institutionId=String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID);
+  studyGroup.zamId=String(target.id);studyGroup._roleAssignmentsInitialized=true;
   saveDb();
   return ctx.reply('⭐ '+(target.first_name||'Пользователь')+' назначен заместителем старосты группы «'+groupName+'». Теперь он может добавлять студентов командой /student, удалять через /delstudent и загружать список через /importstudents в личном чате с ботом.',studentMenu);
 });
@@ -1785,15 +1790,18 @@ bot.command('setstarosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначать старосту может только администратор группы.');
   const target = ctx.message.reply_to_message?.from;
-  if (!target) return ctx.reply('Ответь командой /setstarosta на сообщение нужного человека.');
-  const u = normalizeUser(user(target.id));
-  u.role = 'starosta';
-  u.username = target.username || u.username || '';
-  u.group = ctx.chat.title || u.group;
+  if (!target) return ctx.reply('Ответь командой /setstarosta 1 или /setstarosta 2 на сообщение нужного человека.');
+  const groupNumber=String(ctx.message?.text||'').trim().split(/\s+/)[1]||'';
+  if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи номер учебной группы: /setstarosta 1 или /setstarosta 2.');
   registerGroup(ctx);
-  db.groups[String(ctx.chat.id)].starostaId = target.id;
+  const studyGroup=ensureStudyGroups(db.groups[String(ctx.chat.id)]).find(g=>g.studyGroup===STUDY_GROUPS[groupNumber]);
+  if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
+  const u = normalizeUser(user(target.id));
+  u.role='starosta';u.username=target.username||u.username||'';
+  u.group=studyGroup.studyGroup;u.groupChatId=String(ctx.chat.id);u.institutionId=String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID);
+  studyGroup.starostaId=String(target.id);studyGroup._roleAssignmentsInitialized=true;
   saveDb();
-  await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой.');
+  await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой группы «'+escapeHtml(studyGroup.studyGroup)+'».');
 });
 
 bot.command('appointstarosta', async ctx => {
@@ -1812,10 +1820,19 @@ bot.command('setstudent', async ctx => {
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Менять роль может только администратор группы.');
   const target = ctx.message.reply_to_message?.from;
   if (!target) return ctx.reply('Ответь командой /setstudent на сообщение нужного человека.');
+  const chat=db.groups[String(ctx.chat.id)];
+  if(chat) {
+    for(const studyGroup of ensureStudyGroups(chat)) {
+      if(String(studyGroup.starostaId||'')===String(target.id)) studyGroup.starostaId='';
+      if(String(studyGroup.zamId||'')===String(target.id)) studyGroup.zamId='';
+      studyGroup._roleAssignmentsInitialized=true;
+    }
+  }
   const u = normalizeUser(user(target.id));
-  u.role = 'student';
+  u.role='student';
+  if(String(u.groupChatId||'')===String(ctx.chat.id)) delete u.groupChatId;
   saveDb();
-  await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' теперь отмечен как студент.');
+  await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' снят с управленческих ролей в этом учебном чате.');
 });
 
 
