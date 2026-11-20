@@ -492,10 +492,15 @@ function ensureStudyGroups(chat) {
  if (!chat) return [];
  chat.studyGroups ||= {};
  const names=Object.values(STUDY_GROUPS);
- const needsSave=!chat._studyGroupsMigratedV1 || !chat._institutionMigrationV1 || !chat._groupRoleScopeV1;
+ const needsSave=!chat._studyGroupsMigratedV1 || !chat._institutionMigrationV1 || !chat._groupRoleScopeV1 || !db.defaultRoleSeededChatId;
  // Мягкая миграция: все уже существующие группы относятся к первому заведению.
  if (!chat.institutionId) chat.institutionId=DEFAULT_INSTITUTION_ID;
  const institutionId=String(chat.institutionId);
+ if (!db.defaultRoleSeededChatId) {
+  const firstDefaultChat=Object.keys(db.groups).find(chatId=>!db.groups[chatId]?.institutionId || String(db.groups[chatId].institutionId)===DEFAULT_INSTITUTION_ID);
+  db.defaultRoleSeededChatId=String(firstDefaultChat || chat.chatId || '');
+ }
+ const isPrimaryLegacyChat=String(chat.chatId||'')===String(db.defaultRoleSeededChatId||'');
  db.institutions ||= {};
  db.institutions[institutionId] ||= {
   id: institutionId,
@@ -518,10 +523,15 @@ function ensureStudyGroups(chat) {
   item.chatId=chat.chatId; item.chatTitle=chat.title || 'Общий чат';
   item.title=name; item.studyGroup=name; item.scheduleGroup=name;
   if (!item._roleAssignmentsInitialized) {
-   // Seed the original RUK appointments once; preserve later group-specific changes.
-   if (institutionId === DEFAULT_INSTITUTION_ID) {
+   // Keep the original RUK appointments only in the first legacy Telegram chat.
+   if (institutionId === DEFAULT_INSTITUTION_ID && isPrimaryLegacyChat) {
     if (!item.starostaId && STUDY_GROUP_STAROSTAS[name]) item.starostaId=String(STUDY_GROUP_STAROSTAS[name]);
     if (!item.zamId && STUDY_GROUP_ZAMS[name]) item.zamId=String(STUDY_GROUP_ZAMS[name]);
+   } else {
+    // Older versions copied these platform defaults into every attached chat.
+    // Remove only those copied defaults; preserve any distinct explicit assignment.
+    if (String(item.starostaId||'')===String(STUDY_GROUP_STAROSTAS[name]||'')) delete item.starostaId;
+    if (String(item.zamId||'')===String(STUDY_GROUP_ZAMS[name]||'')) delete item.zamId;
    }
    item._roleAssignmentsInitialized=true;
   }
