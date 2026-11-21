@@ -1348,7 +1348,7 @@ bot.start(async ctx => {
 bot.help(ctx => ctx.reply(
   '📚 <b>Команды Староста Бота</b>\n\n' +
   '📅 <b>Расписание</b>\n' +
-  '/group НАЗВАНИЕ — сохранить учебную группу\n' +
+  '/group НАЗВАНИЕ — сохранить учебную группу\n'    '/openchat — разрешить всем участникам писать (в чате, для админа)\n' +
   '/schedule — сегодня\n/tomorrow — завтра\n/week — неделя\n\n' +
   '👨‍🎓 <b>Студенты и посещаемость</b>\n' +
   '/role — посмотреть свою роль\n/allroles — общий список ролей по группам (в личке, для владельца/админов)\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
@@ -2600,6 +2600,33 @@ bot.hears('➕ Подключить бота к чату', async ctx => {
     { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('➕ Выбрать существующую группу', 'https://t.me/starostagivbot?startgroup=true')]]) }
   );
 });
+bot.command('openchat', async ctx => {
+  if (!ctx.chat || !['group','supergroup'].includes(ctx.chat.type)) {
+    return ctx.reply('📩 Команду /openchat нужно выполнить непосредственно в нужном чате.');
+  }
+  if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) {
+    return ctx.reply('🔒 Открыть возможность писать может только владелец бота или администратор чата.');
+  }
+  try {
+    await ctx.telegram.setChatPermissions(ctx.chat.id, {
+      can_send_messages: true,
+      can_send_audios: true,
+      can_send_documents: true,
+      can_send_photos: true,
+      can_send_videos: true,
+      can_send_video_notes: true,
+      can_send_voice_notes: true,
+      can_send_polls: true,
+      can_send_other_messages: true,
+      can_add_web_page_previews: true
+    }, { use_independent_chat_permissions: true });
+    return ctx.reply('🔓 <b>В чате разрешена отправка сообщений всем участникам.</b>\n\nЕсли отдельные пользователи были ограничены персонально (мут), их ограничения нужно снять отдельно в настройках участников.', { parse_mode: 'HTML' });
+  } catch (error) {
+    console.error('[openchat] setChatPermissions failed:', error?.message || error);
+    return ctx.reply('❌ Не удалось изменить разрешения. Проверь, что бот является администратором чата и имеет право «Ограничивать участников».');
+  }
+});
+
 bot.command('connectgroup', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личные сообщения с ботом.');
   return ctx.reply(
