@@ -2850,6 +2850,49 @@ async function handleMiniAppApi(req,res,url) {
     const groups=accessibleGroups(tgUser.id);
     return sendJson(res,200,{groups});
   }
+  // Telegram chat controls are scoped to chats where the user manages every cohort.
+  if (url.pathname === '/api/telegram-chats') {
+    const chats = Object.values(db.groups || {}).filter(chat => canManageChat(tgUser.id, chat.chatId));
+    if (req.method === 'GET') {
+      return sendJson(res,200,{chats:chats.map(chat=>({id:String(chat.chatId),title:String(chat.title||'Учебный чат')}))});
+    }
+    if (req.method === 'POST') {
+      try {
+        const body=await readJsonBody(req);
+        const chatId=String(body.chatId||'');
+        const chat=chats.find(item=>String(item.chatId)===chatId);
+        if(!chat) return sendJson(res,403,{error:'Нет прав на управление этим чатом.'});
+        const action=String(body.action||'');
+        if(action==='open') {
+          await bot.telegram.setChatPermissions(chat.chatId,{
+            can_send_messages:true,can_send_audios:true,can_send_documents:true,
+            can_send_photos:true,can_send_videos:true,can_send_video_notes:true,
+            can_send_voice_notes:true,can_send_polls:true,can_send_other_messages:true,
+            can_add_web_page_previews:true
+          },{use_independent_chat_permissions:true});
+          return sendJson(res,200,{ok:true,message:'Всем участникам разрешено писать в чат.'});
+        }
+        if(action==='announce') {
+          const message=String(body.text||'').trim();
+          if(!message) return sendJson(res,400,{error:'Напиши текст объявления.'});
+          if(message.length>3000) return sendJson(res,400,{error:'Максимум 3000 символов.'});
+          await bot.telegram.sendMessage(chat.chatId,'📢 <b>Объявление</b>\\n\\n'+escapeHtml(message),{parse_mode:'HTML'});
+          const item={id:crypto.randomUUID(),text:message,authorId:String(tgUser.id),authorName:String(u.fullName||tgUser.first_name||'Староста'),createdAt:new Date().toISOString()};
+          for(const group of ensureStudyGroups(chat)) {
+            group.announcements ||= [];
+            group.announcements.push(item);
+            if(group.announcements.length>100) group.announcements=group.announcements.slice(-100);
+          }
+          saveDb();
+          return sendJson(res,200,{ok:true,message:'Объявление опубликовано в чате.'});
+        }
+        return sendJson(res,400,{error:'Неизвестное действие.'});
+      } catch(error) {
+        console.error('[miniapp telegram chat]',error?.message||error);
+        return sendJson(res,502,{error:'Не удалось выполнить действие. Проверь права бота администратора в чате.'});
+      }
+    }
+  }
   const selectedGroupId=String(url.searchParams.get('groupId')||'');
   const g=managedGroup(tgUser.id,selectedGroupId);
   if(!g || !canManageGroup(tgUser.id,g)) return sendJson(res,403,{error:'Нет доступа к выбранной группе. Обнови список групп.'});
@@ -2917,7 +2960,7 @@ async function handleMiniAppApi(req,res,url) {
     };
     const attendanceHistory={week:summarizeHistory(7),month:summarizeHistory(30),recent:historyEntries.slice(0,12)};
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>{const attendance={present:0,absent:0,marked:0,rate:0},bySubject={};for(const entry of historyEntries){const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];if(status==='present')attendance.present++;else if(status==='absent')attendance.absent++;if(status==='present'||status==='absent'){const subject=String(entry.subject||'Занятие').trim()||'Занятие';bySubject[subject]||={subject,present:0,absent:0,marked:0,rate:0};bySubject[subject][status]++;}}attendance.marked=attendance.present+attendance.absent;attendance.rate=attendance.marked?Math.round(attendance.present/attendance.marked*100):0;const attendanceBySubject=Object.values(bySubject).map(x=>{x.marked=x.present+x.absent;x.rate=x.marked?Math.round(x.present/x.marked*100):0;return x;}).sort((a,b)=>a.subject.localeCompare(b.subject,'ru'));return {index:i,name:studentName(s),attendanceBySubject,statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked'])),attendance30d:attendance,attendanceHistory:historyEntries.map(entry=>{const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];return status==='present'||status==='absent'?{date:entry.date,timeStart:entry.timeStart,subject:entry.subject,status}:null;}).filter(Boolean)};}),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>{const attendance={present:0,absent:0,marked:0,rate:0},bySubject={};for(const entry of historyEntries){const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];if(status==='present')attendance.present++;else if(status==='absent')attendance.absent++;if(status==='present'||status==='absent'){const subject=String(entry.subject||'Занятие').trim()||'Занятие';bySubject[subject]||={subject,present:0,absent:0,marked:0,rate:0};bySubject[subject][status]++;}}attendance.marked=attendance.present+attendance.absent;attendance.rate=attendance.marked?Math.round(attendance.present/attendance.marked*100):0;const attendanceBySubject=Object.values(bySubject).map(x=>{x.marked=x.present+x.absent;x.rate=x.marked?Math.round(x.present/x.marked*100):0;return x;}).sort((a,b)=>a.subject.localeCompare(b.subject,'ru'));return {index:i,name:studentName(s),attendanceBySubject,statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked'])),attendance30d:attendance,attendanceHistory:historyEntries.map(entry=>{const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];return status==='present'||status==='absent'?{date:entry.date,timeStart:entry.timeStart,subject:entry.subject,status}:null;}).filter(Boolean)};}),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
     const count=(g.students||[]).length;
