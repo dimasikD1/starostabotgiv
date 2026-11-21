@@ -69,6 +69,13 @@ test('clears only the requested chat roles and reports each removed assignment',
   assert.equal(groups[1].starostaId, '');
 });
 
+test('can clear a self-assigned role without marking unrelated migration state initialized', () => {
+  const groups = [{ starostaId: '7', _roleAssignmentsInitialized: false }];
+  clearStudyGroupRoles(groups, '7', undefined, false);
+  assert.equal(groups[0].starostaId, '');
+  assert.equal(groups[0]._roleAssignmentsInitialized, false);
+});
+
 test('sets the student role and only clears matching chat context', () => {
   const user = { role: 'starosta', groupChatId: '-100' };
   setStudentRole(user, '-100');
