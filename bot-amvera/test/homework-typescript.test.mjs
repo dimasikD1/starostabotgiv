@@ -6,7 +6,7 @@ import {
   latestHomework,
   markHomeworkCompleted,
   parseHomeworkCommand
-} from '../../.test-build/domain-homework/homework.js';
+} from '../../.test-build/domain-user/homework.js';
 
 test('parses /hw subject and task while preserving extra separators in task', () => {
   assert.deepEqual(parseHomeworkCommand('Математика | Решить 1–10 | оформить в тетради'), {
