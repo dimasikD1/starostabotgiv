@@ -6,6 +6,7 @@ import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
+import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -345,15 +346,7 @@ function user(id) {
   return db.users[key];
 }
 
-function normalizeUser(u) {
-  u.role ||= 'student';
-  u.students ||= [];
-  u.attendance ||= {};
-  u.subscriptionUntil ||= 0;
-  u.paymentHistory ||= [];
-  u.createdAt ||= null;
-  return u;
-}
+
 
 function isManagerRole(u) {
   return ['starosta', 'zam'].includes(u?.role);
