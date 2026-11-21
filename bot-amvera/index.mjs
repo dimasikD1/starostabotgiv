@@ -890,7 +890,7 @@ async function startHomework(ctx) {
 
   const parsed = parseHomeworkCommand(text);
   if (!parsed.ok) {
-    if (parsed.error === 'missing_parts') return ctx.reply('❌ Укажи предмет и задание через |\\nПример: /hw Математика | Решить задачи 1–10');
+    if (parsed.error === 'missing_parts') return ctx.reply('❌ Укажи предмет и задание через |\nПример: /hw Математика | Решить задачи 1–10');
     if (parsed.error === 'subject_too_long') return ctx.reply('❌ Название предмета слишком длинное.');
     return ctx.reply('❌ Текст ДЗ слишком длинный (максимум 3500 символов).');
   }
