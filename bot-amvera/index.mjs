@@ -13,6 +13,7 @@ import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendanc
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole } from './domain/student-management-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -1503,18 +1504,16 @@ bot.on('text', async (ctx,next) => {
   const g=managedGroup(ctx.from.id);
   if(!g||!g.students[pending.index]){delete u.pendingStudentField;saveDb();return ctx.reply('❌ Студент не найден. Открой /students и попробуй снова.');}
   if(raw.toLowerCase()==='/cancel'){delete u.pendingStudentField;saveDb();return ctx.reply('Изменение отменено.');}
-  const student=g.students[pending.index];
-  const rec=typeof student==='string'?{name:student}:student;
+  let value='';
   if(pending.type==='username'){
-   const value=raw==='-'?'':raw.replace(/^@/,'').trim();
+   value=raw==='-'?'':raw.replace(/^@/,'').trim();
    if(value&&!/^[A-Za-z0-9_]{5,32}$/.test(value))return ctx.reply('❌ Неверный username. Введи @username или /cancel.');
-   rec.username=value;
   } else {
-    const value=raw==='-'?'':raw.replace(/[^0-9+]/g,'');
-    if(value&&!/^\+[1-9][0-9]{5,14}$/.test(value))return ctx.reply('❌ Неверный номер. Укажи международный формат с плюсом, например +79181651870 или +37255555555. Для отмены: /cancel.');
-   rec.phone=value;
+   value=raw==='-'?'':raw.replace(/[^0-9+]/g,'');
+   if(value&&!/^\+[1-9][0-9]{5,14}$/.test(value))return ctx.reply('❌ Неверный номер. Укажи международный формат с плюсом, например +79181651870 или +37255555555. Для отмены: /cancel.');
   }
-  g.students[pending.index]=rec;delete u.pendingStudentField;saveDb();
+  if(!updateStudentField(g,pending.index,pending.type,value)){delete u.pendingStudentField;saveDb();return ctx.reply('❌ Студент не найден. Открой /students и попробуй снова.');}
+  delete u.pendingStudentField;saveDb();
   return ctx.reply('✅ Данные сохранены. Открой /students, чтобы увидеть обновлённую карточку.');
  }
  if(!u.pendingStudentImport)return next();
@@ -1573,16 +1572,20 @@ bot.command('student',async ctx=>{
  const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):ctx.message.text.replace(/^\/student(?:@\S+)?/i,'').trim();
  if(target&&['group','supergroup'].includes(ctx.chat.type)){const g=db.groups[String(ctx.chat.id)];if(!g)return ctx.reply('Сначала администратор должен выполнить /attach.');
  if(String(g.starostaId||'')!==String(ctx.from.id)&&String(g.zamId||'')!==String(ctx.from.id)&&!(await isGroupAdmin(ctx))&&!isOwner(ctx.from.id))return ctx.reply('❌ Добавлять студентов может староста или администратор.');
- g.students||=[];g.attendance||={};const rec={name:name||('ID '+target.id),telegramId:String(target.id),username:target.username||''};const i=g.students.findIndex(x=>String(typeof x==='object'?x.telegramId:'')===rec.telegramId);
- if(i>=0)g.students[i]=rec;else if(g.students.length<100)g.students.push(rec);else return ctx.reply('❌ Максимум 100 студентов.');saveDb();return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+studentName(rec));}
+ g.attendance||={};const result=addTelegramStudent(g,{name:name||('ID '+target.id),telegramId:String(target.id),username:target.username||''});
+ if(result==='limit')return ctx.reply('❌ Максимум 100 студентов.');
+ saveDb();return ctx.reply((result==='updated'?'🔄 Обновлена запись в списке «':'✅ Добавлен в список «')+g.title+'»: '+studentName(g.students.find(x=>String(typeof x==='object'?x.telegramId:'')===String(target.id))));
+ }
  if(!isPrivate(ctx))return ctx.reply('Ответь в группе на сообщение студента командой /student.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Сначала назначь старосту в прикреплённой группе.');
- if(!name)return ctx.reply('Формат: /student Имя Фамилия');if(g.students.some(x=>studentName(x).toLowerCase()===name.toLowerCase()))return ctx.reply('ℹ️ Такой студент уже есть.');
- if(g.students.length>=100)return ctx.reply('❌ Максимум 100 студентов.');g.students.push(name);saveDb();return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+name);
+ if(!name)return ctx.reply('Формат: /student Имя Фамилия');const result=addNamedStudent(g,name);
+ if(result==='duplicate')return ctx.reply('ℹ️ Такой студент уже есть.');
+ if(result==='limit')return ctx.reply('❌ Максимум 100 студентов.');
+ saveDb();return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+name);
 });
 bot.command('delstudent',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Удаление доступно в личных сообщениях.');const n=Number(ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i,'').trim())-1,g=managedGroup(ctx.from.id);
  if(!g)return ctx.reply('❌ Не найдена твоя прикреплённая группа.');if(!Number.isInteger(n)||n<0||n>=g.students.length)return ctx.reply('Формат: /delstudent номер из списка /students');
- const removed=g.students.splice(n,1)[0];saveDb();return ctx.reply('🗑 Удалён: '+studentName(removed));
+ const removed=removeStudentAt(g,n);saveDb();return ctx.reply('🗑 Удалён: '+studentName(removed));
 });
 bot.hears('👨‍🎓 Список студентов', ctx => ctx.reply('Используй /students. Добавить с username: ответь в группе на сообщение студента командой /student.'));
 
@@ -1596,11 +1599,8 @@ async function showRole(ctx) {
     return ctx.reply(lines.length?'👤 <b>Твои назначения</b>\n\n'+lines.join('\n'):'👨‍🎓 У тебя нет назначенных управленческих ролей.\n\nНазначение выполняет администратор соответствующей учебной группы.',{parse_mode:'HTML'});
   }
   if (value !== 'student') return ctx.reply('❌ Управленческую роль назначает администратор конкретной учебной группы.');
-  for(const g of allStudyGroups()) {
-    if(String(g.starostaId||'')===id) g.starostaId='';
-    if(String(g.zamId||'')===id) g.zamId='';
-  }
-  const u=normalizeUser(user(id));u.role='student';
+  clearStudyGroupRoles(allStudyGroups(),id);
+  const u=normalizeUser(user(id));setStudentRole(u);  const u=normalizeUser(user(id));u.role='student';
   saveDb();
   await ctx.reply('✅ Ты снял(а) с себя все назначения старосты и заместителя.',menuFor(ctx));
 }
@@ -1613,16 +1613,11 @@ bot.command(['delrole', 'removerole'], async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Снимать роли других пользователей в личке может только владелец бота.');
   const targetId = String(ctx.message?.text || '').trim().split(/\s+/)[1] || '';
   if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
-  let removed = 0;
-  for (const g of allStudyGroups()) {
-    if (String(g.starostaId || '') === targetId) { g.starostaId = ''; removed++; }
-    if (String(g.zamId || '') === targetId) { g.zamId = ''; removed++; }
-    g._roleAssignmentsInitialized = true;
-  }
+  const removed = clearStudyGroupRoles(allStudyGroups(),targetId);
   const target = db.users?.[targetId];
   if (target) {
     const u = normalizeUser(target);
-    u.role = 'student';
+    setStudentRole(u);
   }
   saveDb();
   return ctx.reply(removed
@@ -1698,8 +1693,7 @@ bot.command('starosta', async ctx => {
   if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
   studyGroup.starostaId=String(ctx.from.id);studyGroup._roleAssignmentsInitialized=true;
   const u = normalizeUser(user(ctx.from.id));
-  u.role='starosta';u.username=ctx.from.username||u.username||'';
-  u.group=studyGroup.studyGroup;u.groupChatId=String(ctx.chat.id);u.institutionId=String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID);
+  assignStudyGroupRole(studyGroup,u,'starosta',ctx.from.id,{username:ctx.from.username||'',chatId:ctx.chat.id,institutionId:String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID),groupName:studyGroup.studyGroup});
   saveDb();
   return ctx.reply('👑 Ты назначен старостой учебной группы «'+escapeHtml(studyGroup.studyGroup)+'».', studentMenu);
 });
@@ -1718,9 +1712,7 @@ bot.command('zam', async ctx => {
   if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
   if(String(studyGroup.starostaId||'')===String(target.id)) return ctx.reply('Этот пользователь уже назначен старостой выбранной группы.');
   const u=normalizeUser(user(target.id));
-  u.role='zam';u.username=target.username||u.username||'';u.group=groupName;
-  u.groupChatId=String(ctx.chat.id);u.institutionId=String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID);
-  studyGroup.zamId=String(target.id);studyGroup._roleAssignmentsInitialized=true;
+  assignStudyGroupRole(studyGroup,u,'zam',target.id,{username:target.username||'',chatId:ctx.chat.id,institutionId:String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID),groupName});
   saveDb();
   return ctx.reply('⭐ '+(target.first_name||'Пользователь')+' назначен заместителем старосты группы «'+groupName+'». Теперь он может добавлять студентов командой /student, удалять через /delstudent и загружать список через /importstudents в личном чате с ботом.',studentMenu);
 });
@@ -1736,9 +1728,7 @@ bot.command('setstarosta', async ctx => {
   const studyGroup=ensureStudyGroups(db.groups[String(ctx.chat.id)]).find(g=>g.studyGroup===STUDY_GROUPS[groupNumber]);
   if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
   const u = normalizeUser(user(target.id));
-  u.role='starosta';u.username=target.username||u.username||'';
-  u.group=studyGroup.studyGroup;u.groupChatId=String(ctx.chat.id);u.institutionId=String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID);
-  studyGroup.starostaId=String(target.id);studyGroup._roleAssignmentsInitialized=true;
+  assignStudyGroupRole(studyGroup,u,'starosta',target.id,{username:target.username||'',chatId:ctx.chat.id,institutionId:String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID),groupName:studyGroup.studyGroup});
   saveDb();
   await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой группы «'+escapeHtml(studyGroup.studyGroup)+'».');
 });
@@ -1755,16 +1745,9 @@ bot.command('setstudent', async ctx => {
   const target = ctx.message.reply_to_message?.from;
   if (!target) return ctx.reply('Ответь командой /setstudent на сообщение нужного человека.');
   const chat=db.groups[String(ctx.chat.id)];
-  if(chat) {
-    for(const studyGroup of ensureStudyGroups(chat)) {
-      if(String(studyGroup.starostaId||'')===String(target.id)) studyGroup.starostaId='';
-      if(String(studyGroup.zamId||'')===String(target.id)) studyGroup.zamId='';
-      studyGroup._roleAssignmentsInitialized=true;
-    }
-  }
+  if(chat) clearStudyGroupRoles(ensureStudyGroups(chat),target.id,ctx.chat.id);
   const u = normalizeUser(user(target.id));
-  u.role='student';
-  if(String(u.groupChatId||'')===String(ctx.chat.id)) delete u.groupChatId;
+  setStudentRole(u,ctx.chat.id);
   saveDb();
   await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' снят с управленческих ролей в этом учебном чате.');
 });
