@@ -5,6 +5,13 @@
     "outDir": ".test-build/domain-user",
     "rootDir": "bot-amvera/domain"
   },
-  "include": ["bot-amvera/domain/user-normalization.ts", "bot-amvera/domain/user-profile.ts"],
-  "exclude": ["node_modules", ".test-build"]
+  "include": [
+    "bot-amvera/domain/user-normalization.ts",
+    "bot-amvera/domain/user-profile.ts",
+    "bot-amvera/domain/group-access.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".test-build"
+  ]
 }
