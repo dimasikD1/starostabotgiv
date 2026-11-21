@@ -2876,7 +2876,7 @@ async function handleMiniAppApi(req,res,url) {
           const message=String(body.text||'').trim();
           if(!message) return sendJson(res,400,{error:'Напиши текст объявления.'});
           if(message.length>3000) return sendJson(res,400,{error:'Максимум 3000 символов.'});
-          await bot.telegram.sendMessage(chat.chatId,'📢 <b>Объявление</b>\\n\\n'+escapeHtml(message),{parse_mode:'HTML'});
+          await bot.telegram.sendMessage(chat.chatId,'📢 <b>Объявление</b>\n\n'+escapeHtml(message),{parse_mode:'HTML'});
           const item={id:crypto.randomUUID(),text:message,authorId:String(tgUser.id),authorName:String(u.fullName||tgUser.first_name||'Староста'),createdAt:new Date().toISOString()};
           for(const group of ensureStudyGroups(chat)) {
             group.announcements ||= [];
