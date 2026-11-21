@@ -2718,6 +2718,15 @@ bot.command('connectgroup', async ctx => {
   );
 });
 
+bot.command(['refreshbuttons', 'refreshmenu'], async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('🔒 Обновить кнопки можно только в личных сообщениях с ботом.');
+  const keyboard = menuFor(ctx);
+  return ctx.reply(
+    '🔄 <b>Кнопки обновлены!</b>\nЯ заново проверил твои роли и показал актуальное меню.',
+    { parse_mode: 'HTML', ...keyboard }
+  );
+});
+
 bot.hears('💛 Поддержать хостинг', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Пожертвование можно отправить в личных сообщениях с ботом.');
   return ctx.reply('💛 <b>Поддержать Староста Бот</b>\n\nСобираю средства на новый хостинг. Пожертвование добровольное и не даёт дополнительных функций. Выбери сумму:', { parse_mode: 'HTML', ...donationKeyboard() });
@@ -3243,6 +3252,7 @@ async function main() {
   await telegramStartupRequest('setMyCommands private', () => bot.telegram.setMyCommands([
     { command: 'start', description: 'Запустить бота' },
     { command: 'connectgroup', description: 'Подключить бота к существующей группе' },
+    { command: 'refreshbuttons', description: 'Обновить кнопки личного меню' },
     { command: 'schedule', description: 'Расписание на сегодня' },
     { command: 'group', description: 'Моя учебная группа' },
     { command: 'hw', description: 'Домашние задания' },
