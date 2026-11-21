@@ -1,53 +1,386 @@
-import { getSchedule as getLegacySchedule } from './ruc.mjs';
-import type { LessonType, ScheduleLesson } from './types.js';
+import * as cheerio from 'cheerio';
+import type { ScheduleLesson } from './types.js';
 
-const LESSON_TYPES = new Set<LessonType>([
-  '',
-  'лекция',
-  'практическая',
-  'лабораторная'
-]);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function resolveTimeZone(value: string | undefined, fallback = 'Europe/Moscow'): string {
+  const zone = String(value || '').trim() || fallback;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: zone });
+    return zone;
+  } catch {
+    return fallback;
+  }
 }
 
-function isScheduleLesson(value: unknown): value is ScheduleLesson {
-  if (!isRecord(value)) return false;
+const TIME_ZONE = resolveTimeZone(process.env.TIME_ZONE);
 
-  return (
-    typeof value.date === 'string' &&
-    typeof value.dayOffset === 'number' &&
-    Number.isFinite(value.dayOffset) &&
-    typeof value.time === 'string' &&
-    typeof value.subject === 'string' &&
-    typeof value.teacher === 'string' &&
-    typeof value.room === 'string' &&
-    typeof value.group === 'string' &&
-    (value.timeStart === undefined || typeof value.timeStart === 'string') &&
-    (value.timeEnd === undefined || typeof value.timeEnd === 'string') &&
-    (value.lessonNumber === undefined || typeof value.lessonNumber === 'string') &&
-    (value.lessonType === undefined || LESSON_TYPES.has(value.lessonType as LessonType))
+const DEFAULT_URL = 'https://schedule.ruc.su/';
+const DEFAULT_NEW_URL = 'https://new-schedule.ruc.su/schedule';
+
+const clean = (value: unknown): string => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+function isoToday(offset = 0): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(p => [p.type, p.value]));
+  const d = new Date(values.year + '-' + values.month + '-' + values.day + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + offset);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(date: string, amount: number): string {
+  const d = new Date(String(date).slice(0, 10) + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + amount);
+  return d.toISOString().slice(0, 10);
+}
+
+function parseDate(value: unknown): string {
+  const s = clean(value);
+  const m = s.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const iso = s.match(/\d{4}-\d{2}-\d{2}/);
+  return iso ? iso[0] : '';
+}
+
+function parseCards(html: string, requestedGroup: string): ScheduleLesson[] {
+  const $ = cheerio.load(html);
+  const result = [];
+
+  $('.card').each((_i, card) => {
+    const children = $(card).children();
+    if (!children.length) return;
+    const date = parseDate($(children[0]).text());
+    if (!date) return;
+
+    children.slice(1).each((_j, pair) => {
+      const title = clean($(pair).children().first().text());
+      const raw = $(pair).html() || '';
+      const text = clean(raw.replace(/<[^>]+>/g, ' '));
+      if (!title) return;
+
+      const combined = title + ' ' + text;
+      const timeRange = combined.match(/(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})/);
+      const singleTime = combined.match(/\b(\d{1,2}:\d{2})\b/);
+      const timeLabel = timeRange ? timeRange[0].replace(/\s+/g, '') : (singleTime ? singleTime[1] : '');
+      const lessonNumberMatch = title.match(/^\s*(\d+)\s*[.)-]?\s*/);
+      const lessonNumber = lessonNumberMatch ? lessonNumberMatch[1] : '';
+      const subject = title.replace(/\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/, '').replace(/^\d+\s*[.]?\s*/, '').trim();
+
+      const groupMatch = text.match(/Группа\s*[:\-]?\s*([^,;]+)/i);
+      const roomMatch = text.match(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*([\p{L}\p{N}-]+)/iu);
+      const typeMatch = combined.match(/\b(лекц\w*|практ\w*|лаборатор\w*)\b/i);
+      const lessonType = typeMatch
+        ? (/лекц/i.test(typeMatch[1]) ? 'лекция' : /лаборатор/i.test(typeMatch[1]) ? 'лабораторная' : 'практическая')
+        : '';
+
+      if (groupMatch && requestedGroup &&
+          !groupMatch[1].toLowerCase().includes(requestedGroup.toLowerCase())) return;
+
+      // Убираем предмет, номер пары и аудиторию из общей строки преподавателя.
+      let teacher = text;
+      teacher = teacher.replace(/\b\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\b/g, ' ');
+      teacher = teacher.replace(/^\s*\d+\s*[.)-]?\s*/, '');
+      if (subject) teacher = teacher.replace(subject, ' ');
+      teacher = teacher.replace(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*[\p{L}\p{N}-]+/giu, ' ');
+      teacher = teacher.replace(/Группа\s*[:\-]?\s*[^,;]+/i, ' ');
+      if (typeMatch) teacher = teacher.replace(typeMatch[0], ' ');
+      teacher = clean(teacher.replace(/^[,;:\s-]+|[,;:\s-]+$/g, ''));
+
+      const room = roomMatch ? roomMatch[1].replace(/[,;.]+$/g, '') : '';
+      result.push({
+        date,
+        dayOffset: Math.round((new Date(date + 'T00:00:00') - new Date(isoToday(0) + 'T00:00:00')) / 86400000),
+        time: timeLabel,
+        timeStart: timeRange ? timeRange[1] : '',
+        timeEnd: timeRange ? timeRange[2] : '',
+        subject,
+        lessonNumber,
+        lessonType,
+        teacher,
+        room,
+        group: groupMatch ? clean(groupMatch[1]) : requestedGroup
+      });
+    });
+  });
+  return result;
+}
+
+async function requestHtml(url: string, method: 'GET' | 'POST' = 'GET', data: Record<string, string> = {}, timeout = 20000): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      method,
+      signal: controller.signal,
+      headers: {
+        accept: 'text/html,application/xhtml+xml,application/json',
+        'user-agent': 'Mozilla/5.0 (compatible; StarostaBot/1.0)',
+        ...(method === 'POST'
+          ? { 'content-type': 'application/x-www-form-urlencoded' }
+          : {})
+      },
+      body: method === 'POST'
+        ? new URLSearchParams(data).toString()
+        : undefined
+    });
+
+    if (!response.ok) {
+      throw new Error(`Schedule HTTP ${response.status} from ${url}`);
+    }
+
+    return await response.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getLegacySchedule(group: string, days: number, timeout: number, startDate = isoToday(0)): Promise<ScheduleLesson[]> {
+  const baseUrl =
+    (process.env.SCHEDULE_SITE_URL || DEFAULT_URL).trim().replace(/\/$/, '') + '/';
+
+  const wantedBranch = (process.env.SCHEDULE_BRANCH || '').trim();
+  const wantedKit = (process.env.SCHEDULE_KIT || '').trim();
+
+  const firstHtml = await requestHtml(baseUrl, 'GET', {}, timeout);
+  const $ = cheerio.load(firstHtml);
+  const branchSelect = $('select[name="branch"]').first();
+
+  if (!branchSelect.length) {
+    throw new Error('Не найден список филиалов на schedule.ruc.su');
+  }
+
+  const branches = branchSelect.find('option').map((_i, el) => ({
+    value: $(el).attr('value') || '',
+    text: clean($(el).text())
+  })).get().filter(x => x.value);
+
+  let candidates = branches;
+
+  if (wantedBranch) {
+    candidates = branches.filter(x =>
+      x.text.toLowerCase().includes(wantedBranch.toLowerCase()) ||
+      x.value.toLowerCase() === wantedBranch.toLowerCase()
+    );
+
+    if (!candidates.length) {
+      throw new Error('Филиал не найден: ' + wantedBranch);
+    }
+  }
+
+  for (const branch of candidates) {
+    const branchHtml = await requestHtml(
+      baseUrl,
+      'POST',
+      { branch: branch.value },
+      timeout
+    );
+
+    const branch$ = cheerio.load(branchHtml);
+    const kitSelect = branch$('select[name="year"]').first();
+    if (!kitSelect.length) continue;
+
+    const kits = kitSelect.find('option').map((_i, el) => ({
+      value: branch$(el).attr('value') || '',
+      text: clean(branch$(el).text())
+    })).get().filter(x => x.value);
+
+    const kitCandidates = wantedKit
+      ? kits.filter(x =>
+          x.text.toLowerCase().includes(wantedKit.toLowerCase()) ||
+          x.value.toLowerCase() === wantedKit.toLowerCase()
+        )
+      : kits;
+
+    for (const kit of kitCandidates) {
+      const groupsHtml = await requestHtml(
+        baseUrl,
+        'POST',
+        { branch: branch.value, year: kit.value },
+        timeout
+      );
+
+      const groups$ = cheerio.load(groupsHtml);
+      const groupSelect = groups$('select[name="group"]').first();
+      if (!groupSelect.length) continue;
+
+      const groups = groupSelect.find('option').map((_i, el) => ({
+        value: groups$(el).attr('value') || '',
+        text: clean(groups$(el).text())
+      })).get().filter(x => x.value);
+
+      const match =
+        groups.find(x => x.text.toLowerCase() === group.toLowerCase()) ||
+        groups.find(x => x.text.toLowerCase().includes(group.toLowerCase()));
+
+      if (!match) continue;
+
+      const requestedDate = startDate || isoToday(0);
+      const html = await requestHtml(
+        baseUrl,
+        'POST',
+        {
+          branch: branch.value,
+          year: kit.value,
+          group: match.value,
+          'search-date': 'search-date',
+          'scheduler-date': requestedDate,
+          'date-search': requestedDate
+        },
+        timeout
+      );
+
+      const items = parseCards(html, group);
+
+      const endDate = addDays(requestedDate, days);
+      return items.filter(x => x.date >= requestedDate && x.date < endDate);
+    }
+  }
+
+  throw new Error(
+    `Группа «${group}» не найдена на schedule.ruc.su. Можно задать SCHEDULE_BRANCH и SCHEDULE_KIT.`
   );
 }
 
-/**
- * Typed boundary around the existing, production-proven scraper.
- *
- * The scraper remains in ruc.mjs during this migration step. This adapter
- * checks its runtime output before exposing the strict TypeScript contract.
- * It is not wired into the production bot yet.
- */
-export async function getSchedule(
-  group: string,
-  days = 7,
-  startDate?: string
-): Promise<ScheduleLesson[]> {
-  const result: unknown = await getLegacySchedule(group, days, startDate);
+async function getNewSite(group: string, days: number, timeout: number, startDate = isoToday(0)): Promise<ScheduleLesson[]> {
+  const url = (process.env.SCHEDULE_SITE_URL || DEFAULT_NEW_URL).trim();
+  const response = await requestHtml(url, 'GET', {}, timeout);
+  const $ = cheerio.load(response);
+  const text = clean($.text());
 
-  if (!Array.isArray(result) || !result.every(isScheduleLesson)) {
-    throw new TypeError('Schedule provider returned data with an unexpected shape.');
+  if (!text || /Расписания нет/i.test(text)) return [];
+
+  const items = [];
+
+  $('table').each((_n, table) => {
+    $(table).find('tr').each((_i, row) => {
+      const cells = $(row).find('th,td')
+        .map((_j, cell) => clean($(cell).text()))
+        .get();
+
+      if (cells.length < 2) return;
+
+      const line = cells.join(' | ');
+      if (group && !line.toLowerCase().includes(group.toLowerCase())) return;
+
+      const date = parseDate(line);
+      if (!date) return;
+
+      items.push({
+        date,
+        dayOffset: Math.round(
+          (new Date(date + 'T00:00:00') -
+            new Date(isoToday(0) + 'T00:00:00')) / 86400000
+        ),
+        time: '',
+        subject: line,
+        teacher: '',
+        room: '',
+        group
+      });
+    });
+  });
+
+  const endDate = addDays(startDate || isoToday(0), days);
+  return items.filter(x => x.date >= (startDate || isoToday(0)) && x.date < endDate);
+}
+
+function extractClock(value: unknown): string {
+  const match = String(value || '').match(/(?:T|\b)(\d{1,2}:\d{2})/);
+  return match ? match[1] : '';
+}
+
+function normalizeLessonType(value: unknown): ScheduleLesson['lessonType'] {
+  const s = clean(value).toLowerCase();
+  if (!s) return '';
+  if (/лекц/.test(s)) return 'лекция';
+  if (/лаборатор/.test(s)) return 'лабораторная';
+  if (/практ/.test(s)) return 'практическая';
+  return '';
+}
+
+function normalizeJson(data: any, days: number, startDate = isoToday(0)): ScheduleLesson[] {
+  const raw = Array.isArray(data)
+    ? data
+    : (data?.items || data?.schedule || data?.data || []);
+
+  if (!Array.isArray(raw)) return [];
+
+  const base = new Date((startDate || isoToday(0)) + 'T00:00:00Z');
+
+  return raw.map(item => {
+    const date = String(
+      item.date || item.day || item.start || ''
+    ).slice(0, 10);
+
+    const d = new Date(date + 'T00:00:00Z');
+    const dayOffset = Math.round((d - base) / 86400000);
+
+    return {
+      date,
+      dayOffset,
+      time: item.time || item.startTime || (item.start_time && item.end_time ? item.start_time + '–' + item.end_time : ''),
+      timeStart: item.startTime || item.start_time || item.beginTime || item.timeStart || extractClock(item.start),
+      timeEnd: item.endTime || item.end_time || item.finishTime || item.timeEnd || extractClock(item.end),
+      subject: item.subject || item.name || item.discipline || item.title || '',
+      lessonNumber: item.lessonNumber || item.lesson_number || item.number || item.pairNumber || item.pair_number || '',
+      lessonType: normalizeLessonType(item.lessonType || item.lesson_type || item.type || item.typeName || item.kind || item.classType || ''),
+      teacher: item.teacher || item.teacherName || item.lecturer || '',
+      room: item.room || item.auditory || item.classroom || '',
+      group: item.group || item.groupName || ''
+    };
+  }).filter(x => x.date && x.subject && x.date >= (startDate || isoToday(0)) && x.date < addDays(startDate || isoToday(0), days));
+}
+
+export async function getSchedule(group: string, days = 7, startDate = isoToday(0)): Promise<ScheduleLesson[]> {
+  const timeout = Number(process.env.SCHEDULE_TIMEOUT || 7000);
+  const api = (process.env.SCHEDULE_API_URL || '').trim();
+
+  if (api) {
+    // Поддерживаем как готовый URL, так и шаблон:
+    // https://api-schedule.ruc.su/api/v1/get_schedule/group/{branchId}/{groupId}/no
+    // UUID можно задать через SCHEDULE_BRANCH_ID и SCHEDULE_GROUP_ID.
+    const branchId = (process.env.SCHEDULE_BRANCH_ID || '').trim();
+    const groupId = (process.env.SCHEDULE_GROUP_ID || '').trim();
+
+    let apiUrl = api
+      .replaceAll('{branchId}', branchId)
+      .replaceAll('{groupId}', groupId)
+      .replaceAll('{group}', groupId || group);
+
+    const url = new URL(apiUrl);
+
+    // Если URL старого формата содержит {group}, но UUID не задан,
+    // оставляем совместимость с прежним API через ?group=...
+    if (!api.includes('{branchId}') && !api.includes('{groupId}') &&
+        !api.includes('{group}') && !api.includes('/get_schedule/')) {
+      url.searchParams.set('group', group);
+    }
+
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeout),
+      headers: {
+        accept: 'application/json, text/plain, */*',
+        origin: 'https://new-schedule.ruc.su',
+        referer: 'https://new-schedule.ruc.su/',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/155 Safari/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Schedule API HTTP ' + response.status + ' from ' + url);
+    }
+
+    return normalizeJson(await response.json(), days, startDate);
   }
 
-  return result;
+  try {
+    return await getLegacySchedule(group, days, timeout, startDate);
+  } catch (legacyError) {
+    console.error('[schedule] legacy source failed:', legacyError.message);
+
+    if ((process.env.SCHEDULE_FALLBACK_NEW || 'true').toLowerCase() === 'true') {
+      return await getNewSite(group, days, timeout, startDate);
+    }
+
+    throw legacyError;
+  }
 }
