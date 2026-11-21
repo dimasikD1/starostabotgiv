@@ -3336,6 +3336,25 @@ const healthServer = http.createServer(async (req, res) => {
       time: new Date().toISOString()
     });
   }
+  if (url.pathname === '/terms' || url.pathname === '/privacy') {
+    try {
+      const legalFile = url.pathname === '/terms' ? 'terms.html' : 'privacy.html';
+      const legalPath = new URL('./webapp/' + legalFile, import.meta.url);
+      const body = fs.readFileSync(legalPath);
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': body.length,
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+        ...APP_SECURITY_HEADERS
+      });
+      if (req.method === 'HEAD') return res.end();
+      return res.end(body);
+    } catch (e) {
+      console.error('[legal page]', e?.message || e);
+      return sendText(req, res, 500, 'Документ временно недоступен.');
+    }
+  }
   if (url.pathname === '/telegram-web-app.js') {
     try {
       const sdkFile = new URL('./webapp/telegram-web-app.js', import.meta.url);
