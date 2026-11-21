@@ -9,18 +9,10 @@ import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
+import { resolveTimeZone } from './utils/time-zone-entry.mjs';
+
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
-function resolveTimeZone(value, fallback = 'Europe/Moscow') {
-  const zone = String(value || '').trim() || fallback;
-  try {
-    new Intl.DateTimeFormat('en-CA', { timeZone: zone });
-    return zone;
-  } catch {
-    console.warn('[time] Неизвестный часовой пояс «' + zone + '», использую ' + fallback);
-    return fallback;
-  }
-}
 const TIME_ZONE = resolveTimeZone(process.env.TIME_ZONE);
 
 const DATA_DIR = process.env.DATA_DIR || '/data';
