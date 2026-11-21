@@ -1599,7 +1599,7 @@ async function showRole(ctx) {
     return ctx.reply(lines.length?'👤 <b>Твои назначения</b>\n\n'+lines.join('\n'):'👨‍🎓 У тебя нет назначенных управленческих ролей.\n\nНазначение выполняет администратор соответствующей учебной группы.',{parse_mode:'HTML'});
   }
   if (value !== 'student') return ctx.reply('❌ Управленческую роль назначает администратор конкретной учебной группы.');
-  clearStudyGroupRoles(allStudyGroups(),id);
+  clearStudyGroupRoles(allStudyGroups(),id,undefined,false);
   const u=normalizeUser(user(id));setStudentRole(u);
   saveDb();
   await ctx.reply('✅ Ты снял(а) с себя все назначения старосты и заместителя.',menuFor(ctx));
