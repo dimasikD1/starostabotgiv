@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createJsonStore } from '../../.test-build/domain/json-store.js';
 
-function temporaryDirectory(): string {
+function temporaryDirectory() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'starosta-json-store-'));
 }
 
