@@ -206,6 +206,62 @@ async function registrationMiddleware(ctx, next) {
 
 
 /*
+ * Подключение бота к существующему Telegram-чату.
+ * Сохраняем существующий чат и данные; при изменении статуса бота проверяем админ-права.
+ */
+bot.on('my_chat_member', async ctx => {
+  const update = ctx.update.my_chat_member;
+  const chat = update?.chat;
+  const oldStatus = update?.old_chat_member?.status;
+  const newMember = update?.new_chat_member;
+  const newStatus = newMember?.status;
+  if (!chat?.id || !['group', 'supergroup'].includes(chat.type)) return;
+  const joined = ['left', 'kicked'].includes(oldStatus) &&
+    ['member', 'administrator'].includes(newStatus);
+  const promoted = newStatus === 'administrator' && oldStatus !== 'administrator';
+  const demoted = oldStatus === 'administrator' && newStatus === 'member';
+  if (!joined && !promoted && !demoted) return;
+
+  if (newStatus === 'left' || newStatus === 'kicked') return;
+  try {
+    registerGroup({ chat, from: ctx.from });
+    console.log('[group setup] Existing chat registered:', chat.id, chat.title || '');
+  } catch (error) {
+    console.error('[group setup] Registration failed:', error?.message || error);
+  }
+
+  if (newStatus === 'administrator') {
+    let memberInfo = null;
+    try { memberInfo = await ctx.telegram.getChatMember(chat.id, ctx.botInfo.id); } catch {}
+    const rights = memberInfo || newMember;
+    const missing = [];
+    if (!rights?.can_delete_messages) missing.push('удаление сообщений');
+    if (!rights?.can_restrict_members) missing.push('ограничение участников');
+    if (!rights?.can_pin_messages) missing.push('закрепление сообщений');
+    const message = missing.length
+      ? '⚠️ <b>Бот добавлен в чат, но не все права выданы.</b>\n\nВ настройках администраторов включи: ' + missing.join(', ') + '.'
+      : '✅ <b>Бот подключён к существующему чату!</b>\nЧат зарегистрирован, необходимые права администратора выданы. Существующая переписка и данные не затронуты.';
+    try { await ctx.telegram.sendMessage(chat.id, message, { parse_mode: 'HTML' }); } catch (e) {
+      console.error('[group setup] Could not send admin confirmation:', e?.message || e);
+    }
+  } else if (joined) {
+    try {
+      await ctx.telegram.sendMessage(
+        chat.id,
+        '👋 <b>Староста Бот добавлен в этот существующий чат.</b> Чат зарегистрирован, создавать новую группу не нужно.\n\nДля полной работы назначьте бота администратором и включите права: <b>удаление сообщений</b>, <b>ограничение участников</b> и <b>закрепление сообщений</b>. Не выдавайте право добавлять других администраторов. После выдачи прав бот подтвердит подключение.',
+        { parse_mode: 'HTML' }
+      );
+    } catch (e) {
+      console.error('[group setup] Could not send setup instructions:', e?.message || e);
+    }
+  } else if (demoted) {
+    try {
+      await ctx.telegram.sendMessage(chat.id, '⚠️ Права администратора у бота сняты. Для проверки участников и закрепления расписания верните права удаления сообщений, ограничения участников и закрепления.');
+    } catch {}
+  }
+});
+
+/*
  * Повторная проверка при повторном вступлении.
  * Telegram присылает chat_member только если этот тип обновлений
  * явно включён в allowedUpdates при запуске бота.
@@ -360,6 +416,7 @@ const managerMenu = Markup.keyboard([
   ['📊 Создать опрос', '📚 Создать ДЗ'],
   ['👨‍🎓 Список студентов', '📋 Посещаемость'],
   ['👥 Группы'],
+  ['➕ Подключить бота к чату'],
   ['💛 Поддержать хостинг'],
   ['🔄 Обновить', '❔ Что умеет бот']
 ]).resize();
@@ -367,6 +424,7 @@ const studentMenu = Markup.keyboard([
   ['👥 Моя группа'],
   ['📚 ДЗ'],
   ['❔ Что умеет бот'],
+  ['➕ Подключить бота к чату'],
   ['💛 Поддержать хостинг']
 ]).resize();
 
@@ -1418,7 +1476,9 @@ bot.start(async ctx => {
     u.pendingFullName = true;
     saveDb();
     return ctx.reply(
-      '👋 Добро пожаловать! Напиши, пожалуйста, свои фамилию и имя (при наличии — отчество) одним сообщением. Это нужно для списка студентов.'
+      '👋 Добро пожаловать! Напиши, пожалуйста, свои фамилию и имя (при наличии — отчество) одним сообщением. Это нужно для списка студентов.\n\n' +
+      'Если нужно подключить меня к уже существующему учебному чату, нажми кнопку ниже.',
+      Markup.inlineKeyboard([[Markup.button.url('➕ Добавить бота в существующую группу', 'https://t.me/starostagivbot?startgroup=true')]])
     );
   }
   await ctx.reply(
@@ -1427,6 +1487,10 @@ bot.start(async ctx => {
     'Учебную группу можно выбрать в общей группе или указать командой /group НАЗВАНИЕ.\n\n' +
     '📊 Опросы создаются в личке: /poll Вопрос | Да | Нет',
     { parse_mode: 'HTML', ...menuFor(ctx) }
+  );
+  await ctx.reply(
+    '➕ <b>Подключение к существующему чату</b>\nДобавь бота в уже созданную учебную группу и назначь ему права администратора. Существующий чат и его история сохранятся.',
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('➕ Добавить бота в группу', 'https://t.me/starostagivbot?startgroup=true')]]) }
   );
 });
 
@@ -2633,6 +2697,27 @@ bot.command('donate', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Пожертвование можно отправить в личных сообщениях с ботом.');
   return ctx.reply('💛 <b>Поддержать Староста Бот</b>\n\nСейчас я собираю средства на новый хостинг, чтобы бот и мини-приложение продолжали стабильно работать.\n\nПожертвование полностью добровольное и не открывает платные функции — сейчас бот доступен бесплатно. Выбери сумму:', { parse_mode: 'HTML', ...donationKeyboard() });
 });
+bot.hears('➕ Подключить бота к чату', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личные сообщения с ботом.');
+  return ctx.reply(
+    '➕ <b>Подключение к уже существующей учебной группе</b>\n\n' +
+    '1. Нажми кнопку ниже и выбери нужный существующий Telegram-чат. Создавать новый чат не нужно.\n' +
+    '2. Добавь туда Староста Бот.\n' +
+    '3. В настройках чата открой «Администраторы» и назначь бота администратором.\n\n' +
+    '<b>Нужные права:</b> удаление сообщений, блокировка/ограничение участников и закрепление сообщений. Они нужны для проверки участников и публикации закреплённого расписания. Не выдавай права на добавление других администраторов.\n\n' +
+    'После добавления бот сам зарегистрирует чат и сообщит, если каких-то прав не хватает. Существующие сообщения и история чата не затрагиваются.',
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('➕ Выбрать существующую группу', 'https://t.me/starostagivbot?startgroup=true')]]) }
+  );
+});
+bot.command('connectgroup', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('Открой личные сообщения с ботом.');
+  return ctx.reply(
+    '➕ <b>Подключение к уже существующей учебной группе</b>\n\n' +
+    'Нажми кнопку, выбери существующий чат и добавь туда бота. Затем назначь его администратором с правами удаления сообщений, ограничения участников и закрепления сообщений. Не выдавай право добавлять других администраторов. Бот автоматически зарегистрирует чат после добавления.',
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('➕ Выбрать существующую группу', 'https://t.me/starostagivbot?startgroup=true')]]) }
+  );
+});
+
 bot.hears('💛 Поддержать хостинг', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Пожертвование можно отправить в личных сообщениях с ботом.');
   return ctx.reply('💛 <b>Поддержать Староста Бот</b>\n\nСобираю средства на новый хостинг. Пожертвование добровольное и не даёт дополнительных функций. Выбери сумму:', { parse_mode: 'HTML', ...donationKeyboard() });
@@ -3201,7 +3286,7 @@ async function main() {
   }
 
   console.log('[deploy-check] AMVERA_TEST_2026_11_19');
-  await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member'] });
+  await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member', 'my_chat_member'] });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
   await checkCalendarEventReminders();
