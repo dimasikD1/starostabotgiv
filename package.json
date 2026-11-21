@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "test": "npm run test:typescript && node --test bot-amvera/test/parser.test.mjs bot-amvera/test/schedule-api.test.mjs",
     "test:typescript": "tsc -p tsconfig.test.json && tsc -p tsconfig.domain-test.json && tsc -p tsconfig.utils-test.json && tsc -p tsconfig.user-test.json && node --test bot-amvera/test/schedule-ruc-typescript.test.mjs bot-amvera/test/student-import-typescript.test.mjs bot-amvera/test/html-utils-typescript.test.mjs bot-amvera/test/time-zone-typescript.test.mjs bot-amvera/test/user-normalization-typescript.test.mjs bot-amvera/test/user-profile-typescript.test.mjs bot-amvera/test/group-access-typescript.test.mjs bot-amvera/test/attendance-core-typescript.test.mjs && node --test bot-amvera/test/json-store-typescript.test.mjs",
-    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.domain-build.json && tsc -p tsconfig.utils-build.json && tsc -p tsconfig.user-build.json && tsc -p tsconfig.user-build.json"
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.domain-build.json && tsc -p tsconfig.utils-build.json && tsc -p tsconfig.user-build.json"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
