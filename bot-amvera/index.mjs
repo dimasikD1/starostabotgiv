@@ -14,6 +14,7 @@ import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole } from './domain/student-management-entry.mjs';
+import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -2035,10 +2036,7 @@ function newStructureId(prefix) {
   return prefix + '_' + crypto.randomUUID().replace(/-/g, '').slice(0, 10);
 }
 function sameStructureName(items, name) {
-  const normalized = String(name || '').trim().toLocaleLowerCase('ru-RU');
-  return Object.values(items || {}).some(item =>
-    String(item?.name || '').trim().toLocaleLowerCase('ru-RU') === normalized
-  );
+  return hasDuplicateStructureName(items, name);
 }
 
 bot.command('addfaculty', async ctx => {
@@ -2052,7 +2050,8 @@ bot.command('addfaculty', async ctx => {
   const institution = result.institution;
   if (sameStructureName(institution.faculties, name)) return ctx.reply('⚠️ Такой факультет уже есть в этом заведении.');
   const id = newStructureId('fac');
-  institution.faculties[id] = { id, name: name.slice(0, 120), directions: {}, createdAt: new Date().toISOString() };
+  const created = createFaculty(institution, name, id, new Date().toISOString());
+  if (!created.ok) return ctx.reply(created.reason === 'duplicate' ? '⚠️ Такой факультет уже есть в этом заведении.' : '❌ Укажи название факультета.');
   saveDb();
   console.log('[institution-structure] Faculty created:', id, 'institution:', institution.id);
   return ctx.reply('✅ Факультет добавлен.\n\n🏫 ' + escapeHtml(institution.name) + '\n🎓 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
@@ -2071,7 +2070,8 @@ bot.command('adddirection', async ctx => {
   faculty.directions ||= {};
   if (sameStructureName(faculty.directions, name)) return ctx.reply('⚠️ Такое направление уже есть на этом факультете.');
   const id = newStructureId('dir');
-  faculty.directions[id] = { id, name: name.slice(0, 120), courses: {}, createdAt: new Date().toISOString() };
+  const created = createDirection(faculty, name, id, new Date().toISOString());
+  if (!created.ok) return ctx.reply(created.reason === 'duplicate' ? '⚠️ Такое направление уже есть на этом факультете.' : '❌ Укажи название направления.');
   saveDb();
   console.log('[institution-structure] Direction created:', id, 'faculty:', facultyId);
   return ctx.reply('✅ Направление добавлено.\n\n🎓 ' + escapeHtml(faculty.name) + '\n📚 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
@@ -2091,7 +2091,8 @@ bot.command('addcourse', async ctx => {
   direction.courses ||= {};
   if (sameStructureName(direction.courses, name)) return ctx.reply('⚠️ Такой курс уже есть у этого направления.');
   const id = newStructureId('course');
-  direction.courses[id] = { id, name: name.slice(0, 80), groups: {}, createdAt: new Date().toISOString() };
+  const created = createCourse(direction, name, id, new Date().toISOString());
+  if (!created.ok) return ctx.reply(created.reason === 'duplicate' ? '⚠️ Такой курс уже есть у этого направления.' : '❌ Укажи название курса.');
   saveDb();
   console.log('[institution-structure] Course created:', id, 'direction:', directionId);
   return ctx.reply('✅ Курс добавлен.\n\n📚 ' + escapeHtml(direction.name) + '\n🎓 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
@@ -2112,29 +2113,13 @@ bot.command('linkgroup', async ctx => {
   if (!studyGroup) return ctx.reply('❌ Учебная группа не найдена в этом чате.');
   if (!canManageGroup(ctx.from.id, studyGroup)) return ctx.reply('❌ Нет прав на изменение структуры этой учебной группы.');
   const institution = db.institutions?.[String(studyGroup.institutionId || DEFAULT_INSTITUTION_ID)];
-  const course = Object.values(institution?.faculties || {}).flatMap(f =>
-    Object.values(f.directions || {}).flatMap(d =>
-      Object.values(d.courses || {}).map(c => ({ faculty: f, direction: d, course: c }))
-    )
-  ).find(x => String(x.course.id) === courseId);
-  if (!course) return ctx.reply('❌ Курс не найден в структуре учебного заведения этой группы. Проверь /structure.');
-  const linkId = String(studyGroup.chatId) + '::' + String(studyGroup.studyGroup);
-  course.course.groups ||= {};
-  // Store a reference and display metadata; all live student/attendance data stays on the original studyGroup object.
-  course.course.groups[linkId] = {
-    id: linkId,
-    name: studyGroup.studyGroup,
-    studyGroup: studyGroup.studyGroup,
-    chatId: String(studyGroup.chatId),
-    institutionId: String(studyGroup.institutionId),
-    facultyId: String(course.faculty.id),
-    directionId: String(course.direction.id),
-    courseId: String(course.course.id),
-    linkedAt: new Date().toISOString()
-  };
-  studyGroup.facultyId = String(course.faculty.id);
-  studyGroup.directionId = String(course.direction.id);
-  studyGroup.courseId = String(course.course.id);
+  if (!institution) return ctx.reply('❌ Учебное заведение группы не найдено.');
+  const linked = linkStudyGroupToCourse(institution, studyGroup, courseId, new Date().toISOString());
+  if (!linked.ok) {
+    if (linked.reason === 'institution_mismatch') return ctx.reply('❌ Учебная группа и структура относятся к разным учебным заведениям.');
+    return ctx.reply('❌ Курс не найден в структуре учебного заведения этой группы. Проверь /structure.');
+  }
+  const linkId = linked.id;
   saveDb();
   console.log('[institution-structure] Study group linked:', linkId, 'course:', courseId);
   return ctx.reply('✅ Учебная группа привязана к структуре.\n\n🎓 ' + escapeHtml(course.faculty.name) +
