@@ -47,6 +47,23 @@ body{padding-top:calc(12px + env(safe-area-inset-top))}
 .navitem.active{background:var(--panel2);color:var(--text)}
 .tab.active{background:var(--panel2);border-color:var(--accent);color:var(--text)}
 .toast{background:var(--panel2);border-color:var(--line);color:var(--text)}
+
+/* Полировка: микроанимации и плавность. Только transform/opacity/цвета —
+   на вёрстку и логику не влияют. */
+#app .institution-hero,#app .status-chip,#app .offline-banner{animation:cardReveal .34s ease-out both}
+#app .home-lesson,#app .schedule-lesson{animation:cardReveal .3s ease-out both}
+#app .home-timeline .home-lesson:nth-child(2),#app .schedule-timeline .schedule-lesson:nth-child(2){animation-delay:.045s}
+#app .home-timeline .home-lesson:nth-child(3),#app .schedule-timeline .schedule-lesson:nth-child(3){animation-delay:.09s}
+#app .home-timeline .home-lesson:nth-child(4),#app .schedule-timeline .schedule-lesson:nth-child(4){animation-delay:.135s}
+#app .home-timeline .home-lesson:nth-child(5),#app .schedule-timeline .schedule-lesson:nth-child(5){animation-delay:.18s}
+#app .home-timeline .home-lesson:nth-child(n+6),#app .schedule-timeline .schedule-lesson:nth-child(n+6){animation-delay:.22s}
+.card,.quick-action,.lesson,.student,.stat,.softbtn,.refresh,.tab,.navitem,.home-lesson,.schedule-lesson,.status-chip,.institution-hero,.bottomnav{transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background-color .25s ease,color .25s ease}
+#app .card.action:active,#app .quick-action:active,#app .softbtn:active,#app .refresh:active,#app .tab:active,#app .navitem:active,#app .home-lesson:active,#app .schedule-lesson:active,#app .lesson:active,#app .student:active{transform:scale(.98)}
+@media(hover:hover){#app .tab:not(.active):hover,#app .navitem:hover,#app .softbtn:hover,#app .refresh:hover{transform:translateY(-1px)}}
+#app .home-lesson:hover,#app .schedule-lesson:hover,#app .lesson:hover,#app .student:hover{border-color:#4b3f78;box-shadow:0 8px 22px #0002}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,14px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+.toast{transition:transform .25s ease,opacity .25s ease}
+.toast.show{animation:toastIn .28s cubic-bezier(.2,.9,.3,1.15)}
 </style></head>
 <body><main class="wrap">
 <header class="top"><div class="brand"><span>🎓</span>Староста Бот</div><div class="badge">MINI APP</div></header>
