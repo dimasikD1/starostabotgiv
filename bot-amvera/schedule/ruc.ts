@@ -329,7 +329,7 @@ function normalizeJson(data: unknown, days: number, startDate = isoToday(0)): Sc
     if (!isRecord(value)) return [];
 
     const date = asString(firstDefined(value.date, value.day, value.start)).slice(0, 10);
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return [];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
 
     const dateValue = new Date(date + 'T00:00:00Z');
     if (Number.isNaN(dateValue.getTime())) return [];
