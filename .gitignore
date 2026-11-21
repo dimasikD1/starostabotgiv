@@ -8,3 +8,4 @@ Thumbs.db
 data/
 .test-build/
 bot-amvera/schedule/.build/
+bot-amvera/domain/.build/
