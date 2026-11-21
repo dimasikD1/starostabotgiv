@@ -122,79 +122,13 @@ function donationKeyboard() {
 }
 
 async function registrationMiddleware(ctx, next) {
-  const text = ctx.message?.text || '';
-  const command = text.split(/\s+/)[0].replace(/^\//, '').replace(/@.*$/, '').toLowerCase();
-
-  if (
-    ctx.updateType === 'pre_checkout_query' ||
-    ctx.message?.successful_payment ||
-    (ctx.updateType === 'callback_query' && (String(ctx.callbackQuery?.data || '').startsWith('studygroup:') || String(ctx.callbackQuery?.data || '').startsWith('studentimport:') || String(ctx.callbackQuery?.data || '').startsWith('donate:')))
-  ) return next();
-
   if (!ctx.from) return next();
   if (isOwner(ctx.from.id)) return next();
-
   const u = normalizeUser(user(ctx.from.id));
-
-  // Новый участник должен подтвердить ФИО в личке, прежде чем писать в группе.
-  // Повторное вступление тоже запускает проверку, даже если ФИО уже сохранено.
-  const isRejoiningMember = ctx.updateType === 'message' && Array.isArray(ctx.message?.new_chat_members) && ctx.message.new_chat_members.some(member => String(member.id) === String(ctx.from.id));
-  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && (isRejoiningMember || !u.fullName || String(u.pendingVerificationChatId || '') === String(ctx.chat.id))) {
-    const chatId = String(ctx.chat.id);
-    if (String(u.pendingVerificationChatId || '') !== chatId) {
-      // Если у пользователя осталась незавершённая проверка в другом чате,
-      // новая проверка должна быть привязана к текущей группе.
-      u.pendingVerificationChatId = chatId;
-      u.pendingVerificationChatTitle = ctx.chat.title || 'группа';
-      u.pendingVerificationAt = new Date().toISOString();
-      saveDb();
-      let restricted = false;
-      try {
-        await ctx.telegram.restrictChatMember(ctx.chat.id, ctx.from.id, {
-          can_send_messages: false,
-          can_send_audios: false,
-          can_send_documents: false,
-          can_send_photos: false,
-          can_send_videos: false,
-          can_send_video_notes: false,
-          can_send_voice_notes: false,
-          can_send_polls: false,
-          can_send_other_messages: false,
-          can_add_web_page_previews: false
-        });
-        restricted = true;
-        u.verificationRestrictionApplied = true;
-        saveDb();
-      } catch (e) {
-        console.error('[registration] Не удалось ограничить участника:', e.message || e);
-      }
-      try { await ctx.deleteMessage(); } catch {}
-      let botUsername = ctx.botInfo?.username;
-      if (!botUsername) {
-        try { botUsername = (await ctx.telegram.getMe()).username; } catch {}
-      }
-      if (botUsername) {
-        const payload = Buffer.from(chatId).toString('base64url');
-        const startUrl = 'https://t.me/' + botUsername + '?start=verify_' + payload;
-        const message = restricted
-          ? '🔐 Чтобы писать в этой группе, сначала подтверди ФИО в личных сообщениях с ботом.'
-          : '🔐 Для допуска в группу нужно подтвердить ФИО в личке бота. ⚠️ Не удалось автоматически ограничить отправку сообщений — администратору нужно проверить права бота.';
-        await ctx.reply(message, Markup.inlineKeyboard([[Markup.button.url('📝 Подтвердить ФИО', startUrl)]]));
-      } else {
-        await ctx.reply('🔐 Напиши боту в личные сообщения команду /start и отправь своё ФИО. Администратору нужно проверить права бота в группе.');
-      }
-    } else {
-      try { await ctx.deleteMessage(); } catch {}
-    }
-    return;
-  }
-
-  // Разрешаем отправить ФИО до проверки подписки, если бот его запросил.
-  if (isPrivate(ctx) && u.pendingFullName && ctx.message?.text && !ctx.message.text.startsWith('/')) return next();
-  // При первом сообщении в группе просим выбрать учебную группу.
+  // Капча отключена. Пользователь определяется по Telegram ID, username не требуется.
   if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.group && !String(ctx.message?.text || '').startsWith('/')) {
     await ctx.reply(
-      '👋 Чтобы показывать правильное расписание и домашние задания, выбери свою учебную группу:',
+      '👋 Выбери свою учебную группу, чтобы получать правильное расписание и домашние задания:',
       Markup.inlineKeyboard([
         [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
         [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')],
@@ -205,7 +139,6 @@ async function registrationMiddleware(ctx, next) {
   }
   return next();
 }
-
 
 /*
  * Подключение бота к существующему Telegram-чату.
@@ -263,71 +196,7 @@ bot.on('my_chat_member', async ctx => {
   }
 });
 
-/*
- * Повторная проверка при повторном вступлении.
- * Telegram присылает chat_member только если этот тип обновлений
- * явно включён в allowedUpdates при запуске бота.
- */
-bot.on('chat_member', async ctx => {
-  const update = ctx.update.chat_member;
-  const oldStatus = update?.old_chat_member?.status;
-  const newMember = update?.new_chat_member;
-  const newStatus = newMember?.status;
-  const member = newMember?.user;
-  const chat = update?.chat;
-  if (!member?.id || !chat?.id || !['group', 'supergroup'].includes(chat.type)) return;
-  if (Number(member.id) === Number(ctx.botInfo?.id)) return;
-
-  const joinedAgain = ['left', 'kicked'].includes(oldStatus) &&
-    ['member', 'restricted', 'administrator', 'creator'].includes(newStatus);
-  if (!joinedAgain) return;
-
-  const u = normalizeUser(user(member.id));
-  u.pendingVerificationChatId = String(chat.id);
-  u.pendingVerificationChatTitle = chat.title || 'группа';
-  u.pendingVerificationAt = new Date().toISOString();
-  u.pendingFullName = false;
-  saveDb();
-
-  let restricted = false;
-  try {
-    await ctx.telegram.restrictChatMember(chat.id, member.id, {
-      can_send_messages: false,
-      can_send_audios: false,
-      can_send_documents: false,
-      can_send_photos: false,
-      can_send_videos: false,
-      can_send_video_notes: false,
-      can_send_voice_notes: false,
-      can_send_polls: false,
-      can_send_other_messages: false,
-      can_add_web_page_previews: false
-    });
-    u.verificationRestrictionApplied = true;
-    restricted = true;
-    saveDb();
-  } catch (e) {
-    console.error('[registration] Не удалось ограничить повторно вступившего участника:', e.message || e);
-  }
-
-  let botUsername = ctx.botInfo?.username;
-  if (!botUsername) {
-    try { botUsername = (await ctx.telegram.getMe()).username; } catch {}
-  }
-  if (!botUsername) return;
-  const payload = Buffer.from(String(chat.id)).toString('base64url');
-  const startUrl = 'https://t.me/' + botUsername + '?start=verify_' + payload;
-  const message = restricted
-    ? '🔐 С возвращением! Чтобы снова писать в группе, подтверди ФИО в личных сообщениях с ботом.'
-    : '🔐 С возвращением! Для допуска подтверди ФИО в личке бота. ⚠️ Не удалось автоматически ограничить отправку сообщений — администратору нужно проверить права бота.';
-  try {
-    await ctx.telegram.sendMessage(chat.id, message, {
-      reply_markup: { inline_keyboard: [[{ text: '📝 Подтвердить ФИО', url: startUrl }]] }
-    });
-  } catch (e) {
-    console.error('[registration] Не удалось отправить запрос повторной проверки:', e.message || e);
-  }
-});
+// Повторная проверка участников отключена: вступление не требует капчи.
 
 bot.use(registrationMiddleware);
 
@@ -1338,19 +1207,7 @@ bot.on('poll_answer', async ctx => {
   let student = group?.students?.find(x =>
     String(typeof x === 'object' ? x.telegramId || '' : '') === userId
   );
-  // Если Telegram ID ещё не привязан, ищем ровно одного студента по username.
-  // При однозначном совпадении сохраняем ID для следующих ответов.
-  if (!student && group?.students?.length && answer.user?.username) {
-    const username = String(answer.user.username).replace(/^@/, '').toLowerCase();
-    const matches = group.students.filter(x =>
-      x && typeof x === 'object' &&
-      String(x.username || '').replace(/^@/, '').toLowerCase() === username
-    );
-    if (matches.length === 1) {
-      student = matches[0];
-      if (!student.telegramId) student.telegramId = userId;
-    }
-  }
+  // Автопривязка посещаемости выполняется только по Telegram ID.
   if (student && record.lessonKey) {
     group.lessonAttendance ||= {};
     group.lessonAttendance[record.lessonKey] ||= {};
@@ -1463,23 +1320,8 @@ bot.on('successful_payment', async ctx => {
 bot.start(async ctx => {
   const u = normalizeUser(user(ctx.from.id));
   const startPayload = String(ctx.startPayload || '');
-  if (isPrivate(ctx) && startPayload.startsWith('verify_')) {
-    let requestedChatId = '';
-    try { requestedChatId = Buffer.from(startPayload.slice(7), 'base64url').toString('utf8'); } catch {}
-    // Ссылка лишь запускает проверку. Источник истины — текущая проверка,
-    // сохранённая для этого Telegram-пользователя, а не chat_id из URL.
-    // Это позволяет открыть старую кнопку, если в базе уже обновилась привязка.
-    const pendingChatId = String(u.pendingVerificationChatId || '');
-    if (!pendingChatId) {
-      return ctx.reply('❌ Сейчас нет ожидающей проверки для твоего аккаунта. Вернись в нужную группу и нажми кнопку проверки ещё раз.');
-    }
-    if (requestedChatId && requestedChatId !== pendingChatId) {
-      console.warn('[registration] Verification link chat differs from pending chat; using saved pending chat.');
-    }
-    u.pendingFullName = true;
-    saveDb();
-    return ctx.reply('🔐 <b>Проверка участника группы</b>\n\nЧтобы получить возможность писать в группе «' + escapeHtml(u.pendingVerificationChatTitle || 'группа') + '», отправь своё ФИО одним сообщением (фамилия и имя, при наличии — отчество).', { parse_mode: 'HTML' });
-  }
+  // Старые ссылки verify_ больше не используются.
+
   saveDb();
   if (isPrivate(ctx) && !u.fullName) {
     u.pendingFullName = true;
