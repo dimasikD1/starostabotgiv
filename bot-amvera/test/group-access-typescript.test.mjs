@@ -8,8 +8,9 @@ function setup() {
   const groupA1 = { chatId: '-100', studyGroup: 'Группа 1', institutionId: 'inst', starostaId: '11', zamId: '12', students: [{name:'A'}] };
   const groupA2 = { chatId: '-100', studyGroup: 'Группа 2', institutionId: 'inst', starostaId: '21', zamId: '22', students: [] };
   const groupB1 = { chatId: '-200', studyGroup: 'Группа 1', institutionId: 'inst', starostaId: '11', students: [{name:'A'}, {name:'B'}] };
+  const groupB2 = { chatId: '-200', studyGroup: 'Группа 2', institutionId: 'inst', starostaId: '31', students: [] };
   chatA.studyGroups = { 'Группа 1': groupA1, 'Группа 2': groupA2 };
-  chatB.studyGroups = { 'Группа 1': groupB1 };
+  chatB.studyGroups = { 'Группа 1': groupB1, 'Группа 2': groupB2 };
   const db = { groups: { '-100': chatA, '-200': chatB }, defaultRoleSeededChatId: '-100' };
   const allStudyGroups = () => Object.values(db.groups).flatMap(chat => Object.values(chat.studyGroups || {}));
   const ensureStudyGroups = chat => Object.values(chat.studyGroups || {});
