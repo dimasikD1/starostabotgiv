@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".test-build/domain-user",
+    "rootDir": "bot-amvera/domain"
+  },
+  "include": ["bot-amvera/domain/user-normalization.ts"],
+  "exclude": ["node_modules", ".test-build"]
+}
