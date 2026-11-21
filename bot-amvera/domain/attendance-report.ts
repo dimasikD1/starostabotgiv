@@ -40,13 +40,15 @@ export function createAttendanceHtml({
   const attendance = asRecord(group.attendance);
   const lessonAttendance = asRecord(group.lessonAttendance);
   const students = asStudents(group.students);
-  const esc = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, ch => ({
+  const htmlEntities: Record<string, string> = {
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
     '"': '&quot;',
     "'": '&#39;'
-  })[ch] ?? ch);
+  };
+  const esc = (value: unknown): string =>
+    String(value ?? '').replace(/[&<>"']/g, ch => htmlEntities[ch] ?? ch);
   const labels: Record<string, string> = {
     week: 'за последние 7 дней',
     month: 'за последние 30 дней',
