@@ -1600,7 +1600,7 @@ async function showRole(ctx) {
   }
   if (value !== 'student') return ctx.reply('❌ Управленческую роль назначает администратор конкретной учебной группы.');
   clearStudyGroupRoles(allStudyGroups(),id);
-  const u=normalizeUser(user(id));setStudentRole(u);  const u=normalizeUser(user(id));u.role='student';
+  const u=normalizeUser(user(id));setStudentRole(u);
   saveDb();
   await ctx.reply('✅ Ты снял(а) с себя все назначения старосты и заместителя.',menuFor(ctx));
 }
@@ -1691,7 +1691,6 @@ bot.command('starosta', async ctx => {
   const chat=db.groups[String(ctx.chat.id)];
   const studyGroup=ensureStudyGroups(chat).find(g=>g.studyGroup===STUDY_GROUPS[groupNumber]);
   if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
-  studyGroup.starostaId=String(ctx.from.id);studyGroup._roleAssignmentsInitialized=true;
   const u = normalizeUser(user(ctx.from.id));
   assignStudyGroupRole(studyGroup,u,'starosta',ctx.from.id,{username:ctx.from.username||'',chatId:ctx.chat.id,institutionId:String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID),groupName:studyGroup.studyGroup});
   saveDb();
