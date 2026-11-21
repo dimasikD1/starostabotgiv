@@ -15,6 +15,7 @@ test('parseStudentNames ignores headings, invalid lines and excessive word count
 
 test('parseStudentNames accepts unknown input safely and caps output at 100 names', () => {
   assert.deepEqual(parseStudentNames(null), []);
-  const rows = Array.from({ length: 105 }, (_, index) => `Фамилия Имя${index}`).join('\n');
+  const letters = index => String.fromCharCode(97 + (index % 26)) + (index >= 26 ? String.fromCharCode(97 + Math.floor(index / 26)) : '');
+  const rows = Array.from({ length: 105 }, (_, index) => `Surname ${letters(index)}`).join('\n');
   assert.equal(parseStudentNames(rows).length, 100);
 });
