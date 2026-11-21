@@ -10,81 +10,16 @@ import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
+import { createJsonStore } from './domain/json-store-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
 const TIME_ZONE = resolveTimeZone(process.env.TIME_ZONE);
 
-const DATA_DIR = process.env.DATA_DIR || '/data';
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-try {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-} catch (error) {
-  console.error('[storage] Не удалось создать каталог данных ' + DATA_DIR + ':', error?.message || error);
-  process.exit(1);
-}
-
-function readUsers() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
-        (parsed.users != null && (typeof parsed.users !== 'object' || Array.isArray(parsed.users))) ||
-        (parsed.groups != null && (typeof parsed.groups !== 'object' || Array.isArray(parsed.groups)))) {
-      throw new Error('Некорректная структура users.json.');
-    }
-    try { fs.chmodSync(USERS_FILE, 0o600); } catch {}
-    return parsed;
-  } catch (error) {
-    if (error?.code === 'ENOENT') {
-      if (fs.existsSync(USERS_FILE + '.bak')) {
-        throw new Error('Основной users.json отсутствует, но найдена резервная копия users.json.bak. Запуск остановлен для ручного восстановления.');
-      }
-      return { users: {}, groups: {} };
-    }
-    console.error('[storage] Не удалось прочитать users.json. Запуск остановлен, чтобы не перезаписать данные пустой базой:', error?.message || error);
-    throw error;
-  }
-}
-const db = readUsers();
-db.users ||= {};
-db.groups ||= {};
-
-// Резервная копия нужна для восстановления, но копировать весь файл
-// при каждой отметке посещаемости слишком дорого. Делаем не чаще раза в минуту.
-const BACKUP_INTERVAL_MS = (() => {
-  const raw = Number(process.env.DB_BACKUP_INTERVAL_MS);
-  return Number.isFinite(raw) && raw >= 0 ? raw : 60000;
-})();
-let lastBackupAt = 0;
-
-function saveDb() {
-  const serialized = JSON.stringify(db, null, 2);
-  const tempFile = USERS_FILE + '.' + process.pid + '.' + crypto.randomUUID() + '.tmp';
-  const backupFile = USERS_FILE + '.bak';
-  let fd;
-  try {
-    if (fs.existsSync(USERS_FILE) && Date.now() - lastBackupAt >= BACKUP_INTERVAL_MS) {
-      fs.copyFileSync(USERS_FILE, backupFile);
-      try { fs.chmodSync(backupFile, 0o600); } catch {}
-      lastBackupAt = Date.now();
-    }
-    fd = fs.openSync(tempFile, 'w', 0o600);
-    fs.writeFileSync(fd, serialized, 'utf8');
-    fs.fsyncSync(fd);
-    fs.closeSync(fd);
-    fd = undefined;
-    fs.renameSync(tempFile, USERS_FILE);
-    try { fs.chmodSync(USERS_FILE, 0o600); } catch {}
-    try {
-      const dirFd = fs.openSync(DATA_DIR, 'r');
-      try { fs.fsyncSync(dirFd); } finally { fs.closeSync(dirFd); }
-    } catch {}
-  } catch (error) {
-    if (fd !== undefined) try { fs.closeSync(fd); } catch {}
-    try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch {}
-    throw error;
-  }
-}
+const { db, saveDb } = createJsonStore({
+  dataDir: process.env.DATA_DIR || '/data',
+  backupIntervalMs: Number(process.env.DB_BACKUP_INTERVAL_MS)
+});
 
 const token = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 if (!token) {
