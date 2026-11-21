@@ -375,7 +375,10 @@ export async function getSchedule(group: string, days = 7, startDate = isoToday(
   try {
     return await getLegacySchedule(group, days, timeout, startDate);
   } catch (legacyError) {
-    console.error('[schedule] legacy source failed:', legacyError.message);
+    console.error(
+      '[schedule] legacy source failed:',
+      legacyError instanceof Error ? legacyError.message : String(legacyError)
+    );
 
     if ((process.env.SCHEDULE_FALLBACK_NEW || 'true').toLowerCase() === 'true') {
       return await getNewSite(group, days, timeout, startDate);
