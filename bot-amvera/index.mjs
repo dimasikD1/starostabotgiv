@@ -3242,6 +3242,7 @@ async function main() {
   // Обновляем список команд в меню Telegram.
   await telegramStartupRequest('setMyCommands private', () => bot.telegram.setMyCommands([
     { command: 'start', description: 'Запустить бота' },
+    { command: 'connectgroup', description: 'Подключить бота к существующей группе' },
     { command: 'schedule', description: 'Расписание на сегодня' },
     { command: 'group', description: 'Моя учебная группа' },
     { command: 'hw', description: 'Домашние задания' },
