@@ -54,8 +54,14 @@ export function createAttendanceHtml({
     month: 'за последние 30 дней',
     all: 'за весь период'
   };
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone }).format(now);
-  const today = parts;
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const dateValues = Object.fromEntries(dateParts.map(part => [part.type, part.value]));
+  const today = dateValues.year + '-' + dateValues.month + '-' + dateValues.day;
   const days = period === 'week' ? 7 : period === 'month' ? 30 : 0;
   const cutoff = days
     ? new Date(Date.UTC(
