@@ -122,7 +122,8 @@ export function assignStudyGroupRole(
 export function clearStudyGroupRoles(
   groups: StudentRosterGroup[],
   userId: string | number,
-  chatId?: string | number
+  chatId?: string | number,
+  markInitialized = true
 ): number {
   const id = String(userId);
   const scopedChat = chatId === undefined ? undefined : String(chatId);
@@ -131,7 +132,7 @@ export function clearStudyGroupRoles(
     if (scopedChat !== undefined && String(group.chatId || '') !== scopedChat) continue;
     if (String(group.starostaId || '') === id) { group.starostaId = ''; removed++; }
     if (String(group.zamId || '') === id) { group.zamId = ''; removed++; }
-    group._roleAssignmentsInitialized = true;
+    if (markInitialized) group._roleAssignmentsInitialized = true;
   }
   return removed;
 }
