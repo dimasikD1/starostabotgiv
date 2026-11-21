@@ -42,7 +42,7 @@ function parseDate(value: unknown): string {
 
 function parseCards(html: string, requestedGroup: string): ScheduleLesson[] {
   const $ = cheerio.load(html);
-  const result = [];
+  const result: ScheduleLesson[] = [];
 
   $('.card').each((_i, card) => {
     const children = $(card).children();
@@ -87,7 +87,7 @@ function parseCards(html: string, requestedGroup: string): ScheduleLesson[] {
       const room = roomMatch ? roomMatch[1].replace(/[,;.]+$/g, '') : '';
       result.push({
         date,
-        dayOffset: Math.round((new Date(date + 'T00:00:00') - new Date(isoToday(0) + 'T00:00:00')) / 86400000),
+        dayOffset: Math.round((new Date(date + 'T00:00:00').getTime() - new Date(isoToday(0) + 'T00:00:00').getTime()) / 86400000),
         time: timeLabel,
         timeStart: timeRange ? timeRange[1] : '',
         timeEnd: timeRange ? timeRange[2] : '',
@@ -248,7 +248,7 @@ async function getNewSite(group: string, days: number, timeout: number, startDat
 
   if (!text || /Расписания нет/i.test(text)) return [];
 
-  const items = [];
+  const items: ScheduleLesson[] = [];
 
   $('table').each((_n, table) => {
     $(table).find('tr').each((_i, row) => {
@@ -267,8 +267,8 @@ async function getNewSite(group: string, days: number, timeout: number, startDat
       items.push({
         date,
         dayOffset: Math.round(
-          (new Date(date + 'T00:00:00') -
-            new Date(isoToday(0) + 'T00:00:00')) / 86400000
+          (new Date(date + 'T00:00:00').getTime() -
+            new Date(isoToday(0) + 'T00:00:00').getTime()) / 86400000
         ),
         time: '',
         subject: line,
