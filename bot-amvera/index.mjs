@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
+import { parseStudentNames } from './domain/student-import-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
@@ -373,18 +374,6 @@ function studentName(s) {
   return typeof s === 'string' ? s : String(s?.name || 'Без имени') + (s?.username ? ' (@' + s.username + ')' : '');
 }
 function attendanceKey(s) { return typeof s === 'string' ? s : (s.telegramId || s.name); }
-function parseStudentNames(raw){
- const out=[],seen=new Set();
- for(let line of String(raw||'').split(/\r?\n/)){
-  line=line.replace(/\t+/g,' ').replace(/^\s*(?:№\s*)?\d+[.)]?[\s.)-]*/,'').replace(/^\s*[-•*]\s*/,'').trim();
-  line=line.split(/\s{3,}/)[0].trim().replace(/\s+/g,' ').replace(/\s+\d+\s*$/,'').trim();
-  const words=line.split(' ').filter(Boolean);
-  if(line.length<5||words.length<2||words.length>5||!/^[a-zа-яё .-]+$/i.test(line)||/^(список|группа|фамилия|имя|отчество|студенты|итого|всего)$/i.test(words[0]))continue;
-  const name=words.map(w=>w[0].toLocaleUpperCase('ru-RU')+w.slice(1)).join(' '),key=name.toLocaleLowerCase('ru-RU');
-  if(!seen.has(key)){seen.add(key);out.push(name);}
- }
- return out.slice(0,100);
-}
 function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.callback('✅ Подтвердить','studentimport:confirm')],[Markup.button.callback('❌ Отменить','studentimport:cancel')]]);}
 
 // OCR временно отключён: импорт списка выполняется текстом.
