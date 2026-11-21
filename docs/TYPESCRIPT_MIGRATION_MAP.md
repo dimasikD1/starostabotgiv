@@ -291,3 +291,17 @@ bot-amvera/
 ## Важное замечание
 
 В файле есть не только обычные функции, но и inline-регистрации `bot.command/action/on/hears`, а также глобальные константы и состояние. Их нельзя механически вырезать регулярным выражением: переносить целыми логическими блоками, сохраняя порядок middleware и регистрации callback handlers. В частности, два глобальных `bot.on('callback_query')` нужно проверить на порядок и пересечение.
+
+## Выполнено в ходе миграции
+
+Следующие части посещаемости уже вынесены из `index.mjs` в TypeScript:
+
+- `bot-amvera/domain/attendance-core.ts` — ключи занятий и классификация отметок.
+- `bot-amvera/domain/attendance-report.ts` — построение HTML-отчёта, сводная статистика по студентам, фильтр периодов и старые записи.
+- `bot-amvera/domain/attendance-polls.ts` — поиск опроса по Telegram poll ID, запись ответов и привязка отметки к студенту строго по Telegram ID.
+- Runtime bridges: `attendance-core-entry.mjs`, `attendance-report-entry.mjs`, `attendance-polls-entry.mjs`.
+- Тесты: `attendance-core-typescript.test.mjs`, `attendance-report-typescript.test.mjs`, `attendance-polls-typescript.test.mjs`.
+
+Для этих модулей добавлены TypeScript build/test конфигурации и команды проверки синтаксиса собранных файлов. Само выполнение компиляции и тестов ещё не подтверждено: в текущей среде нет сетевого доступа к GitHub для клонирования репозитория, а GitHub Actions для проверяемого коммита не вернул запусков. Перед включением ветки в production обязательно выполнить `npm install`, `npm run typecheck`, `npm run check` и `npm test`.
+
+**Production не переключён:** изменения остаются в `typescript-migration`; `main` и Amvera не менялись.
