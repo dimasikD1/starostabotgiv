@@ -1772,22 +1772,34 @@ bot.command(['allroles', 'roleslist'], async ctx => {
   if(!owner && !adminInstitutionIds.length) {
     return ctx.reply('🔒 Общий список ролей доступен владельцу бота и администраторам учебных заведений.');
   }
-  const groups=allStudyGroups().filter(g=>owner || adminInstitutionIds.includes(String(g.institutionId||'')));
-  if(!groups.length) return ctx.reply('Пока нет доступных учебных групп.');
+  const rawGroups=allStudyGroups().filter(g=>owner || adminInstitutionIds.includes(String(g.institutionId||'')));
+  // Один и тот же курс/группа может быть зарегистрирован в нескольких чатах.
+  // Показываем одну карточку на сочетание учебного заведения и учебной группы.
+  const grouped=new Map();
+  for (const g of rawGroups) {
+    const key=String(g.institutionId||'')+'::'+String(g.studyGroup||g.title||'');
+    if (!grouped.has(key)) grouped.set(key,{...g,_sourceGroups:[]});
+    grouped.get(key)._sourceGroups.push(g);
+  }
+  if(!grouped.size) return ctx.reply('Пока нет доступных учебных групп.');
   const blocks=[];
-  for(const g of groups) {
+  for(const g of grouped.values()) {
     const institutionName=db.institutions?.[String(g.institutionId||'')]?.name||'Учебное заведение';
+    const sourceChatIds=new Set(g._sourceGroups.map(x=>String(x.chatId||'')));
+    const starostaId=g._sourceGroups.map(x=>String(x.starostaId||'')).find(Boolean)||'';
+    const zamId=g._sourceGroups.map(x=>String(x.zamId||'')).find(Boolean)||'';
     const members=Object.entries(db.users||{}).filter(([uid,u])=>
+      !isOwner(uid) &&
       String(u.group||'')===String(g.studyGroup||'') &&
-      (!u.groupChatId || String(u.groupChatId)===String(g.chatId))
+      (!u.groupChatId || sourceChatIds.has(String(u.groupChatId)))
     );
-    const roleFor=uid=>String(g.starostaId||'')===uid?'👑 Староста':String(g.zamId||'')===uid?'⭐ Заместитель':'👨‍🎓 Студент';
+    const roleFor=uid=>starostaId===uid?'👑 Староста':zamId===uid?'⭐ Заместитель':'👨‍🎓 Студент';
     const lines=[];
     for(const [uid,u] of members) {
       const name=escapeHtml(u.fullName||u.fio||u.username&&('@'+u.username)||('ID '+uid));
       lines.push('• '+roleFor(String(uid))+' — '+name+' <code>'+escapeHtml(uid)+'</code>');
     }
-    for(const [uid,label] of [[String(g.starostaId||''),'👑 Староста'],[String(g.zamId||''),'⭐ Заместитель']]) {
+    for(const [uid,label] of [[starostaId,'👑 Староста'],[zamId,'⭐ Заместитель']]) {
       if(uid && !members.some(([memberId])=>String(memberId)===uid)) {
         const u=db.users?.[uid]||{};
         const name=escapeHtml(u.fullName||u.fio||u.username&&('@'+u.username)||('ID '+uid));
