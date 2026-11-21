@@ -1742,8 +1742,8 @@ bot.command('roles', showRole);
 bot.command(['delrole', 'removerole'], async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Команду /delrole используй только в личке с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Снимать роли других пользователей в личке может только владелец бота.');
-  const targetId = String(ctx.message?.text || '').trim().split(/\\s+/)[1] || '';
-  if (!/^\\d+$/.test(targetId)) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
+  const targetId = String(ctx.message?.text || '').trim().split(/\s+/)[1] || '';
+  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
   let removed = 0;
   for (const g of allStudyGroups()) {
     if (String(g.starostaId || '') === targetId) { g.starostaId = ''; removed++; }
