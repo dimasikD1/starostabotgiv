@@ -12,7 +12,7 @@
     "dev": "node --watch bot-amvera/index.mjs",
     "check": "node --check bot-amvera/index.mjs && node --check bot-amvera/schedule/ruc.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run test:typescript && node --test bot-amvera/test/*.test.mjs",
+    "test": "npm run test:typescript && node --test bot-amvera/test/parser.test.mjs bot-amvera/test/schedule-api.test.mjs",
     "test:typescript": "tsc -p tsconfig.test.json && node --test bot-amvera/test/schedule-ruc-typescript.test.mjs"
   },
   "dependencies": {
