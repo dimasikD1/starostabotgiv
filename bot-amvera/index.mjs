@@ -2769,7 +2769,7 @@ function verifyMiniAppInitData(initData) {
   if (!Number.isFinite(authDate) || ageSeconds < -30 || ageSeconds > 3600) throw new Error('Сессия устарела. Закрой и снова открой мини-приложение.');
   let tgUser;
   try { tgUser = JSON.parse(params.get('user') || 'null'); } catch {}
-  if (!tgUser?.id || !/^\\d+$/.test(String(tgUser.id))) throw new Error('Telegram не передал корректные данные пользователя.');
+  if (!tgUser?.id || !/^\d+$/.test(String(tgUser.id))) throw new Error('Telegram не передал корректные данные пользователя.');
   return tgUser;
 }
 function sendJson(res, status, data) {
