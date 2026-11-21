@@ -242,6 +242,12 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = STUDY_GROUPS[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
   u.group = selected;
+  if (!['starosta', 'zam'].includes(String(u.role || ''))) u.role = 'student';
+  const linkedGroup = allStudyGroups().find(g => String(g.studyGroup || '') === selected);
+  if (linkedGroup) {
+    u.groupChatId = String(linkedGroup.chatId || '');
+    u.institutionId = String(linkedGroup.institutionId || DEFAULT_INSTITUTION_ID);
+  }
   const verificationChatId = String(u.pendingVerificationChatId || '');
   if (verificationChatId) {
     try {
@@ -1321,6 +1327,7 @@ bot.start(async ctx => {
   const u = normalizeUser(user(ctx.from.id));
   const startPayload = String(ctx.startPayload || '');
   // Старые ссылки verify_ больше не используются.
+  if (!['starosta', 'zam'].includes(String(u.role || ''))) u.role = 'student';
 
   saveDb();
   if (isPrivate(ctx) && !u.fullName) {
@@ -1332,10 +1339,19 @@ bot.start(async ctx => {
       Markup.inlineKeyboard([[Markup.button.url('➕ Добавить бота в существующую группу', 'https://t.me/starostagivbot?startgroup=true')]])
     );
   }
+  if (isPrivate(ctx) && !u.group) {
+    return ctx.reply(
+      '👋 Привет! Твоя роль — 👨‍🎓 Студент. Теперь выбери свою учебную группу:',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
+        [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')]
+      ])
+    );
+  }
   await ctx.reply(
     '👋 Привет! Я бот расписания.\n\n' +
     'Твоё ФИО: ' + escapeHtml(u.fullName || 'не указано') + '\n' +
-    'Учебную группу можно выбрать в общей группе или указать командой /group НАЗВАНИЕ.\n\n' +
+    'Учебная группа: ' + escapeHtml(u.group || 'не выбрана') + '\n\n' +
     '📊 Опросы создаются в личке: /poll Вопрос | Да | Нет',
     { parse_mode: 'HTML', ...menuFor(ctx) }
   );
@@ -1352,7 +1368,7 @@ bot.help(ctx => ctx.reply(
   '/openchat — разрешить всем участникам писать (в чате, для админа)\n' +
   '/schedule — сегодня\n/tomorrow — завтра\n/week — неделя\n\n' +
   '👨‍🎓 <b>Студенты и посещаемость</b>\n' +
-  '/role — посмотреть свою роль\n/allroles — общий список ролей по группам (в личке, для владельца/админов)\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
+  '/role — посмотреть свою роль\n/allroles — общий список ролей по группам (в личке, для владельца/админов)\n/delrole ID — снять управленческие роли пользователя (в личке, владелец)\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
   '/delstudent НОМЕР — удалить из списка\n/attendance — журнал (староста)\n/html — HTML-отчёт посещаемости\n' +
   '/mark НОМЕР present|absent — отметить вручную\n\n' +
   '📢 <b>Для группы</b>\n' +
@@ -1580,7 +1596,15 @@ bot.on('text', async (ctx,next) => {
     ]) }
    );
   }
-  return ctx.reply('✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>.', { parse_mode: 'HTML', ...menuFor(ctx) });
+  if (!['starosta', 'zam'].includes(String(u.role || ''))) u.role = 'student';
+  saveDb();
+  return ctx.reply(
+   '✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>.\n\nТвоя роль — 👨‍🎓 Студент. Теперь выбери учебную группу:',
+   { parse_mode: 'HTML', ...Markup.inlineKeyboard([
+    [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
+    [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')]
+   ]) }
+  );
  }
  if(u.pendingStudentField){
   const pending=u.pendingStudentField;
@@ -1692,6 +1716,29 @@ bot.command('role', showRole);
 bot.command('roles', showRole);
 
 // Общий просмотр ролей доступен владельцам платформы и администраторам заведения — только в личке.
+bot.command(['delrole', 'removerole'], async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Команду /delrole используй только в личке с ботом.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Снимать роли других пользователей в личке может только владелец бота.');
+  const targetId = String(ctx.message?.text || '').trim().split(/\\s+/)[1] || '';
+  if (!/^\\d+$/.test(targetId)) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
+  let removed = 0;
+  for (const g of allStudyGroups()) {
+    if (String(g.starostaId || '') === targetId) { g.starostaId = ''; removed++; }
+    if (String(g.zamId || '') === targetId) { g.zamId = ''; removed++; }
+    g._roleAssignmentsInitialized = true;
+  }
+  const target = db.users?.[targetId];
+  if (target) {
+    const u = normalizeUser(target);
+    u.role = 'student';
+  }
+  saveDb();
+  return ctx.reply(removed
+    ? '✅ Управленческие назначения пользователя <code>' + escapeHtml(targetId) + '</code> сняты (' + removed + '). Роль пользователя — студент.'
+    : 'ℹ️ У пользователя <code>' + escapeHtml(targetId) + '</code> не найдено назначений старосты или заместителя. Если профиль существует, его роль установлена как «Студент».',
+    { parse_mode: 'HTML' });
+});
+
 bot.command(['allroles', 'roleslist'], async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список ролей можно получить только в личных сообщениях с ботом.');
   const requesterId=String(ctx.from.id);
