@@ -4,7 +4,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
-import { getSchedule } from './schedule/ruc.mjs';
+import { getSchedule } from './schedule/ruc-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
