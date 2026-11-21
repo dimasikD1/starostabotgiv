@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGroupAccess } from '../../.test-build/domain-group/group-access.js';
+import { createGroupAccess } from '../../.test-build/domain-user/group-access.js';
 
 function setup() {
   const chatA = { chatId: '-100', title: 'Общий чат', studyGroups: {} };
