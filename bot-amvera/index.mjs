@@ -9,6 +9,7 @@ import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
+import { buildAttendanceLessonKey } from './domain/attendance-core-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -287,7 +288,7 @@ function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.ca
 
 function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date()); }
 function attendanceLessonKey(lesson) {
- return [lesson.date||attendanceDate(),lesson.timeStart||lesson.time||'',lesson.timeEnd||'',lesson.subject||'Занятие'].join('|');
+ return buildAttendanceLessonKey(lesson, attendanceDate());
 }
 const scheduleCache = new Map();
 const scheduleInFlight = new Map();
