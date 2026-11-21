@@ -1368,7 +1368,7 @@ bot.help(ctx => ctx.reply(
   '/openchat — разрешить всем участникам писать (в чате, для админа)\n' +
   '/schedule — сегодня\n/tomorrow — завтра\n/week — неделя\n\n' +
   '👨‍🎓 <b>Студенты и посещаемость</b>\n' +
-  '/role — посмотреть свою роль\n/allroles — общий список ролей по группам (в личке, для владельца/админов)\n/delrole ID — снять управленческие роли пользователя (в личке, владелец)\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
+  '/role — посмотреть свою роль\n/allroles — общий список ролей по группам (в личке, для владельца/админов)\n/delrole ID — снять управленческие роли пользователя (в личке, владелец)\n/announce — выбрать чат и отправить объявление (владелец, личка)\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
   '/delstudent НОМЕР — удалить из списка\n/attendance — журнал (староста)\n/html — HTML-отчёт посещаемости\n' +
   '/mark НОМЕР present|absent — отметить вручную\n\n' +
   '📢 <b>Для группы</b>\n' +
@@ -1577,6 +1577,29 @@ bot.on('text', async (ctx,next) => {
   return ctx.reply('📝 <b>Проверь список студентов</b>\n👥 Группа: <b>'+escapeHtml(group.title)+'</b>\n👨‍🎓 Найдено: <b>'+names.length+'</b>\n\n'+preview+'\n\nПосле подтверждения текущий список группы будет заменён.',{parse_mode:'HTML',...importPreviewKeyboard()});
  }
  if(!isPrivate(ctx))return next();
+ if (u.pendingAnnouncementChatId) {
+  if (raw.toLowerCase() === '/cancel') {
+   delete u.pendingAnnouncementChatId; saveDb();
+   return ctx.reply('❌ Публикация объявления отменена.');
+  }
+  if (raw.startsWith('/')) return ctx.reply('Отправь текст объявления или /cancel для отмены.');
+  if (raw.length > 3000) return ctx.reply('❌ Объявление слишком длинное. Максимум 3000 символов.');
+  const chatId = String(u.pendingAnnouncementChatId);
+  const exists = Object.entries(db.groups || {}).some(([id, g]) => String(g.chatId || id) === chatId);
+  if (!exists) {
+   delete u.pendingAnnouncementChatId; saveDb();
+   return ctx.reply('❌ Выбранный чат больше не подключён. Запусти /announce ещё раз.');
+  }
+  try {
+   await ctx.telegram.sendMessage(chatId, '📢 <b>Объявление</b>\\n\\n' + escapeHtml(raw), { parse_mode: 'HTML' });
+   delete u.pendingAnnouncementChatId; saveDb();
+   console.log('[owner announcement] sent to chat ' + chatId + ' by ' + ctx.from.id);
+   return ctx.reply('✅ Объявление отправлено в выбранный чат.');
+  } catch (error) {
+   console.error('[owner announcement] send failed for ' + chatId + ':', error?.message || error);
+   return ctx.reply('❌ Не удалось отправить объявление. Проверь, что бот всё ещё находится в чате и может отправлять сообщения.');
+  }
+ }
  if (u.pendingFullName && !raw.startsWith('/')) {
   const words = raw.replace(/\\s+/g, ' ').trim().split(' ').filter(Boolean);
   if (words.length < 2 || words.length > 5 || !/^[a-zа-яё -]+$/i.test(raw)) {
@@ -2499,6 +2522,32 @@ bot.command('tomorrow', ctx => show(ctx, 2, 1));
 bot.command('week', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
 
 // Ручная публикация истории проекта от имени бота в официальный канал.
+// Владелец выбирает зарегистрированный Telegram-чат и отправляет туда объявление из лички.
+bot.command('announce', async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Команду /announce используй в личных сообщениях с ботом.');
+  if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Публиковать объявления через эту команду может только владелец бота.');
+  const chats = Object.entries(db.groups || {})
+    .map(([id, g]) => ({ id: String(g.chatId || id), title: String(g.title || g.chatTitle || ('Чат ' + (g.chatId || id))) }))
+    .filter(x => /^-?\\d+$/.test(x.id));
+  const unique = [...new Map(chats.map(x => [x.id, x])).values()];
+  if (!unique.length) return ctx.reply('❌ Пока нет подключённых Telegram-чатов. Сначала добавь бота в нужный чат.');
+  const rows = unique.map(x => [Markup.button.callback('📢 ' + x.title.slice(0, 48), 'announcechat:' + x.id)]);
+  return ctx.reply('📨 <b>Выбери чат для объявления</b>:', { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
+});
+
+bot.action(/^announcechat:(-?\\d+)$/, async ctx => {
+  if (!isOwner(ctx.from.id)) return ctx.answerCbQuery('Недостаточно прав.', { show_alert: true });
+  if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой выбор в личных сообщениях с ботом.', { show_alert: true });
+  const chatId = String(ctx.match[1]);
+  const exists = Object.entries(db.groups || {}).some(([id, g]) => String(g.chatId || id) === chatId);
+  if (!exists) return ctx.answerCbQuery('Чат больше не подключён.', { show_alert: true });
+  const u = normalizeUser(user(ctx.from.id));
+  u.pendingAnnouncementChatId = chatId;
+  saveDb();
+  await ctx.answerCbQuery('Чат выбран');
+  return ctx.editMessageText('✍️ Отправь следующим сообщением текст объявления. Оно будет опубликовано в выбранном чате. Для отмены отправь /cancel.');
+});
+
 bot.command('publishstartup', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Команду /publishstartup используй в личных сообщениях с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу бота.');
