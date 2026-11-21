@@ -1351,7 +1351,7 @@ bot.help(ctx => ctx.reply(
   '/group НАЗВАНИЕ — сохранить учебную группу\n' +
   '/schedule — сегодня\n/tomorrow — завтра\n/week — неделя\n\n' +
   '👨‍🎓 <b>Студенты и посещаемость</b>\n' +
-  '/role — посмотреть роль\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
+  '/role — посмотреть свою роль\n/allroles — общий список ролей по группам (в личке, для владельца/админов)\n/students — список студентов\n/student ИМЯ — добавить вручную\n' +
   '/delstudent НОМЕР — удалить из списка\n/attendance — журнал (староста)\n/html — HTML-отчёт посещаемости\n' +
   '/mark НОМЕР present|absent — отметить вручную\n\n' +
   '📢 <b>Для группы</b>\n' +
@@ -1689,6 +1689,46 @@ async function showRole(ctx) {
 }
 bot.command('role', showRole);
 bot.command('roles', showRole);
+
+// Общий просмотр ролей доступен владельцам платформы и администраторам заведения — только в личке.
+bot.command(['allroles', 'roleslist'], async ctx => {
+  if (!isPrivate(ctx)) return ctx.reply('📩 Список ролей можно получить только в личных сообщениях с ботом.');
+  const requesterId=String(ctx.from.id);
+  const owner=isOwner(requesterId);
+  const adminInstitutionIds=Object.entries(db.institutions||{})
+    .filter(([,inst])=>Array.isArray(inst.adminIds)&&inst.adminIds.map(String).includes(requesterId))
+    .map(([id])=>String(id));
+  if(!owner && !adminInstitutionIds.length) {
+    return ctx.reply('🔒 Общий список ролей доступен владельцу бота и администраторам учебных заведений.');
+  }
+  const groups=allStudyGroups().filter(g=>owner || adminInstitutionIds.includes(String(g.institutionId||'')));
+  if(!groups.length) return ctx.reply('Пока нет доступных учебных групп.');
+  const blocks=[];
+  for(const g of groups) {
+    const institutionName=db.institutions?.[String(g.institutionId||'')]?.name||'Учебное заведение';
+    const members=Object.entries(db.users||{}).filter(([uid,u])=>
+      String(u.group||'')===String(g.studyGroup||'') &&
+      (!u.groupChatId || String(u.groupChatId)===String(g.chatId))
+    );
+    const roleFor=uid=>String(g.starostaId||'')===uid?'👑 Староста':String(g.zamId||'')===uid?'⭐ Заместитель':'👨‍🎓 Студент';
+    const lines=[];
+    for(const [uid,u] of members) {
+      const name=escapeHtml(u.fullName||u.fio||u.username&&('@'+u.username)||('ID '+uid));
+      lines.push('• '+roleFor(String(uid))+' — '+name+' <code>'+escapeHtml(uid)+'</code>');
+    }
+    for(const [uid,label] of [[String(g.starostaId||''),'👑 Староста'],[String(g.zamId||''),'⭐ Заместитель']]) {
+      if(uid && !members.some(([memberId])=>String(memberId)===uid)) {
+        const u=db.users?.[uid]||{};
+        const name=escapeHtml(u.fullName||u.fio||u.username&&('@'+u.username)||('ID '+uid));
+        lines.unshift('• '+label+' — '+name+' <code>'+escapeHtml(uid)+'</code>');
+      }
+    }
+    blocks.push('🏫 <b>'+escapeHtml(institutionName)+'</b>\n📚 <b>'+escapeHtml(g.studyGroup||'Учебная группа')+'</b>\n'+(lines.length?lines.join('\n'):'Пока нет пользователей, выбравших эту группу.'));
+  }
+  let output='👥 <b>Роли пользователей по учебным группам</b>\n\n'+blocks.join('\n\n');
+  if(output.length>3900) output=output.slice(0,3850)+'\n\n… Список большой, часть записей не показана.';
+  return ctx.reply(output,{parse_mode:'HTML'});
+});
 
 
 bot.command('starosta', async ctx => {
