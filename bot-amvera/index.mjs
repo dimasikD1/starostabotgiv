@@ -141,7 +141,9 @@ async function registrationMiddleware(ctx, next) {
   const isRejoiningMember = ctx.updateType === 'message' && Array.isArray(ctx.message?.new_chat_members) && ctx.message.new_chat_members.some(member => String(member.id) === String(ctx.from.id));
   if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && (isRejoiningMember || !u.fullName || String(u.pendingVerificationChatId || '') === String(ctx.chat.id))) {
     const chatId = String(ctx.chat.id);
-    if (!u.pendingVerificationChatId) {
+    if (String(u.pendingVerificationChatId || '') !== chatId) {
+      // Если у пользователя осталась незавершённая проверка в другом чате,
+      // новая проверка должна быть привязана к текущей группе.
       u.pendingVerificationChatId = chatId;
       u.pendingVerificationChatTitle = ctx.chat.title || 'группа';
       u.pendingVerificationAt = new Date().toISOString();
