@@ -6,6 +6,7 @@ import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
+import { escapeHtml } from './utils/html-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
@@ -982,12 +983,6 @@ function removeGroup(ctx) {
   saveDb();
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
 
 function attendanceButtons(g,page=0){
  const students=g.students||[],size=10,pages=Math.max(1,Math.ceil(students.length/size));page=Math.max(0,Math.min(Number(page)||0,pages-1));const today=attendanceDate();
