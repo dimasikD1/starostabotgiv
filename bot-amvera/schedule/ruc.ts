@@ -297,37 +297,83 @@ function normalizeLessonType(value: unknown): ScheduleLesson['lessonType'] {
   return '';
 }
 
-function normalizeJson(data: any, days: number, startDate = isoToday(0)): ScheduleLesson[] {
-  const raw = Array.isArray(data)
-    ? data
-    : (data?.items || data?.schedule || data?.data || []);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function firstDefined(...values: unknown[]): unknown {
+  return values.find(value => value !== undefined && value !== null && value !== '');
+}
+
+function asString(value: unknown): string {
+  return value === undefined || value === null ? '' : String(value);
+}
+
+function normalizeJson(data: unknown, days: number, startDate = isoToday(0)): ScheduleLesson[] {
+  let raw: unknown;
+
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (isRecord(data)) {
+    raw = firstDefined(data.items, data.schedule, data.data);
+  } else {
+    return [];
+  }
 
   if (!Array.isArray(raw)) return [];
 
-  const base = new Date((startDate || isoToday(0)) + 'T00:00:00Z');
+  const rangeStart = startDate || isoToday(0);
+  const base = new Date(rangeStart + 'T00:00:00Z');
 
-  return raw.map(item => {
-    const date = String(
-      item.date || item.day || item.start || ''
-    ).slice(0, 10);
+  return raw.flatMap((value): ScheduleLesson[] => {
+    if (!isRecord(value)) return [];
 
-    const d = new Date(date + 'T00:00:00Z');
-    const dayOffset = Math.round((d - base) / 86400000);
+    const date = asString(firstDefined(value.date, value.day, value.start)).slice(0, 10);
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return [];
 
-    return {
+    const dateValue = new Date(date + 'T00:00:00Z');
+    if (Number.isNaN(dateValue.getTime())) return [];
+
+    const startTime = firstDefined(value.startTime, value.start_time, value.beginTime, value.timeStart);
+    const endTime = firstDefined(value.endTime, value.end_time, value.finishTime, value.timeEnd);
+    const time = firstDefined(
+      value.time,
+      startTime && endTime ? asString(startTime) + '–' + asString(endTime) : undefined
+    );
+
+    const lesson: ScheduleLesson = {
       date,
-      dayOffset,
-      time: item.time || item.startTime || (item.start_time && item.end_time ? item.start_time + '–' + item.end_time : ''),
-      timeStart: item.startTime || item.start_time || item.beginTime || item.timeStart || extractClock(item.start),
-      timeEnd: item.endTime || item.end_time || item.finishTime || item.timeEnd || extractClock(item.end),
-      subject: item.subject || item.name || item.discipline || item.title || '',
-      lessonNumber: item.lessonNumber || item.lesson_number || item.number || item.pairNumber || item.pair_number || '',
-      lessonType: normalizeLessonType(item.lessonType || item.lesson_type || item.type || item.typeName || item.kind || item.classType || ''),
-      teacher: item.teacher || item.teacherName || item.lecturer || '',
-      room: item.room || item.auditory || item.classroom || '',
-      group: item.group || item.groupName || ''
+      dayOffset: Math.round((dateValue.getTime() - base.getTime()) / 86400000),
+      time: asString(time),
+      timeStart: asString(firstDefined(startTime, extractClock(value.start))),
+      timeEnd: asString(firstDefined(endTime, extractClock(value.end))),
+      subject: asString(firstDefined(value.subject, value.name, value.discipline, value.title)),
+      lessonNumber: asString(firstDefined(
+        value.lessonNumber,
+        value.lesson_number,
+        value.number,
+        value.pairNumber,
+        value.pair_number
+      )),
+      lessonType: normalizeLessonType(firstDefined(
+        value.lessonType,
+        value.lesson_type,
+        value.type,
+        value.typeName,
+        value.kind,
+        value.classType
+      )),
+      teacher: asString(firstDefined(value.teacher, value.teacherName, value.lecturer)),
+      room: asString(firstDefined(value.room, value.auditory, value.classroom)),
+      group: asString(firstDefined(value.group, value.groupName))
     };
-  }).filter(x => x.date && x.subject && x.date >= (startDate || isoToday(0)) && x.date < addDays(startDate || isoToday(0), days));
+
+    if (!lesson.subject || date < rangeStart || date >= addDays(rangeStart, days)) {
+      return [];
+    }
+
+    return [lesson];
+  });
 }
 
 export async function getSchedule(group: string, days = 7, startDate = isoToday(0)): Promise<ScheduleLesson[]> {
