@@ -2540,14 +2540,14 @@ bot.command('announce', async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Публиковать объявления через эту команду может только владелец бота.');
   const chats = Object.entries(db.groups || {})
     .map(([id, g]) => ({ id: String(g.chatId || id), title: String(g.title || g.chatTitle || ('Чат ' + (g.chatId || id))) }))
-    .filter(x => /^-?\\d+$/.test(x.id));
+    .filter(x => /^-?\d+$/.test(x.id));
   const unique = [...new Map(chats.map(x => [x.id, x])).values()];
   if (!unique.length) return ctx.reply('❌ Пока нет подключённых Telegram-чатов. Сначала добавь бота в нужный чат.');
   const rows = unique.map(x => [Markup.button.callback('📢 ' + x.title.slice(0, 48), 'announcechat:' + x.id)]);
   return ctx.reply('📨 <b>Выбери чат для объявления</b>:', { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
 });
 
-bot.action(/^announcechat:(-?\\d+)$/, async ctx => {
+bot.action(/^announcechat:(-?\d+)$/, async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.answerCbQuery('Недостаточно прав.', { show_alert: true });
   if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой выбор в личных сообщениях с ботом.', { show_alert: true });
   const chatId = String(ctx.match[1]);
@@ -2733,6 +2733,23 @@ bot.command('openchat', async ctx => {
   } catch (error) {
     console.error('[openchat] setChatPermissions failed:', error?.message || error);
     return ctx.reply('❌ Не удалось изменить разрешения. Проверь, что бот является администратором чата и имеет право «Ограничивать участников».');
+  }
+});
+
+bot.command('registerchat', async ctx => {
+  if (!ctx.chat || !['group', 'supergroup'].includes(ctx.chat.type)) {
+    return ctx.reply('Эту команду нужно отправить непосредственно в учебном чате.');
+  }
+  if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) {
+    return ctx.reply('🔒 Зарегистрировать чат может владелец бота или администратор чата.');
+  }
+  try {
+    registerGroup(ctx);
+    console.log('[group setup] Chat manually registered:', ctx.chat.id, ctx.chat.title || '');
+    return ctx.reply('✅ <b>Чат зарегистрирован!</b> Теперь он должен появиться в списке /announce.', { parse_mode: 'HTML' });
+  } catch (error) {
+    console.error('[group setup] Manual registration failed:', error?.message || error);
+    return ctx.reply('❌ Не удалось зарегистрировать чат. Проверь логи бота.');
   }
 });
 
