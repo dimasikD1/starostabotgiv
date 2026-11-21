@@ -7,3 +7,4 @@ Thumbs.db
 .env.local
 data/
 .test-build/
+bot-amvera/schedule/.build/
