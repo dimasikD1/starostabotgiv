@@ -88,7 +88,7 @@ export function applyAttendancePollAnswer(
   });
 
   let attendanceUpdated = false;
-  if (student && record.lessonKey) {
+  if (group && student && record.lessonKey) {
     group.lessonAttendance ||= {};
     group.lessonAttendance[String(record.lessonKey)] ||= {};
     group.lessonAttendance[String(record.lessonKey)][String(attendanceKey(student))] =
