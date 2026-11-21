@@ -66,7 +66,7 @@ export function parseCards(html: string, requestedGroup: string): ScheduleLesson
 
       const groupMatch = text.match(/Группа\s*[:\-]?\s*([^,;]+)/i);
       const roomMatch = text.match(/(?:аудитория|кабинет|ауд\.?)\s*[:\-]?\s*([\p{L}\p{N}-]+)/iu);
-      const typeMatch = combined.match(/\b(лекц\w*|практ\w*|лаборатор\w*)\b/i);
+      const typeMatch = combined.match(/(?:^|[^\p{L}])(лекц\p{L}*|практ\p{L}*|лаборатор\p{L}*)(?=$|[^\p{L}])/iu);
       const lessonType = typeMatch
         ? (/лекц/i.test(typeMatch[1]) ? 'лекция' : /лаборатор/i.test(typeMatch[1]) ? 'лабораторная' : 'практическая')
         : '';
