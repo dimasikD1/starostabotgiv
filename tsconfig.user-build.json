@@ -13,7 +13,8 @@
     "bot-amvera/domain/attendance-report.ts",
     "bot-amvera/domain/attendance-polls.ts",
     "bot-amvera/domain/homework.ts",
-    "bot-amvera/domain/student-management.ts"
+    "bot-amvera/domain/student-management.ts",
+    "bot-amvera/domain/institution-structure.ts"
   ],
   "exclude": [
     "node_modules",
