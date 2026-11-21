@@ -8,6 +8,7 @@ import { getSchedule } from './schedule/ruc-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
+import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -418,61 +419,20 @@ function ensureStudyGroups(chat) {
  return names.map(name=>chat.studyGroups[name]);
 }
 function allStudyGroups() { return Object.values(db.groups).flatMap(chat=>ensureStudyGroups(chat)); }
-function canManageGroup(userId,g) {
- const id=String(userId);
- return Boolean(g && (isOwner(id) || isInstitutionAdmin(id,g.institutionId) ||
-  String(g.starostaId||'')===id || String(g.zamId||'')===id));
-}
-function managedStudyGroups(userId) {
- return allStudyGroups().filter(g=>canManageGroup(userId,g));
-}
-function canManageChat(userId,chatId) {
- const groups=allStudyGroups().filter(g=>String(g.chatId)===String(chatId));
- // Telegram messages and the legacy chat-level roster affect every cohort in that chat.
- return groups.length>0 && groups.every(g=>canManageGroup(userId,g));
-}
-function managedChats(userId) {
- return Object.values(db.groups).filter(chat=>canManageChat(userId,chat.chatId));
-}
-function studyGroupForUser(chatId,userId) {
- const chat=db.groups[String(chatId)]; if(!chat)return null;
- const id=String(userId);
- return ensureStudyGroups(chat).find(g=>String(g.starostaId||'')===id||String(g.zamId||'')===id)||null;
-}
-function accessibleGroups(userId) {
- const id=String(userId);
- const groups=managedStudyGroups(id);
- // Several Telegram chats can contain copies of the same logical study group.
- // Show one selector entry and prefer the copy with an explicit appointment,
- // then the copy with the most actual group data.
- const score=g=>{
-  const appointed=String(g.starostaId||'')===id||String(g.zamId||'')===id;
-  const students=Array.isArray(g.students)?g.students.length:0;
-  const attendance=Object.keys(g.lessonAttendance||{}).length+Object.keys(g.attendance||{}).length;
-  const activity=(g.homework||[]).length+(g.announcements||[]).length+(g.calendarEvents||[]).length;
-  const primary=String(g.chatId||'')===String(db.defaultRoleSeededChatId||'');
-  return (appointed?1000000000:0)+(primary?100000000:0)+students*10000+attendance*100+activity;
- };
- const unique=new Map();
- for(const group of groups){
-  const key=String(group.institutionId||'')+'::'+String(group.studyGroup||group.title||'');
-  const previous=unique.get(key);
-  if(!previous||score(group)>score(previous)) unique.set(key,group);
- }
- return [...unique.values()]
-  .sort((a,b)=>String(a.studyGroup||a.title||'').localeCompare(String(b.studyGroup||b.title||''),'ru'))
-  .map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId),institutionId:String(g.institutionId||'')}));
-}
-function managedGroup(userId,selectedGroupId='') {
- const allowed=accessibleGroups(userId);
- const selected=selectedGroupId?allowed.find(x=>x.id===String(selectedGroupId)):allowed[0];
- if(!selected)return null;
- const chat=db.groups[String(selected.chatId)]; if(!chat)return null;
- const g=ensureStudyGroups(chat).find(x=>x.studyGroup===selected.title); if(!g)return null;
- g.chatId=chat.chatId; g.chatTitle=chat.title || 'Общий чат';
- g.title=selected.title; g.scheduleGroup=selected.title;
- return g;
-}
+const {
+  canManageGroup,
+  managedStudyGroups,
+  canManageChat,
+  managedChats,
+  accessibleGroups,
+  managedGroup
+} = createGroupAccess({
+  db,
+  isOwner,
+  isInstitutionAdmin,
+  allStudyGroups,
+  ensureStudyGroups
+});
 function formatAttendance(g) {
  const students=g?.students||[],attendance=g?.attendance||{};
  if(!students.length)return '📋 <b>Посещаемость</b>\n\nСписок группы пуст. Добавь студентов командой /student.';
