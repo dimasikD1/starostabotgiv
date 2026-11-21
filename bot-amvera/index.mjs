@@ -7,6 +7,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
+import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -268,15 +269,7 @@ const studentMenu = Markup.keyboard([
 ]).resize();
 
 function user(id) {
-  const key = String(id);
-  db.users[key] ||= { group: '', role: 'student', createdAt: new Date().toISOString(), pendingPoll: null, pendingHomework: null, students: [], attendance: {} };
-  return db.users[key];
-}
-
-
-
-function isManagerRole(u) {
-  return ['starosta', 'zam'].includes(u?.role);
+  return getOrCreateUser(db.users, id);
 }
 function canManageAttendance(u, id) {
   return isOwner(id) || accessibleGroups(id).length > 0;
@@ -287,14 +280,6 @@ function getMenu(id) {
 function menuFor(ctx) {
   return isPrivate(ctx) ? getMenu(ctx.from.id) : studentMenu;
 }
-function roleLabel(role) {
-  return role === 'starosta' ? '👑 Староста' : role === 'zam' ? '⭐ Заместитель старосты' : '👨‍🎓 Студент';
-}
-
-function studentName(s) {
-  return typeof s === 'string' ? s : String(s?.name || 'Без имени') + (s?.username ? ' (@' + s.username + ')' : '');
-}
-function attendanceKey(s) { return typeof s === 'string' ? s : (s.telegramId || s.name); }
 function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.callback('✅ Подтвердить','studentimport:confirm')],[Markup.button.callback('❌ Отменить','studentimport:cancel')]]);}
 
 // OCR временно отключён: импорт списка выполняется текстом.
