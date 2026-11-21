@@ -8,7 +8,8 @@
   "include": [
     "bot-amvera/domain/user-normalization.ts",
     "bot-amvera/domain/user-profile.ts",
-    "bot-amvera/domain/group-access.ts"
+    "bot-amvera/domain/group-access.ts",
+    "bot-amvera/domain/attendance-core.ts"
   ],
   "exclude": [
     "node_modules",
