@@ -32,7 +32,7 @@ function addDays(date: string, amount: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function parseDate(value: unknown): string {
+export function parseDate(value: unknown): string {
   const s = clean(value);
   const m = s.match(/(\d{2})\.(\d{2})\.(\d{4})/);
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
@@ -40,7 +40,7 @@ function parseDate(value: unknown): string {
   return iso ? iso[0] : '';
 }
 
-function parseCards(html: string, requestedGroup: string): ScheduleLesson[] {
+export function parseCards(html: string, requestedGroup: string): ScheduleLesson[] {
   const $ = cheerio.load(html);
   const result: ScheduleLesson[] = [];
 
@@ -309,7 +309,7 @@ function asString(value: unknown): string {
   return value === undefined || value === null ? '' : String(value);
 }
 
-function normalizeJson(data: unknown, days: number, startDate = isoToday(0)): ScheduleLesson[] {
+export function normalizeJson(data: unknown, days: number, startDate = isoToday(0)): ScheduleLesson[] {
   let raw: unknown;
 
   if (Array.isArray(data)) {
