@@ -10,7 +10,8 @@
     "bot-amvera/domain/user-profile.ts",
     "bot-amvera/domain/group-access.ts",
     "bot-amvera/domain/attendance-core.ts",
-    "bot-amvera/domain/attendance-report.ts"
+    "bot-amvera/domain/attendance-report.ts",
+    "bot-amvera/domain/attendance-polls.ts"
   ],
   "exclude": [
     "node_modules",
