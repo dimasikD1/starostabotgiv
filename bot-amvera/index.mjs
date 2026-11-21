@@ -1466,8 +1466,15 @@ bot.start(async ctx => {
   if (isPrivate(ctx) && startPayload.startsWith('verify_')) {
     let requestedChatId = '';
     try { requestedChatId = Buffer.from(startPayload.slice(7), 'base64url').toString('utf8'); } catch {}
-    if (!requestedChatId || String(u.pendingVerificationChatId || '') !== requestedChatId) {
-      return ctx.reply('❌ Эта ссылка на проверку недействительна или уже использована. Вернись в группу и нажми кнопку проверки ещё раз.');
+    // Ссылка лишь запускает проверку. Источник истины — текущая проверка,
+    // сохранённая для этого Telegram-пользователя, а не chat_id из URL.
+    // Это позволяет открыть старую кнопку, если в базе уже обновилась привязка.
+    const pendingChatId = String(u.pendingVerificationChatId || '');
+    if (!pendingChatId) {
+      return ctx.reply('❌ Сейчас нет ожидающей проверки для твоего аккаунта. Вернись в нужную группу и нажми кнопку проверки ещё раз.');
+    }
+    if (requestedChatId && requestedChatId !== pendingChatId) {
+      console.warn('[registration] Verification link chat differs from pending chat; using saved pending chat.');
     }
     u.pendingFullName = true;
     saveDb();
