@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "bot-amvera/domain/.build",
+    "rootDir": "bot-amvera/domain"
+  },
+  "include": ["bot-amvera/domain/**/*.ts"],
+  "exclude": ["node_modules", "bot-amvera/domain/.build"]
+}
