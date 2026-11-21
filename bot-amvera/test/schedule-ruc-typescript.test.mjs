@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeJson, parseCards, parseDate } from '../../.test-build/ruc.js';
+import http from 'node:http';
+import { getSchedule, normalizeJson, parseCards, parseDate } from '../../.test-build/ruc.js';
 
 function moscowDate(offsetDays = 0) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -83,4 +84,58 @@ test('parseCards извлекает пару и фильтрует по груп
   assert.equal(lessons[0].room, '204');
   assert.equal(lessons[0].lessonType, 'практическая');
   assert.equal(parseCards(html, 'другая группа').length, 0);
+});
+
+test('getSchedule TypeScript provider requests and normalizes the configured API', async () => {
+  const today = moscowDate(0);
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([{
+      date: today,
+      start_time: '11:00',
+      end_time: '12:30',
+      subject: 'Тестовая пара',
+      teacher: 'Иванов И. И.',
+      room: '101',
+      group: 'Тестовая группа'
+    }]));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const previous = process.env.SCHEDULE_API_URL;
+  process.env.SCHEDULE_API_URL = 'http://127.0.0.1:' + port + '/schedule';
+
+  try {
+    const lessons = await getSchedule('Тестовая группа', 7, today);
+    assert.equal(lessons.length, 1);
+    assert.equal(lessons[0].subject, 'Тестовая пара');
+    assert.equal(lessons[0].time, '11:00–12:30');
+    assert.equal(lessons[0].teacher, 'Иванов И. И.');
+  } finally {
+    if (previous === undefined) delete process.env.SCHEDULE_API_URL;
+    else process.env.SCHEDULE_API_URL = previous;
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('getSchedule TypeScript provider reports API errors', async () => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(503);
+    res.end('unavailable');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const previous = process.env.SCHEDULE_API_URL;
+  process.env.SCHEDULE_API_URL = 'http://127.0.0.1:' + port + '/schedule';
+
+  try {
+    await assert.rejects(
+      () => getSchedule('Тестовая группа', 7, moscowDate(0)),
+      /Schedule API HTTP 503/
+    );
+  } finally {
+    if (previous === undefined) delete process.env.SCHEDULE_API_URL;
+    else process.env.SCHEDULE_API_URL = previous;
+    await new Promise(resolve => server.close(resolve));
+  }
 });
