@@ -11,6 +11,7 @@ import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey }
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
+import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -1079,33 +1080,18 @@ bot.on('poll_answer', async ctx => {
   const answer = ctx.update.poll_answer;
   if (!answer?.poll_id) return;
   db.sentAttendancePolls ||= {};
-  const record = Object.values(db.sentAttendancePolls).find(x => String(x.pollId) === String(answer.poll_id));
+  const record = findAttendancePollRecord(db.sentAttendancePolls, answer.poll_id);
   if (!record) return;
-  const userId = String(answer.user?.id || '');
-  if (!userId) return;
-  const option = Number(answer.option_ids?.[0]);
-  record.responses ||= {};
-  record.responses[userId] = {
-    userId, username: answer.user?.username || '',
-    firstName: answer.user?.first_name || '',
-    status: option === 0 ? 'present' : option === 1 ? 'absent' : 'unknown',
-    answeredAt: new Date().toISOString()
-  };
-  const group = db.groups[String(record.groupId)];
-  let student = group?.students?.find(x =>
-    String(typeof x === 'object' ? x.telegramId || '' : '') === userId
+  const result = applyAttendancePollAnswer(
+    record,
+    answer,
+    db.groups,
+    new Date().toISOString()
   );
-  // Автопривязка посещаемости выполняется только по Telegram ID.
-  if (student && record.lessonKey) {
-    group.lessonAttendance ||= {};
-    group.lessonAttendance[record.lessonKey] ||= {};
-    group.lessonAttendance[record.lessonKey][attendanceKey(student)] =
-      option === 0 ? 'present' : option === 1 ? 'absent' : 'unmarked';
-  }
+  if (!result) return;
   saveDb();
-  console.log('[attendance poll] Answer recorded for ' + userId + ' in ' + record.groupName);
+  console.log('[attendance poll] Answer recorded for ' + result.userId + ' in ' + result.groupName);
 });
-
 bot.command('events', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список событий доступен в личных сообщениях.');
   const g = managedGroup(ctx.from.id);
