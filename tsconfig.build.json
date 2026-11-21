@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "bot-amvera/schedule/.build",
+    "rootDir": "bot-amvera/schedule"
+  },
+  "include": [
+    "bot-amvera/schedule/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "bot-amvera/schedule/.build"
+  ]
+}
