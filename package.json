@@ -10,11 +10,11 @@
   "scripts": {
     "start": "npm run build && node bot-amvera/index.mjs",
     "dev": "npm run build && node --watch bot-amvera/index.mjs",
-    "check": "npm run build && node --check bot-amvera/index.mjs && node --check bot-amvera/schedule/.build/ruc.js",
+    "check": "npm run build && node --check bot-amvera/index.mjs && node --check bot-amvera/schedule/.build/ruc.js && node --check bot-amvera/domain/.build/student-import.js",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:typescript && node --test bot-amvera/test/parser.test.mjs bot-amvera/test/schedule-api.test.mjs",
-    "test:typescript": "tsc -p tsconfig.test.json && node --test bot-amvera/test/schedule-ruc-typescript.test.mjs",
-    "build": "tsc -p tsconfig.build.json"
+    "test:typescript": "tsc -p tsconfig.test.json && tsc -p tsconfig.domain-test.json && node --test bot-amvera/test/schedule-ruc-typescript.test.mjs bot-amvera/test/student-import-typescript.test.mjs",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.domain-build.json"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
