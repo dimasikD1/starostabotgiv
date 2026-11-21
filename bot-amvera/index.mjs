@@ -547,13 +547,26 @@ function studyGroupForUser(chatId,userId) {
 function accessibleGroups(userId) {
  const id=String(userId);
  const groups=managedStudyGroups(id);
- // Prefer the group where this user is explicitly appointed, even if they are also the bot owner.
- groups.sort((a,b)=>{
-  const ownA=String(a.starostaId||'')===id||String(a.zamId||'')===id;
-  const ownB=String(b.starostaId||'')===id||String(b.zamId||'')===id;
-  return Number(ownB)-Number(ownA);
- });
- return groups.map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId),institutionId:String(g.institutionId||'')}));
+ // Several Telegram chats can contain copies of the same logical study group.
+ // Show one selector entry and prefer the copy with an explicit appointment,
+ // then the copy with the most actual group data.
+ const score=g=>{
+  const appointed=String(g.starostaId||'')===id||String(g.zamId||'')===id;
+  const students=Array.isArray(g.students)?g.students.length:0;
+  const attendance=Object.keys(g.lessonAttendance||{}).length+Object.keys(g.attendance||{}).length;
+  const activity=(g.homework||[]).length+(g.announcements||[]).length+(g.calendarEvents||[]).length;
+  const primary=String(g.chatId||'')===String(db.defaultRoleSeededChatId||'');
+  return (appointed?1000000000:0)+(primary?100000000:0)+students*10000+attendance*100+activity;
+ };
+ const unique=new Map();
+ for(const group of groups){
+  const key=String(group.institutionId||'')+'::'+String(group.studyGroup||group.title||'');
+  const previous=unique.get(key);
+  if(!previous||score(group)>score(previous)) unique.set(key,group);
+ }
+ return [...unique.values()]
+  .sort((a,b)=>String(a.studyGroup||a.title||'').localeCompare(String(b.studyGroup||b.title||''),'ru'))
+  .map(g=>({id:String(g.chatId)+'::'+String(g.studyGroup),title:String(g.studyGroup),chatId:String(g.chatId),institutionId:String(g.institutionId||'')}));
 }
 function managedGroup(userId,selectedGroupId='') {
  const allowed=accessibleGroups(userId);
