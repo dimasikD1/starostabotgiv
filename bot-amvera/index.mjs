@@ -12,6 +12,7 @@ import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
+import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -887,13 +888,13 @@ async function startHomework(ctx) {
     );
   }
 
-  const parts = text.split('|').map(x => x.trim()).filter(Boolean);
-  if (parts.length < 2) return ctx.reply('❌ Укажи предмет и задание через |\nПример: /hw Математика | Решить задачи 1–10');
-
-  const subject = parts.shift();
-  const homework = parts.join(' | ');
-  if (subject.length > 100) return ctx.reply('❌ Название предмета слишком длинное.');
-  if (homework.length > 3500) return ctx.reply('❌ Текст ДЗ слишком длинный (максимум 3500 символов).');
+  const parsed = parseHomeworkCommand(text);
+  if (!parsed.ok) {
+    if (parsed.error === 'missing_parts') return ctx.reply('❌ Укажи предмет и задание через |\\nПример: /hw Математика | Решить задачи 1–10');
+    if (parsed.error === 'subject_too_long') return ctx.reply('❌ Название предмета слишком длинное.');
+    return ctx.reply('❌ Текст ДЗ слишком длинный (максимум 3500 символов).');
+  }
+  const { subject, homework } = parsed;
 
   if (!managedChats(ctx.from.id).length) return ctx.reply('❌ В этом Telegram-чате несколько учебных групп. Для общей публикации нужны права на все группы чата.');
   const u = user(ctx.from.id);
@@ -2234,9 +2235,7 @@ async function sendHomeworkAttachments(ctx, records) {
 async function showHomework(ctx) {
   const u = normalizeUser(user(ctx.from.id));
   const groupName = String(u.group || '').trim();
-  const matching = Object.values(db.groups).filter(g => !groupName || String(g.scheduleGroup || '').trim() === groupName || String(g.title || '').trim() === groupName);
-  const records = matching.flatMap(g => (g.homework || []).map(h => ({...h, groupTitle:g.title})));
-  const latest = records.sort((a,b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 10);
+  const latest = latestHomework(Object.values(db.groups), groupName, 10);
   if (!latest.length) return ctx.reply('Пока не готово, либо ничего не задано, лучше напишите вашему старосте', menuFor(ctx));
   const view=homeworkMessage(latest,ctx.from.id,ctx);
   await ctx.reply(view.text,view.extra);
@@ -2245,14 +2244,16 @@ async function showHomework(ctx) {
 bot.hears(/^📚\\s*ДЗ\\s*$/iu, showHomework);
 bot.command('dz', showHomework);
 bot.action(/^hwcomplete:([a-f0-9-]{36})$/i,async ctx=>{
-  const userId=String(ctx.from.id),u=normalizeUser(user(userId)),groupName=String(u.group||'').trim();
-  const groups=Object.values(db.groups).filter(g=>!groupName||String(g.scheduleGroup||'').trim()===groupName||String(g.title||'').trim()===groupName);
-  const item=groups.flatMap(g=>g.homework||[]).find(h=>String(h.id||'')===String(ctx.match[1]));
-  if(!item){await ctx.answerCbQuery('Задание не найдено или уже удалено.');return}
-  item.completedBy||={};
-  if(item.completedBy[userId]){await ctx.answerCbQuery('Уже отмечено.');return}
-  item.completedBy[userId]=new Date().toISOString();saveDb();
-  const records=groups.flatMap(g=>(g.homework||[]).map(h=>({...h,groupTitle:g.title}))).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).slice(0,10);
+  const userId=String(ctx.from.id),u=normalizeUser(user(ctx.from.id)),groupName=String(u.group||'').trim();
+  const groups=Object.values(db.groups);
+  const homeworkId=String(ctx.match[1]);
+  const existing=groups.filter(g=>!groupName||String(g.scheduleGroup||'').trim()===groupName||String(g.title||'').trim()===groupName)
+    .flatMap(g=>g.homework||[]).find(h=>String(h.id||'')===homeworkId);
+  if(!existing){await ctx.answerCbQuery('Задание не найдено или уже удалено.');return}
+  if(existing.completedBy?.[userId]){await ctx.answerCbQuery('Уже отмечено.');return}
+  markHomeworkCompleted(groups,groupName,homeworkId,userId,new Date().toISOString());
+  saveDb();
+  const records=latestHomework(groups,groupName,10);
   const view=homeworkMessage(records,ctx.from.id,ctx);
   try{await ctx.editMessageText(view.text,view.extra)}catch(e){console.error('[homework complete view]',e?.message||e)}
   await ctx.answerCbQuery('Выполнение отмечено!');
@@ -2370,9 +2371,10 @@ bot.on('callback_query', async ctx => {
     try {
       if (isHomework) {
         await ctx.telegram.sendMessage(g.chatId, '📚 <b>Домашнее задание</b>\n\n<b>' + escapeHtml(u.pendingHomework.subject) + '</b>\n' + escapeHtml(u.pendingHomework.homework), { parse_mode: 'HTML' });
-        g.homework ||= [];
-        g.homework.push({ id: crypto.randomUUID(), subject: u.pendingHomework.subject, homework: u.pendingHomework.homework, createdAt: new Date().toISOString(), authorId: ctx.from.id, completedBy: {} });
-        if (g.homework.length > 50) g.homework = g.homework.slice(-50);
+        appendHomework(g, createHomeworkRecord(
+          { subject: u.pendingHomework.subject, homework: u.pendingHomework.homework },
+          crypto.randomUUID(), new Date().toISOString(), ctx.from.id
+        ));
       } else {
         await ctx.telegram.sendPoll(g.chatId, u.pendingPoll.question, u.pendingPoll.options, {
           is_anonymous: false,
