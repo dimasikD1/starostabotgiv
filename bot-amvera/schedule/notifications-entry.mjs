@@ -1,6 +1,7 @@
 // Runtime bridge: generated from notifications.ts by the TypeScript build.
 export {
   buildWeeklySchedulePublicationKey,
+  getPendingWeeklyScheduleTargets,
   groupScheduleTargetsByGroup,
   getScheduleChangeMonitorEnd,
   buildScheduleChangeMessage,
