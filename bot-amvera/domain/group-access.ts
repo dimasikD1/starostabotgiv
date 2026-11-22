@@ -13,7 +13,6 @@ export interface StudyGroup {
   attendance?: Record<string, unknown>;
   homework?: unknown[];
   announcements?: unknown[];
-  calendarEvents?: unknown[];
 }
 
 export interface GroupChat {
@@ -78,7 +77,7 @@ export function createGroupAccess(deps: GroupAccessDependencies) {
       const appointed = String(group.starostaId || '') === id || String(group.zamId || '') === id;
       const students = Array.isArray(group.students) ? group.students.length : 0;
       const attendance = Object.keys(group.lessonAttendance || {}).length + Object.keys(group.attendance || {}).length;
-      const activity = (group.homework || []).length + (group.announcements || []).length + (group.calendarEvents || []).length;
+      const activity = (group.homework || []).length + (group.announcements || []).length;
       const primary = String(group.chatId || '') === String(db.defaultRoleSeededChatId || '');
       return (appointed ? 1000000000 : 0) + (primary ? 100000000 : 0) +
         students * 10000 + attendance * 100 + activity;
