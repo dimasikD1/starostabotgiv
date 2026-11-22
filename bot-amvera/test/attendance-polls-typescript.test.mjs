@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAttendancePollAnswer, findAttendancePollRecord } from '../../.test-build/domain-user/attendance-polls.js';
+import { applyAttendancePollAnswer, findAttendancePollRecord, buildAttendancePollKey, isAttendancePollDue } from '../../.test-build/domain-user/attendance-polls.js';
 
 test('finds a saved attendance poll by Telegram poll ID', () => {
   const records = {
@@ -74,4 +74,46 @@ test('does not auto-link attendance by username or name alone', () => {
 test('ignores answers without a Telegram user ID', () => {
   const record = { groupId: '-1001' };
   assert.equal(applyAttendancePollAnswer(record, { option_ids: [0] }, {}, 'now'), null);
+});
+
+test('removes a withdrawn poll response and clears only the linked lesson mark', () => {
+  const record = {
+    groupId: '-1001',
+    lessonKey: 'lesson-a',
+    responses: {
+      '101': { userId: '101', username: 'anna', firstName: 'Анна', status: 'present', answeredAt: 'before' },
+      '202': { userId: '202', username: 'boris', firstName: 'Борис', status: 'absent', answeredAt: 'before' }
+    }
+  };
+  const groups = {
+    '-1001': {
+      students: [{ name: 'Анна', telegramId: 101 }, { name: 'Борис', telegramId: 202 }],
+      lessonAttendance: { 'lesson-a': { '101': 'present', '202': 'absent' }, 'lesson-b': { '101': 'present' } }
+    }
+  };
+  const result = applyAttendancePollAnswer(record, {
+    option_ids: [],
+    user: { id: 101, username: 'anna' }
+  }, groups, 'now');
+
+  assert.equal(result?.attendanceUpdated, true);
+  assert.equal(record.responses['101'], undefined);
+  assert.ok(record.responses['202']);
+  assert.deepEqual(groups['-1001'].lessonAttendance, {
+    'lesson-a': { '202': 'absent' },
+    'lesson-b': { '101': 'present' }
+  });
+});
+
+test('builds the legacy poll key without changing its delimiter format', () => {
+  assert.equal(buildAttendancePollKey('-1001', '2026-11-23', '09:00', 'Математика'),
+    '-1001|2026-11-23|09:00|Математика');
+});
+
+test('sends automatic polls only in the existing ten-minute window', () => {
+  assert.equal(isAttendancePollDue(470, 480), true);
+  assert.equal(isAttendancePollDue(471, 480), true);
+  assert.equal(isAttendancePollDue(469, 480), false);
+  assert.equal(isAttendancePollDue(472, 480), false);
+  assert.equal(isAttendancePollDue(NaN, 480), false);
 });
