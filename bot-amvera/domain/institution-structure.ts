@@ -41,7 +41,7 @@ export interface StudyGroupReference {
   [key: string]: unknown;
 }
 export type StructureResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; facultyName?: string; directionName?: string; courseName?: string }
   | { ok: false; reason: 'invalid_name' | 'duplicate' | 'faculty_not_found' | 'direction_not_found' | 'course_not_found' | 'institution_mismatch' };
 
 export function ensureInstitutionStructure(institution: InstitutionStructure): Record<string, FacultyNode> {
@@ -135,7 +135,7 @@ export function linkStudyGroupToCourse(
       group.facultyId = faculty.id;
       group.directionId = direction.id;
       group.courseId = course.id;
-      return { ok: true, id: linkId };
+      return { ok: true, id: linkId, facultyName: faculty.name, directionName: direction.name, courseName: course.name };
     }
   }
   return { ok: false, reason: 'course_not_found' };
