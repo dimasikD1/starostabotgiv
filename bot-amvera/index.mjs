@@ -8,6 +8,7 @@ import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
+import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage } from './schedule/notifications-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
@@ -509,7 +510,7 @@ async function checkWeeklySchedules() {
     const targetChats = Object.values(db.groups).filter(g => g.chatId);
     for (const g of targetChats) {
       const chatId = g.chatId;
-      const key = String(chatId) + ':' + range.start;
+      const key = buildWeeklySchedulePublicationKey(chatId, range.start);
       if (db.sentWeeklySchedules[key]) continue;
       try {
         const built = await buildWeeklyScheduleText({
@@ -544,22 +545,14 @@ async function checkScheduleChanges() {
   scheduleChangeCheckRunning = true;
   try {
     db.scheduleSnapshots ||= {};
-    const targets = Object.values(db.groups).filter(g => g.chatId && g.scheduleGroup);
-    const bySchedule = new Map();
-    for (const g of targets) {
-      const key = String(g.scheduleGroup).trim();
-      if (!bySchedule.has(key)) bySchedule.set(key, []);
-      bySchedule.get(key).push(g);
-    }
+    const bySchedule = groupScheduleTargetsByGroup(Object.values(db.groups));
 
     for (const [scheduleGroup, chats] of bySchedule) {
       try {
         const lessons = await getSchedule(scheduleGroup, 14);
         if (!Array.isArray(lessons)) continue;
         const today = attendanceDate();
-        const monitorEndDate = new Date(today + 'T12:00:00Z');
-        monitorEndDate.setUTCDate(monitorEndDate.getUTCDate() + 7);
-        const monitorEnd = monitorEndDate.toISOString().slice(0, 10);
+        const monitorEnd = getScheduleChangeMonitorEnd(today);
         const inAlertWindow = date => date >= today && date <= monitorEnd;
         const current = buildScheduleSnapshot(lessons);
 
@@ -580,12 +573,7 @@ async function checkScheduleChanges() {
         const { added, removed, changed } = diffScheduleSnapshots(previous, current, today, monitorEnd);
 
         if (added.length || removed.length || changed.length) {
-          const lines = ['🔔 <b>Обнаружены изменения в расписании</b>', 'Учебная группа: <b>' + escapeHtml(scheduleGroup) + '</b>', ''];
-          if (added.length) lines.push('<b>Добавлено:</b>', ...added.slice(0, 12).map(escapeHtml), '');
-          if (removed.length) lines.push('<b>Убрано:</b>', ...removed.slice(0, 12).map(escapeHtml), '');
-          if (changed.length) lines.push('<b>Изменено:</b>', ...changed.slice(0, 12).map(escapeHtml), '');
-          lines.push('Проверяй актуальное расписание в боте.');
-          const message = lines.join('\n').slice(0, 3900);
+          const message = buildScheduleChangeMessage(scheduleGroup, { added, removed, changed }, escapeHtml);
           for (const g of chats) {
             try {
               await bot.telegram.sendMessage(g.chatId, message, { parse_mode: 'HTML' });
