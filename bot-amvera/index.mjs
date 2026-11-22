@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
+import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
@@ -296,61 +297,19 @@ function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 
 function attendanceLessonKey(lesson) {
  return buildAttendanceLessonKey(lesson, attendanceDate());
 }
-const scheduleCache = new Map();
-const scheduleInFlight = new Map();
-const SCHEDULE_CACHE_TTL = 3 * 60 * 1000;
+const scheduleCache = new ScheduleCache({
+ load: (group, days) => getSchedule(String(group), days),
+ ttlMs: 3 * 60 * 1000,
+ logger: console
+});
 
 async function getCachedSchedule(group, days = 7) {
- const cacheKey = String(group) + ':' + Number(days);
- const cached = scheduleCache.get(cacheKey);
- if (cached && cached.expiresAt > Date.now()) {
-  console.log('[schedule cache] hit:', cacheKey);
-  return cached.items;
- }
- if (scheduleInFlight.has(cacheKey)) {
-  console.log('[schedule cache] waiting for in-flight request:', cacheKey);
-  return scheduleInFlight.get(cacheKey);
- }
- const stale = cached && Array.isArray(cached.items) ? cached.items : null;
- const startedAt = Date.now();
- console.log('[schedule cache] loading:', cacheKey);
- const request = getSchedule(String(group), days).then(items => {
-  const safeItems = Array.isArray(items) ? items : [];
-  scheduleCache.set(cacheKey, { items: safeItems, expiresAt: Date.now() + SCHEDULE_CACHE_TTL });
-  console.log('[schedule cache] loaded:', cacheKey, 'items:', safeItems.length, 'ms:', Date.now() - startedAt);
-  return safeItems;
- }).catch(error => {
-  console.error('[schedule cache] failed:', cacheKey, error?.message || error);
-  if (stale) {
-   console.warn('[schedule cache] serving expired cache after source failure:', cacheKey);
-   return stale;
-  }
-  throw error;
- }).finally(() => scheduleInFlight.delete(cacheKey));
- scheduleInFlight.set(cacheKey, request);
- return request;
+ return scheduleCache.get(String(group), days);
 }
 
-// Для Mini App не ждём внешний сайт расписания: отдаём кэш сразу,
-// а при холодном старте загружаем расписание в фоне.
+// Mini App получает кэш сразу; при холодном старте обновление идёт в фоне.
 function getMiniAppSchedule(group, days = 7) {
- const cacheKey = String(group) + ':' + Number(days);
- const cached = scheduleCache.get(cacheKey);
- const fresh = cached && cached.expiresAt > Date.now();
- if (fresh) return { items: cached.items, loading: false };
- if (!scheduleInFlight.has(cacheKey)) {
-  const request = getSchedule(String(group), days).then(items => {
-   const safeItems = Array.isArray(items) ? items : [];
-   scheduleCache.set(cacheKey, { items: safeItems, expiresAt: Date.now() + SCHEDULE_CACHE_TTL });
-   console.log('[schedule cache] background refresh complete:', cacheKey, 'items:', safeItems.length);
-   return safeItems;
-  }).catch(error => {
-   console.error('[schedule cache] background refresh failed:', cacheKey, error?.message || error);
-   return cached?.items || [];
-  }).finally(() => scheduleInFlight.delete(cacheKey));
-  scheduleInFlight.set(cacheKey, request);
- }
- return { items: cached?.items || [], loading: !cached };
+ return scheduleCache.getImmediate(String(group), days);
 }
 
 async function getTodayLessons(g) {
