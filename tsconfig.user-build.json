@@ -16,7 +16,11 @@
     "bot-amvera/domain/student-management.ts",
     "bot-amvera/domain/institution-structure.ts",
     "bot-amvera/domain/institution-admins.ts",
-    "bot-amvera/domain/institutions.ts"
+    "bot-amvera/domain/institutions.ts",
+    "bot-amvera/domain/study-groups.ts"
   ],
-  "exclude": ["node_modules", "bot-amvera/domain/.build"]
+  "exclude": [
+    "node_modules",
+    "bot-amvera/domain/.build"
+  ]
 }
