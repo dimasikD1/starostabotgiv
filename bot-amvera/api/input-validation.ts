@@ -6,11 +6,11 @@ export interface ProfileNameValidation {
 
 /** Mirrors the Mini App profile rules while keeping validation independent of HTTP and storage. */
 export function validateMiniAppProfileName(input: unknown): ProfileNameValidation {
-  const fullName = String(input || '').replace(/\\s+/g, ' ').trim();
+  const fullName = String(input || '').replace(/\s+/g, ' ').trim();
   if (fullName.length < 5 || fullName.length > 100) {
     return { ok: false, reason: 'length' };
   }
-  if (!/^[\\p{L}][\\p{L}\\s.'’-]*$/u.test(fullName) || fullName.split(' ').filter(Boolean).length < 2) {
+  if (!/^[\p{L}][\p{L}\s.'’-]*$/u.test(fullName) || fullName.split(' ').filter(Boolean).length < 2) {
     return { ok: false, reason: 'format' };
   }
   const normalized = fullName
