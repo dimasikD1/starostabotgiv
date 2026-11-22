@@ -22,7 +22,7 @@ export function parseScheduleHtml(html: string, requestedGroup = ''): ParsedSche
 
     const headers: string[] = [];
     rows.first().find('th,td').each((_i, cell) => {
-      headers.push(clean($(cell).text()).toLowerCase());
+      { headers.push(clean($(cell).text()).toLowerCase()); }
     });
 
     const index = (names: string[]): number => headers.findIndex(header =>
@@ -37,7 +37,7 @@ export function parseScheduleHtml(html: string, requestedGroup = ''): ParsedSche
 
     rows.slice(1).each((_i, row) => {
       const cells: string[] = [];
-      $(row).find('td,th').each((_j, cell) => cells.push(clean($(cell).text())));
+      $(row).find('td,th').each((_j, cell) => { cells.push(clean($(cell).text())); });
       if (!cells.length) return;
 
       const get = (i: number): string => i >= 0 ? cells[i] || '' : '';
