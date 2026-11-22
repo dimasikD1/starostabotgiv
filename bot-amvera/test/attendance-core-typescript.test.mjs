@@ -63,7 +63,7 @@ test('writes a status only to the selected lesson and student', () => {
   });
 });
 
-test('clears only the selected student's mark and preserves other marks', () => {
+test("clears only the selected student mark and preserves other marks", () => {
   const group = { lessonAttendance: { lesson: { '7': 'present', '8': 'absent' } } };
   assert.equal(setLessonAttendanceStatus(group, 'lesson', '7', 'unmarked'), true);
   assert.deepEqual(group.lessonAttendance.lesson, { '8': 'absent' });
