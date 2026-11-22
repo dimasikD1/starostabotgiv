@@ -6,6 +6,7 @@ import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
+import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
@@ -395,26 +396,6 @@ function attendancePairButtons(g,lesson,userId,page=0) {
 function createAttendanceHtml(g, period='all') {
  return buildAttendanceHtml({ group: g, period, timeZone: TIME_ZONE });
 }
-function format(items, group) {
-  if (!items.length) return 'На ближайшие дни занятий для группы «' + group + '» не найдено.';
-  const out = [];
-  let current = '';
-  for (const x of items) {
-    if (x.date !== current) {
-      current = x.date;
-      out.push('\n📅 ' + (x.date || 'Дата не указана'));
-    }
-    const lessonTime = x.timeStart && x.timeEnd ? x.timeStart + '–' + x.timeEnd : (x.time || '');
-    const numberLabel = x.lessonNumber ? String(x.lessonNumber) + '. ' : '';
-    let line = '• ' + numberLabel + (lessonTime ? lessonTime + ' — ' : '') + (x.subject || 'Занятие');
-    if (x.lessonType) line += ' (' + x.lessonType + ')';
-    if (x.teacher) line += '\n   👨‍🏫 ' + x.teacher;
-    const room = String(x.room || '').trim();
-    if (room) line += '\n   🚪 Аудитория: ' + room;
-    out.push(line);
-  }
-  return out.join('\n').trim();
-}
 
 async function show(ctx, days, offset) {
   const u = user(ctx.from.id);
@@ -432,7 +413,7 @@ async function show(ctx, days, offset) {
   try {
     let items = await getSchedule(selectedGroup, days);
     if (offset) items = items.filter(x => Number(x.dayOffset) === offset);
-    await ctx.reply(format(items, selectedGroup), menuFor(ctx));
+    await ctx.reply(formatSchedule(items, selectedGroup), menuFor(ctx));
   } catch (e) {
     console.error('[schedule]', e);
     await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь источник или SCHEDULE_API_URL.', menuFor(ctx));
@@ -535,58 +516,6 @@ async function checkAutomaticAttendancePolls() {
 
 let weeklyScheduleCheckRunning = false;
 
-function nextWeekDateRange() {
-  const today = attendanceDate();
-  const base = new Date(today + 'T12:00:00Z');
-  const start = new Date(base);
-  start.setUTCDate(start.getUTCDate() + 1); // понедельник после текущего воскресенья
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  const iso = d => d.toISOString().slice(0, 10);
-  return { start: iso(start), end: iso(end) };
-}
-
-// Формирует одно расписание сразу для обеих учебных групп.
-async function buildWeeklyScheduleText(range) {
-  const names = Object.values(STUDY_GROUPS);
-  const results = [];
-  for (const name of names) {
-    try {
-      const lessons = await getSchedule(name, 7, range.start);
-      const weekLessons = (lessons || [])
-        .filter(x => x.date >= range.start && x.date <= range.end && x.subject)
-        .sort((a, b) => String(a.date).localeCompare(String(b.date)) ||
-          String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
-      results.push({ name, lessons: weekLessons });
-    } catch (error) {
-      console.error('[weekly schedule] source failed for ' + name + ':', error?.message || error);
-      results.push({ name, error });
-    }
-  }
-
-  const signature = items => JSON.stringify(items.map(x => [
-    x.date || '', x.timeStart || x.time || '', x.timeEnd || '',
-    x.subject || '', x.teacher || '', x.room || ''
-  ]));
-  const lines = [
-    '🗓 РАСПИСАНИЕ НА СЛЕДУЮЩУЮ НЕДЕЛЮ',
-    '📅 ' + range.start + ' — ' + range.end,
-    ''
-  ];
-  if (results.every(x => !x.error) && signature(results[0].lessons) === signature(results[1].lessons)) {
-    lines.push('👥 Обе учебные группы — расписание совпадает', '');
-    lines.push(format(results[0].lessons, 'обеих учебных групп'));
-  } else {
-    for (const result of results) {
-      lines.push('👥 ' + result.name);
-      lines.push(result.error
-        ? '❌ Не удалось загрузить расписание этой учебной группы.'
-        : format(result.lessons, result.name));
-      lines.push('');
-    }
-  }
-  return { text: lines.join('\n').trim(), lessonCount: results.reduce((sum, x) => sum + (x.lessons?.length || 0), 0) };
-}
 
 async function checkWeeklySchedules() {
   if (weeklyScheduleCheckRunning) return;
