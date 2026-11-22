@@ -69,11 +69,16 @@ export function deleteInstitution(
   const key = String(id);
   if (!institutions[key]) return { ok: false, reason: 'not_found' };
   if (protectedIds.some(value => String(value) === key)) return { ok: false, reason: 'protected' };
-  const hasGroups = Object.values(groups || {}).some(chat =>
-    Object.values(chat || {}).some(value =>
-      value && typeof value === 'object' && String((value as InstitutionGroupRecord).institutionId || '') === key
-    )
-  );
+  const visited = new Set<object>();
+  const containsInstitutionGroup = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    const objectValue = value as Record<string, unknown>;
+    if (visited.has(objectValue)) return false;
+    visited.add(objectValue);
+    if (String(objectValue.institutionId || '') === key) return true;
+    return Object.values(objectValue).some(containsInstitutionGroup);
+  };
+  const hasGroups = Object.values(groups || {}).some(containsInstitutionGroup);
   if (hasGroups) return { ok: false, reason: 'has_groups' };
   delete institutions[key];
   return { ok: true, status: 'deleted', id: key };
