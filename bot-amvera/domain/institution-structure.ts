@@ -42,7 +42,7 @@ export interface StudyGroupReference {
 }
 export type StructureResult =
   | { ok: true; id: string; facultyName?: string; directionName?: string; courseName?: string }
-  | { ok: false; reason: 'invalid_name' | 'duplicate' | 'faculty_not_found' | 'direction_not_found' | 'course_not_found' | 'institution_mismatch' };
+  | { ok: false; reason: 'invalid_name' | 'duplicate' | 'faculty_not_found' | 'direction_not_found' | 'course_not_found' | 'institution_mismatch' | 'group_reference_invalid' };
 
 export function ensureInstitutionStructure(institution: InstitutionStructure): Record<string, FacultyNode> {
   institution.faculties ||= {};
@@ -116,10 +116,17 @@ export function linkStudyGroupToCourse(
     for (const direction of Object.values(faculty.directions || {})) {
       const course = direction.courses?.[courseId];
       if (!course) continue;
-      const chatId = String(group.chatId || '');
-      const studyGroup = String(group.studyGroup || '');
-      if (!chatId || !studyGroup) return { ok: false, reason: 'institution_mismatch' };
+      const chatId = String(group.chatId || '').trim();
+      const studyGroup = String(group.studyGroup || '').trim();
+      if (!chatId || !studyGroup) return { ok: false, reason: 'group_reference_invalid' };
       const linkId = chatId + '::' + studyGroup;
+      for (const candidateFaculty of faculties) {
+        for (const candidateDirection of Object.values(candidateFaculty.directions || {})) {
+          for (const candidateCourse of Object.values(candidateDirection.courses || {})) {
+            if (candidateCourse.groups?.[linkId]) delete candidateCourse.groups[linkId];
+          }
+        }
+      }
       course.groups ||= {};
       course.groups[linkId] = {
         id: linkId,
@@ -139,4 +146,22 @@ export function linkStudyGroupToCourse(
     }
   }
   return { ok: false, reason: 'course_not_found' };
+}
+
+export function unlinkStudyGroupFromStructure(institution: InstitutionStructure, group: StudyGroupReference): { ok: true; removed: number } | { ok: false; reason: 'institution_mismatch' | 'group_reference_invalid' } {
+  if (String(group.institutionId || '') !== String(institution.id)) return { ok: false, reason: 'institution_mismatch' };
+  const chatId = String(group.chatId || '').trim();
+  const studyGroup = String(group.studyGroup || '').trim();
+  if (!chatId || !studyGroup) return { ok: false, reason: 'group_reference_invalid' };
+  const linkId = chatId + '::' + studyGroup;
+  let removed = 0;
+  for (const faculty of Object.values(institution.faculties || {})) {
+    for (const direction of Object.values(faculty.directions || {})) {
+      for (const course of Object.values(direction.courses || {})) {
+        if (course.groups?.[linkId]) { delete course.groups[linkId]; removed += 1; }
+      }
+    }
+  }
+  delete group.facultyId; delete group.directionId; delete group.courseId;
+  return { ok: true, removed };
 }
