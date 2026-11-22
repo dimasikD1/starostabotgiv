@@ -25,7 +25,7 @@ export function addInstitutionAdmin(
   platformOwnerIds: Array<string | number> = []
 ): AdminChangeResult {
   const normalizedId = String(userId || '').trim();
-  if (!/^\\d+$/.test(normalizedId)) return { ok: false, reason: 'invalid_user_id' };
+  if (!/^\d+$/.test(normalizedId)) return { ok: false, reason: 'invalid_user_id' };
   if (platformOwnerIds.some(id => String(id) === normalizedId)) return { ok: false, reason: 'platform_owner' };
   institution.adminIds ||= [];
   if (institution.adminIds.some(id => String(id) === normalizedId)) {
@@ -40,7 +40,7 @@ export function removeInstitutionAdmin(
   userId: string | number
 ): AdminChangeResult {
   const normalizedId = String(userId || '').trim();
-  if (!/^\\d+$/.test(normalizedId)) return { ok: false, reason: 'invalid_user_id' };
+  if (!/^\d+$/.test(normalizedId)) return { ok: false, reason: 'invalid_user_id' };
   institution.adminIds ||= [];
   const before = institution.adminIds.length;
   institution.adminIds = institution.adminIds.filter(id => String(id) !== normalizedId);
