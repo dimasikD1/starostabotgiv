@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttendanceLessonKey, classifyAttendance } from '../../.test-build/domain-user/attendance-core.js';
+import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus } from '../../.test-build/domain-user/attendance-core.js';
 
 test('builds the lesson key from date, start/end time and subject', () => {
   assert.equal(
@@ -52,4 +52,26 @@ test('classifies every student as unmarked when the journal has no records', () 
     classifyAttendance(students, () => undefined, student => student),
     {present:[],absent:[],unmarked:['А','Б']}
   );
+});
+
+test('writes a status only to the selected lesson and student', () => {
+  const group = { lessonAttendance: { other: { '7': 'absent' } } };
+  assert.equal(setLessonAttendanceStatus(group, 'lesson-a', '7', 'present'), true);
+  assert.deepEqual(group.lessonAttendance, {
+    other: { '7': 'absent' },
+    'lesson-a': { '7': 'present' }
+  });
+});
+
+test('clears only the selected student's mark and preserves other marks', () => {
+  const group = { lessonAttendance: { lesson: { '7': 'present', '8': 'absent' } } };
+  assert.equal(setLessonAttendanceStatus(group, 'lesson', '7', 'unmarked'), true);
+  assert.deepEqual(group.lessonAttendance.lesson, { '8': 'absent' });
+});
+
+test('rejects empty keys without creating journal entries', () => {
+  const group = {};
+  assert.equal(setLessonAttendanceStatus(group, '', '7', 'present'), false);
+  assert.equal(setLessonAttendanceStatus(group, 'lesson', ' ', 'absent'), false);
+  assert.equal(group.lessonAttendance, undefined);
 });
