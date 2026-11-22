@@ -4,5 +4,6 @@ export {
   createFaculty,
   createDirection,
   createCourse,
-  linkStudyGroupToCourse
+  linkStudyGroupToCourse,
+  unlinkStudyGroupFromStructure
 } from './.build/institution-structure.js';
