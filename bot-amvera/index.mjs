@@ -16,6 +16,7 @@ import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomewor
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins } from './domain/institution-admins-entry.mjs';
+import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -1847,74 +1848,44 @@ bot.command('mark',async ctx=>{
 bot.command('addinstitution', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /addinstitution.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Добавлять учебные заведения может только владелец платформы.');
-
   const raw = String(ctx.message?.text || '').replace(/^\/addinstitution(?:@\S+)?/i, '').trim();
-  if (!raw) {
-    return ctx.reply(
-      '🏫 <b>Добавление учебного заведения</b>\n\n' +
-      'Формат:\n<code>/addinstitution Название | Сокращение | Город</code>\n\n' +
-      'Пример:\n<code>/addinstitution Колледж связи | КС | Таллин</code>\n\n' +
-      'Название обязательно. Сокращение и город можно не указывать.',
-      { parse_mode: 'HTML' }
-    );
-  }
-
+  if (!raw) return ctx.reply('Формат: /addinstitution Название | Сокращение | Город');
   const parts = raw.split('|').map(value => value.trim());
   const name = String(parts[0] || '').slice(0, 120).trim();
   const shortName = String(parts[1] || '').slice(0, 40).trim();
   const city = String(parts[2] || '').slice(0, 80).trim();
   if (!name) return ctx.reply('❌ Укажи название учебного заведения.');
-
   db.institutions ||= {};
   const duplicate = Object.values(db.institutions).find(item =>
     item && String(item.name || '').trim().toLocaleLowerCase('ru-RU') === name.toLocaleLowerCase('ru-RU') &&
     String(item.city || '').trim().toLocaleLowerCase('ru-RU') === city.toLocaleLowerCase('ru-RU')
   );
-  if (duplicate) {
-    return ctx.reply(
-      '⚠️ Такое учебное заведение уже зарегистрировано.\n' +
-      'ID: <code>' + escapeHtml(duplicate.id) + '</code>',
-      { parse_mode: 'HTML' }
-    );
-  }
-
+  if (duplicate) return ctx.reply('⚠️ Такое учебное заведение уже зарегистрировано.\nID: <code>' + escapeHtml(duplicate.id) + '</code>', { parse_mode: 'HTML' });
   const id = 'inst_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-  db.institutions[id] = {
-    id,
-    name,
-    shortName,
-    city,
-    status: 'active',
-    createdAt: new Date().toISOString(),
-    createdBy: String(ctx.from.id),
-    adminIds: [],
-    faculties: {}
-  };
+  const created = createInstitution(db.institutions, {
+    id, name, shortName, city, status: 'active', createdAt: new Date().toISOString(),
+    createdBy: String(ctx.from.id), adminIds: [], faculties: {}
+  });
+  if (!created.ok) return ctx.reply('❌ Не удалось зарегистрировать учебное заведение.');
   saveDb();
-
   console.log('[institutions] Institution created:', id, 'by owner:', String(ctx.from.id));
-  return ctx.reply(
-    '✅ <b>Учебное заведение зарегистрировано!</b>\n\n' +
-    '🏫 Название: <b>' + escapeHtml(name) + '</b>\n' +
+  return ctx.reply('✅ <b>Учебное заведение зарегистрировано!</b>\n\n🏫 Название: <b>' + escapeHtml(name) + '</b>\n' +
     (shortName ? '🔖 Сокращение: ' + escapeHtml(shortName) + '\n' : '') +
     (city ? '📍 Город: ' + escapeHtml(city) + '\n' : '') +
-    '🆔 ID: <code>' + escapeHtml(id) + '</code>\n\n' +
-    'Пока оно создано отдельно: существующие группы и данные остались в основном заведении. На следующем этапе подключим администраторов и добавление групп.',
-    { parse_mode: 'HTML' }
-  );
+    '🆔 ID: <code>' + escapeHtml(id) + '</code>\n\nСуществующие группы и данные не затронуты.', { parse_mode: 'HTML' });
 });
 
 bot.command('institutions', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список учебных заведений доступен в личных сообщениях.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Список доступен только владельцу платформы.');
-
-  const institutions = Object.values(db.institutions || {});
+  const institutions = listInstitutions(db.institutions);
   if (!institutions.length) return ctx.reply('Пока нет зарегистрированных учебных заведений.');
   const lines = institutions.map((item, index) =>
     (index + 1) + '. <b>' + escapeHtml(item.name || 'Без названия') + '</b>' +
     (item.city ? ' · ' + escapeHtml(item.city) : '') +
     '\nID: <code>' + escapeHtml(item.id) + '</code>' +
-    (item.id === DEFAULT_INSTITUTION_ID ? ' · основное' : '')
+    (item.id === DEFAULT_INSTITUTION_ID ? ' · основное' : '') +
+    (item.status === 'inactive' ? ' · отключено' : '')
   );
   return ctx.reply('🏫 <b>Учебные заведения (' + institutions.length + ')</b>\n\n' + lines.join('\n\n'), { parse_mode: 'HTML' });
 });
@@ -1922,43 +1893,19 @@ bot.command('institutions', async ctx => {
 bot.command('deleteinstitution', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /deleteinstitution ID.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Удалять учебные заведения может только владелец платформы.');
-
   const id = String(ctx.message?.text || '').replace(/^\/deleteinstitution(?:@\S+)?/i, '').trim();
-  if (!id) {
-    return ctx.reply(
-      'Формат: <code>/deleteinstitution ID</code>\n' +
-      'Сначала посмотри ID командой /institutions.\n' +
-      'Основное заведение удалить нельзя.',
-      { parse_mode: 'HTML' }
-    );
-  }
-  if (id === DEFAULT_INSTITUTION_ID) {
-    return ctx.reply('⛔ Нельзя удалить основное учебное заведение. Оно содержит действующие группы.');
-  }
-
+  if (!id) return ctx.reply('Формат: /deleteinstitution ID. Основное заведение удалить нельзя.');
   const institution = db.institutions?.[id];
   if (!institution) return ctx.reply('❌ Учебное заведение с таким ID не найдено.');
-
-  const attachedChats = Object.values(db.groups || {}).filter(chat =>
-    chat && (
-      String(chat.institutionId || '') === id ||
-      Object.values(chat.studyGroups || {}).some(group => group && String(group.institutionId || '') === id)
-    )
-  );
-  if (attachedChats.length) {
-    return ctx.reply('⛔ Удаление отменено: к этому заведению привязаны учебные группы. Сначала перенеси их в другое заведение.');
+  const deletion = deleteInstitution(db.institutions, id, db.groups, [DEFAULT_INSTITUTION_ID]);
+  if (!deletion.ok) {
+    if (deletion.reason === 'protected') return ctx.reply('⛔ Нельзя удалить основное учебное заведение.');
+    if (deletion.reason === 'has_groups') return ctx.reply('⛔ Удаление отменено: к этому заведению привязаны учебные группы. Сначала перенеси их в другое заведение.');
+    return ctx.reply('❌ Не удалось удалить учебное заведение.');
   }
-
-  delete db.institutions[id];
   saveDb();
   console.log('[institutions] Institution deleted:', id, 'by owner:', String(ctx.from.id));
-  return ctx.reply(
-    '✅ Учебное заведение удалено.\n' +
-    '🏫 ' + escapeHtml(institution.name || 'Без названия') + '\n' +
-    '🆔 <code>' + escapeHtml(id) + '</code>\n\n' +
-    'Основное заведение и его группы не затронуты.',
-    { parse_mode: 'HTML' }
-  );
+  return ctx.reply('✅ Учебное заведение «' + escapeHtml(institution.name || 'Без названия') + '» удалено.\n🆔 <code>' + escapeHtml(id) + '</code>\nОсновное заведение и его группы не затронуты.', { parse_mode: 'HTML' });
 });
 
 // Управление администраторами заведений: только владельцы платформы.
