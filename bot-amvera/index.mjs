@@ -28,6 +28,7 @@ import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-group
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
+import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
@@ -2406,36 +2407,8 @@ function sendJson(res, status, data, headers = {}) {
   res.end(JSON.stringify(data));
 }
 
-// Простое ограничение частоты запросов Mini App на пользователя.
-// Защищает сервер и Telegram API от случайных циклов и злоупотреблений.
-const API_WINDOW_MS = 60_000;
-const API_READ_LIMIT = 120;
-const API_WRITE_LIMIT = 60;
-const apiRateBuckets = new Map();
-
-function checkApiRate(userId, method) {
-  const key = String(userId);
-  const now = Date.now();
-  let bucket = apiRateBuckets.get(key);
-  if (!bucket || now - bucket.startedAt >= API_WINDOW_MS) {
-    bucket = { startedAt: now, reads: 0, writes: 0 };
-    apiRateBuckets.set(key, bucket);
-  }
-  const isWrite = method !== 'GET' && method !== 'HEAD';
-  if (isWrite) bucket.writes += 1;
-  else bucket.reads += 1;
-  const used = isWrite ? bucket.writes : bucket.reads;
-  const limit = isWrite ? API_WRITE_LIMIT : API_READ_LIMIT;
-  if (used > limit) {
-    return { limited: true, retryAfter: Math.max(1, Math.ceil((bucket.startedAt + API_WINDOW_MS - now) / 1000)) };
-  }
-  if (apiRateBuckets.size > 5000) {
-    for (const [id, value] of apiRateBuckets) {
-      if (now - value.startedAt >= API_WINDOW_MS) apiRateBuckets.delete(id);
-    }
-  }
-  return { limited: false };
-}
+// TypeScript module owns the Mini App API rate-limit policy and counters.
+const checkApiRate = createApiRateLimiter();
 async function readJsonBody(req, maxBytes=32768) {
   const chunks=[];let size=0;
   for await (const chunk of req) { size+=chunk.length;if(size>maxBytes)throw new Error('Слишком большой запрос.');chunks.push(chunk); }
