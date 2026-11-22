@@ -24,7 +24,7 @@ export function formatSchedule(items: ScheduleLesson[], group: string): string {
   for (const lesson of items) {
     if (lesson.date !== current) {
       current = lesson.date;
-      out.push('\\n📅 ' + (lesson.date || 'Дата не указана'));
+      out.push('\n📅 ' + (lesson.date || 'Дата не указана'));
     }
     const lessonTime = lesson.timeStart && lesson.timeEnd
       ? lesson.timeStart + '–' + lesson.timeEnd
@@ -32,12 +32,12 @@ export function formatSchedule(items: ScheduleLesson[], group: string): string {
     const numberLabel = lesson.lessonNumber ? String(lesson.lessonNumber) + '. ' : '';
     let line = '• ' + numberLabel + (lessonTime ? lessonTime + ' — ' : '') + (lesson.subject || 'Занятие');
     if (lesson.lessonType) line += ' (' + lesson.lessonType + ')';
-    if (lesson.teacher) line += '\\n   👨‍🏫 ' + lesson.teacher;
+    if (lesson.teacher) line += '\n   👨‍🏫 ' + lesson.teacher;
     const room = String(lesson.room || '').trim();
-    if (room) line += '\\n   🚪 Аудитория: ' + room;
+    if (room) line += '\n   🚪 Аудитория: ' + room;
     out.push(line);
   }
-  return out.join('\\n').trim();
+  return out.join('\n').trim();
 }
 
 export function nextWeekDateRange(today: string): DateRange {
@@ -93,5 +93,5 @@ export async function buildWeeklyScheduleText(options: WeeklyScheduleOptions): P
       lines.push('');
     }
   }
-  return { text: lines.join('\\n').trim(), lessonCount: results.reduce((sum, result) => sum + result.lessons.length, 0) };
+  return { text: lines.join('\n').trim(), lessonCount: results.reduce((sum, result) => sum + result.lessons.length, 0) };
 }
