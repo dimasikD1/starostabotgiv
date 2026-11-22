@@ -2,5 +2,6 @@ export {
   isInstitutionAdminId,
   addInstitutionAdmin,
   removeInstitutionAdmin,
-  listInstitutionAdmins
+  listInstitutionAdmins,
+  checkInstitutionAccess
 } from './.build/institution-admins.js';
