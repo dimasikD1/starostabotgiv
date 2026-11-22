@@ -1,9 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildScheduleSnapshot, diffScheduleSnapshots } from '../../.test-build/changes.js';
+import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from '../../.test-build/changes.js';
 
 const lesson = { date: '2026-11-24', dayOffset: 2, time: '09:00–10:30', timeStart: '09:00', timeEnd: '10:30', subject: 'Математика', lessonNumber: '1', lessonType: 'лекция', teacher: 'Иванов И. И.', room: '204', group: 'БИ(ЭБ)2' };
 const window = ['2026-11-23', '2026-11-30'];
+
+test('classifies first snapshot as baseline without reporting changes', () => {
+  const current = buildScheduleSnapshot([lesson]);
+  assert.deepEqual(analyzeScheduleSnapshot(undefined, current, ...window), { status: 'baseline', snapshot: current });
+});
+
+test('ignores an empty source response when a previous snapshot exists', () => {
+  const previous = buildScheduleSnapshot([lesson]);
+  assert.deepEqual(analyzeScheduleSnapshot(previous, {}, ...window), { status: 'empty-response', snapshot: {} });
+});
+
+test('returns typed changes for a non-empty comparison', () => {
+  const previous = buildScheduleSnapshot([lesson]);
+  const current = buildScheduleSnapshot([{ ...lesson, room: '305' }]);
+  const result = analyzeScheduleSnapshot(previous, current, ...window);
+  assert.equal(result.status, 'compared');
+  if (result.status === 'compared') assert.match(result.changes.changed[0], /аудитория: 204 → 305/);
+});
 
 test('builds a snapshot using date, start time and subject as stable identity', () => {
   const snapshot = buildScheduleSnapshot([lesson, { ...lesson, date: '', subject: 'ignored' }, { ...lesson, subject: '' }]);
