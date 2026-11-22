@@ -12,7 +12,7 @@ import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
-import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendance-core-entry.mjs';
+import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
@@ -2018,7 +2018,8 @@ bot.action(/^attpairmark:(\d+):(present|absent)$/,async ctx=>{
  const lesson=g.activeAttendanceLessons?.[String(ctx.from.id)],i=Number(ctx.match[1]),student=g.students?.[i];
  if(!lesson||!student)return ctx.answerCbQuery('Пара или студент не найдены. Открой /attendance заново.');
  const key=attendanceLessonKey(lesson),studentKey=attendanceKey(student);
- g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][studentKey]=ctx.match[2];saveDb();
+ if(!setLessonAttendanceStatus(g,key,studentKey,ctx.match[2]))return ctx.answerCbQuery('Не удалось сохранить отметку.');
+ saveDb();
  await ctx.answerCbQuery('Отметка сохранена');
  return ctx.editMessageText(formatLessonAttendance(g,lesson),{parse_mode:'HTML',...attendancePairButtons(g,lesson,ctx.from.id,Math.floor(i/10))});
 });
