@@ -13,7 +13,8 @@ import {
   assignStudyGroupRoleByNumber,
   removeGroupRolesAndSetStudent,
   getStudentRosterPage,
-  getStudentCard
+  getStudentCard,
+  replaceStudentRoster
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -189,4 +190,26 @@ test('reads student contact cards from both legacy and object records', () => {
     index: 1, name: 'Анна', username: 'anna_1', phone: '+37255555555', telegramId: '42'
   });
   assert.equal(getStudentCard(group, 2), undefined);
+});
+
+
+test('replaces a reviewed roster, initializes attendance, and syncs user copy', () => {
+  const group = { students: ['old'], attendance: undefined };
+  const user = {};
+  const result = replaceStudentRoster(group, user, ['Иван', 'Анна']);
+  assert.deepEqual(result, { count: 2, truncated: false });
+  assert.deepEqual(group.students, ['Иван', 'Анна']);
+  assert.deepEqual(group.attendance, {});
+  assert.deepEqual(user.students, ['Иван', 'Анна']);
+  assert.notEqual(user.students, group.students);
+});
+
+test('caps imported roster at 100 without mutating the supplied names', () => {
+  const names = Array.from({ length: 105 }, (_, i) => 'Student ' + i);
+  const group = {};
+  const user = {};
+  const result = replaceStudentRoster(group, user, names);
+  assert.deepEqual(result, { count: 100, truncated: true });
+  assert.equal(group.students.length, 100);
+  assert.equal(names.length, 105);
 });
