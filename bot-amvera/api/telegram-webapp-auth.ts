@@ -32,7 +32,7 @@ export function verifyTelegramWebAppInitData(
   const checkString = [...params.entries()]
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
     .map(([key, value]) => key + '=' + value)
-    .join('\\n');
+    .join('\n');
   const secretKey = createHmac('sha256', 'WebAppData').update(options.token).digest();
   const expectedHash = createHmac('sha256', secretKey).update(checkString).digest('hex');
   const received = Buffer.from(receivedHash, 'hex');
@@ -57,7 +57,7 @@ export function verifyTelegramWebAppInitData(
   }
   if (!user || typeof user !== 'object' || !('id' in user) ||
       !(typeof user.id === 'number' || typeof user.id === 'string') ||
-      !/^\\d+$/.test(String(user.id)) || String(user.id) === '0') {
+      !/^\d+$/.test(String(user.id)) || String(user.id) === '0') {
     throw new Error('Telegram не передал корректные данные пользователя.');
   }
   return user as TelegramWebAppUser;
