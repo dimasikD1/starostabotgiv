@@ -9,13 +9,14 @@ import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
+import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
-import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollKey, isAttendancePollDue } from './domain/attendance-polls-entry.mjs';
+import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
@@ -451,14 +452,19 @@ async function checkAutomaticAttendancePolls() {
       if (!scheduleGroup) continue;
       try {
         const lessons = await getSchedule(scheduleGroup, 2);
-        for (const lesson of lessons) {
-          if (lesson.date !== today || !lesson.timeStart) continue;
-          const match = String(lesson.timeStart).match(/^(\\d{1,2}):(\\d{2})$/);
-          if (!match) continue;
-          const startMinutes = Number(match[1]) * 60 + Number(match[2]);
-          const key = buildAttendancePollKey(g.chatId, lesson.date, lesson.timeStart, lesson.subject);
-          db.sentLessonNotices ||= {};
-          if (currentMinutes >= startMinutes - 30 && currentMinutes <= startMinutes - 29 && !db.sentLessonNotices[key]) {
+        db.sentLessonNotices ||= {};
+        const tasks = buildAttendanceScheduleTasks({
+          chatId: g.chatId,
+          lessons,
+          today,
+          currentMinutes,
+          sentLessonNotices: db.sentLessonNotices,
+          sentAttendancePolls: db.sentAttendancePolls
+        });
+        for (const task of tasks) {
+          const lesson = task.lesson;
+          const key = task.key;
+          if (task.sendLessonReminder) {
             await bot.telegram.sendMessage(g.chatId,
               '⏰ <b>Напоминание о занятии</b>\n\nЧерез 30 минут начинается: <b>' + escapeHtml(lesson.subject) +
               '</b>\n🕒 Начало: ' + lesson.timeStart + (lesson.room ? '\n🚪 Аудитория: ' + escapeHtml(lesson.room) : ''),
@@ -467,21 +473,21 @@ async function checkAutomaticAttendancePolls() {
             db.sentLessonNotices[key] = new Date().toISOString();
             saveDb();
           }
-          if (!isAttendancePollDue(currentMinutes, startMinutes)) continue;
-          if (db.sentAttendancePolls[key]) continue;
-          const sent = await bot.telegram.sendPoll(
-            g.chatId,
-            '📋 Посещаемость: ' + lesson.subject + '\nПара начинается в ' + lesson.timeStart + '. Ты будешь присутствовать?',
-            ['✅ Буду', '❌ Не буду'],
-            { is_anonymous: false, allows_multiple_answers: false }
-          );
-          db.sentAttendancePolls[key] = {
-            pollId: sent.poll.id, groupId: String(g.chatId), groupName: g.title,
-            scheduleGroup, date: lesson.date, time: lesson.timeStart,
-            subject: lesson.subject, lessonKey: attendanceLessonKey(lesson), sentAt: new Date().toISOString()
-          };
-          saveDb();
-          console.log('[attendance poll] Sent to ' + g.title + ' for ' + lesson.subject + ' at ' + lesson.timeStart);
+          if (task.sendAttendancePoll) {
+            const sent = await bot.telegram.sendPoll(
+              g.chatId,
+              '📋 Посещаемость: ' + lesson.subject + '\nПара начинается в ' + lesson.timeStart + '. Ты будешь присутствовать?',
+              ['✅ Буду', '❌ Не буду'],
+              { is_anonymous: false, allows_multiple_answers: false }
+            );
+            db.sentAttendancePolls[key] = {
+              pollId: sent.poll.id, groupId: String(g.chatId), groupName: g.title,
+              scheduleGroup, date: lesson.date, time: lesson.timeStart,
+              subject: lesson.subject, lessonKey: attendanceLessonKey(lesson), sentAt: new Date().toISOString()
+            };
+            saveDb();
+            console.log('[attendance poll] Sent to ' + g.title + ' for ' + lesson.subject + ' at ' + lesson.timeStart);
+          }
         }
       } catch (e) {
         console.error('[attendance poll] ' + g.title + ':', e.message || e);
