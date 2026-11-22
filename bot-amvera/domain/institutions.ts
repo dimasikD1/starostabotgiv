@@ -22,11 +22,11 @@ export function listInstitutions(institutions: Record<string, InstitutionRecord>
     String(a.name || '').localeCompare(String(b.name || ''), 'ru')
   );
 }
-export function hasInstitutionName(institutions: Record<string, InstitutionRecord> | undefined, name: string, exceptId = ''): boolean {
+export function hasInstitutionName(institutions: Record<string, InstitutionRecord> | undefined, name: string, exceptId = '', city?: string): boolean {
   const normalized = String(name || '').trim().toLocaleLowerCase('ru-RU');
   if (!normalized) return false;
   return Object.entries(institutions || {}).some(([id, item]) =>
-    id !== exceptId && String(item?.name || '').trim().toLocaleLowerCase('ru-RU') === normalized
+    id !== exceptId && String(item?.name || '').trim().toLocaleLowerCase('ru-RU') === normalized && (city === undefined || String(item?.city || '').trim().toLocaleLowerCase('ru-RU') === String(city || '').trim().toLocaleLowerCase('ru-RU'))
   );
 }
 export function createInstitution(
@@ -37,7 +37,7 @@ export function createInstitution(
   if (!/^inst_[a-zA-Z0-9_-]+$/.test(id)) return { ok: false, reason: 'invalid_id' };
   if (!name) return { ok: false, reason: 'invalid_name' };
   if (institutions[id]) return { ok: false, reason: 'duplicate_id' };
-  if (hasInstitutionName(institutions, name)) return { ok: false, reason: 'duplicate_name' };
+  if (hasInstitutionName(institutions, name, '', record.city)) return { ok: false, reason: 'duplicate_name' };
   institutions[id] = { ...record, id, name: name.slice(0, 160), status: record.status || 'active', faculties: record.faculties || {} };
   return { ok: true, status: 'created', id };
 }
@@ -48,7 +48,7 @@ export function renameInstitution(
   if (!institution) return { ok: false, reason: 'not_found' };
   const normalized = String(name || '').trim();
   if (!normalized) return { ok: false, reason: 'invalid_name' };
-  if (hasInstitutionName(institutions, normalized, String(id))) return { ok: false, reason: 'duplicate_name' };
+  if (hasInstitutionName(institutions, normalized, String(id), institution.city)) return { ok: false, reason: 'duplicate_name' };
   institution.name = normalized.slice(0, 160);
   return { ok: true, status: 'renamed', id: String(id) };
 }
