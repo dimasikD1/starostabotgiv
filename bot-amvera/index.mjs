@@ -14,7 +14,7 @@ import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole } from './domain/student-management-entry.mjs';
-import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
+import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
 import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-groups-entry.mjs';
@@ -2020,6 +2020,30 @@ bot.command('linkgroup', async ctx => {
     '\n📚 ' + escapeHtml(linked.directionName || 'Направление') + '\n🧑‍🎓 ' + escapeHtml(linked.courseName || 'Курс') +
     '\n👥 ' + escapeHtml(studyGroup.studyGroup) +
     '\n\nСуществующие студенты, посещаемость, расписание и роли сохранены.', { parse_mode: 'HTML' });
+});
+
+
+bot.command('unlinkgroup', async ctx => {
+  if (!ctx.chat || ctx.chat.type === 'private') return ctx.reply('📌 Команду используй в общем чате, где добавлен бот.');
+  const args = structureParts(ctx, 'unlinkgroup');
+  const groupNumber = String(args[0] || '').trim();
+  if (!['1', '2'].includes(groupNumber)) {
+    return ctx.reply('Формат: /unlinkgroup 1\nДля второй группы укажи /unlinkgroup 2. Команда убирает только привязку к курсу, студенты и посещаемость сохраняются.');
+  }
+  const groupName = STUDY_GROUPS[groupNumber];
+  const chat = db.groups?.[String(ctx.chat.id)];
+  if (!chat) return ctx.reply('❌ Этот чат ещё не зарегистрирован.');
+  const studyGroup = ensureStudyGroups(chat).find(g => g.studyGroup === groupName);
+  if (!studyGroup) return ctx.reply('❌ Учебная группа не найдена в этом чате.');
+  if (!canManageGroup(ctx.from.id, studyGroup)) return ctx.reply('❌ Нет прав на изменение структуры этой учебной группы.');
+  const institution = db.institutions?.[String(studyGroup.institutionId || DEFAULT_INSTITUTION_ID)];
+  if (!institution) return ctx.reply('❌ Учебное заведение группы не найдено.');
+  studyGroup.institutionId ||= institution.id;
+  const result = unlinkStudyGroupFromStructure(institution, studyGroup);
+  if (!result.ok) return ctx.reply('❌ Не удалось снять привязку: данные учебного заведения не совпадают.');
+  saveDb();
+  console.log('[institution-structure] Study group unlinked:', String(ctx.chat.id), groupName, 'removed links:', result.removed);
+  return ctx.reply('✅ Привязка учебной группы к курсу снята.\n\n👥 ' + escapeHtml(groupName) + '\nСтуденты, посещаемость, расписание и роли сохранены.');
 });
 
 bot.command('structure', async ctx => {
