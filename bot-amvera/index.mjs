@@ -16,7 +16,7 @@ import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendanc
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
@@ -1183,9 +1183,8 @@ bot.action('studentimport:confirm', async ctx => {
   const g=groupId ? db.groups[groupId] : managedGroup(ctx.from.id);
   if(groupId && g && !canManageChat(ctx.from.id,groupId)) { await ctx.answerCbQuery('Нет прав для подтверждения.'); return; }
   if(!g){await ctx.answerCbQuery('Группа не найдена.');return;}
-  g.students=list.slice(0,100);
-  g.attendance||={};
-  u.students=JSON.parse(JSON.stringify(g.students));
+  const importResult=replaceStudentRoster(g,u,list);
+  if(importResult.truncated)console.warn('[student import] roster capped at 100 entries for group '+String(g.chatId||groupId||g.title||'unknown'));
   delete u.pendingStudentImport;
   delete u.pendingStudentImportChatId;
   delete u.pendingStudentImportReview;
@@ -1289,8 +1288,9 @@ bot.on('text', async (ctx,next) => {
    if(!normalized.ok)return ctx.reply('❌ Неверный username. Введи @username или /cancel.');
    value=normalized.value;
   } else {
-   value=raw==='-'?'':raw.replace(/[^0-9+]/g,'');
-   if(value&&!/^\+[1-9][0-9]{5,14}$/.test(value))return ctx.reply('❌ Неверный номер. Укажи международный формат с плюсом, например +79181651870 или +37255555555. Для отмены: /cancel.');
+   const normalized=normalizeStudentPhone(raw);
+   if(!normalized.ok)return ctx.reply('❌ Неверный номер. Укажи международный формат с плюсом, например +79181651870 или +37255555555. Для отмены: /cancel.');
+   value=normalized.value;
   }
   if(!updateStudentField(g,pending.index,pending.type,value)){delete u.pendingStudentField;saveDb();return ctx.reply('❌ Студент не найден. Открой /students и попробуй снова.');}
   delete u.pendingStudentField;saveDb();
