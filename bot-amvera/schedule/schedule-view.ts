@@ -25,3 +25,18 @@ export function buildScheduleView(
     )
   };
 }
+
+export type ScheduleGroupResolution =
+  | { ok: true; group: string }
+  | { ok: false; reason: 'missing' | 'unknown' };
+
+/** Resolve /setgroup input against exact configured schedule group names. */
+export function resolveScheduleGroupName(
+  requested: string,
+  availableGroups: readonly string[]
+): ScheduleGroupResolution {
+  const value = String(requested || '').trim();
+  if (!value) return { ok: false, reason: 'missing' };
+  const group = availableGroups.find(name => String(name || '').trim() === value);
+  return group ? { ok: true, group } : { ok: false, reason: 'unknown' };
+}
