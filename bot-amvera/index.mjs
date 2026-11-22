@@ -526,7 +526,7 @@ async function checkWeeklySchedules() {
 
   weeklyScheduleCheckRunning = true;
   try {
-    const range = nextWeekDateRange();
+    const range = nextWeekDateRange(attendanceDate());
     db.sentWeeklySchedules ||= {};
     const targetChats = Object.values(db.groups).filter(g => g.chatId);
     for (const g of targetChats) {
@@ -534,7 +534,12 @@ async function checkWeeklySchedules() {
       const key = String(chatId) + ':' + range.start;
       if (db.sentWeeklySchedules[key]) continue;
       try {
-        const built = await buildWeeklyScheduleText(range);
+        const built = await buildWeeklyScheduleText({
+          groups: Object.values(STUDY_GROUPS),
+          range,
+          loadSchedule: getSchedule,
+          logger: console
+        });
         let message = escapeHtml(built.text);
         if (message.length > 3900) message = message.slice(0, 3850) + '\n\n… расписание сокращено.';
         const sent = await bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
