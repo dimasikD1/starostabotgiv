@@ -40,6 +40,20 @@ export function formatSchedule(items: ScheduleLesson[], group: string): string {
   return out.join('\n').trim();
 }
 
+/** Returns the next Monday–Sunday publication range, regardless of today's weekday. */
+export function nextMondayDateRange(today: string): DateRange {
+  const base = new Date(today + 'T12:00:00Z');
+  if (Number.isNaN(base.getTime())) throw new Error('Invalid schedule date: ' + today);
+  const weekday = base.getUTCDay();
+  const daysUntilMonday = (8 - weekday) % 7 || 7;
+  const start = new Date(base);
+  start.setUTCDate(start.getUTCDate() + daysUntilMonday);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const iso = (date: Date): string => date.toISOString().slice(0, 10);
+  return { start: iso(start), end: iso(end) };
+}
+
 export function nextWeekDateRange(today: string): DateRange {
   const base = new Date(today + 'T12:00:00Z');
   const start = new Date(base);
