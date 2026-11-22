@@ -51,3 +51,24 @@ export function listInstitutionAdmins(institution: InstitutionAdminRecord | unde
   if (!institution || !Array.isArray(institution.adminIds)) return [];
   return institution.adminIds.map(String);
 }
+
+export type InstitutionAccessResult =
+  | { allowed: true; role: 'platform_owner' | 'institution_admin' }
+  | { allowed: false; reason: 'institution_not_found' | 'institution_inactive' | 'forbidden' };
+
+export function checkInstitutionAccess(
+  institution: InstitutionAdminRecord | undefined,
+  userId: string | number,
+  platformOwnerIds: Array<string | number> = []
+): InstitutionAccessResult {
+  const normalizedId = String(userId);
+  if (platformOwnerIds.some(id => String(id) === normalizedId)) {
+    return { allowed: true, role: 'platform_owner' };
+  }
+  if (!institution) return { allowed: false, reason: 'institution_not_found' };
+  if (institution.status === 'inactive') return { allowed: false, reason: 'institution_inactive' };
+  if (!isInstitutionAdminId(institution, normalizedId)) {
+    return { allowed: false, reason: 'forbidden' };
+  }
+  return { allowed: true, role: 'institution_admin' };
+}
