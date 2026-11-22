@@ -10,7 +10,7 @@ import { formatSchedule, nextWeekDateRange, nextMondayDateRange, buildWeeklySche
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName } from './schedule/schedule-view-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
-import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
+import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -520,11 +520,11 @@ async function checkWeeklySchedules() {
   try {
     const range = nextWeekDateRange(attendanceDate());
     db.sentWeeklySchedules ||= {};
-    const targetChats = Object.values(db.groups).filter(g => g.chatId);
-    for (const g of targetChats) {
+    const targetChats = getPendingWeeklyScheduleTargets(Object.values(db.groups), db.sentWeeklySchedules, range.start);
+    for (const pending of targetChats) {
+      const g = pending.target;
       const chatId = g.chatId;
-      const key = buildWeeklySchedulePublicationKey(chatId, range.start);
-      if (db.sentWeeklySchedules[key]) continue;
+      const key = pending.key;
       try {
         const built = await buildWeeklyScheduleText({
           groups: Object.values(STUDY_GROUPS),
