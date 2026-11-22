@@ -1114,7 +1114,7 @@ bot.command('setgroup', async ctx => {
   const availableGroups = ensureStudyGroups(db.groups[String(ctx.chat.id)]);
   const resolution = resolveScheduleGroupName(requestedScheduleGroup, availableGroups.map(g => String(g.studyGroup || '')));
   if (!resolution.ok) {
-    if (resolution.reason === 'missing') return ctx.reply('Формат: /setgroup ИСП-21\\nУкажи точное название группы из расписания.');
+    if (resolution.reason === 'missing') return ctx.reply('Формат: /setgroup ИСП-21\nУкажи точное название группы из расписания.');
     return ctx.reply('❌ Укажи одну из двух учебных групп: ' + Object.values(STUDY_GROUPS).join(' или ') + '.');
   }
   const selected = availableGroups.find(g => String(g.studyGroup || '') === resolution.group);
