@@ -4,7 +4,10 @@ import {
   buildWeeklySchedulePublicationKey,
   groupScheduleTargetsByGroup,
   getScheduleChangeMonitorEnd,
-  buildScheduleChangeMessage
+  buildScheduleChangeMessage,
+  isWeeklySchedulePublicationWindow,
+  WEEKLY_SCHEDULE_CHECK_INTERVAL_MS,
+  SCHEDULE_CHANGE_CHECK_INTERVAL_MS
 } from '../../.test-build/notifications.js';
 
 test('weekly publication key remains chat- and week-specific', () => {
@@ -48,4 +51,17 @@ test('schedule change message escapes values and caps each category at 12 items'
   assert.match(message, /<b>Убрано:<\/b>/);
   assert.match(message, /<b>Изменено:<\/b>/);
   assert.ok(escaped.includes('Group <A>'));
+});
+
+test('weekly schedule publication window is Sunday from 18:00 in the configured timezone', () => {
+  assert.equal(isWeeklySchedulePublicationWindow({ year: '2026', month: '11', day: '22', hour: '17' }), false);
+  assert.equal(isWeeklySchedulePublicationWindow({ year: '2026', month: '11', day: '22', hour: '18' }), true);
+  assert.equal(isWeeklySchedulePublicationWindow({ year: '2026', month: '11', day: '22', hour: '23' }), true);
+  assert.equal(isWeeklySchedulePublicationWindow({ year: '2026', month: '11', day: '23', hour: '18' }), false);
+  assert.equal(isWeeklySchedulePublicationWindow({ year: '2026', month: '02', day: '30', hour: '18' }), false);
+});
+
+test('schedule background check intervals remain unchanged', () => {
+  assert.equal(WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, 60_000);
+  assert.equal(SCHEDULE_CHANGE_CHECK_INTERVAL_MS, 300_000);
 });
