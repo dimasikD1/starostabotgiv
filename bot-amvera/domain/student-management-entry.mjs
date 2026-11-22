@@ -6,5 +6,7 @@ export {
   updateStudentField,
   assignStudyGroupRole,
   clearStudyGroupRoles,
-  setStudentRole
+  setStudentRole,
+  normalizeStudentUsername,
+  normalizeStudentPhone
 } from './.build/student-management.js';
