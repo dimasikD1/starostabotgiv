@@ -9,7 +9,7 @@ import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, nextMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName } from './schedule/schedule-view-entry.mjs';
-import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
+import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
@@ -569,21 +569,19 @@ async function checkScheduleChanges() {
         const inAlertWindow = date => date >= today && date <= monitorEnd;
         const current = buildScheduleSnapshot(lessons);
 
-        const previous = db.scheduleSnapshots[scheduleGroup];
-        // Не считаем первое успешное получение расписания изменением.
-        if (!previous) {
-          db.scheduleSnapshots[scheduleGroup] = current;
+        const analysis = analyzeScheduleSnapshot(db.scheduleSnapshots[scheduleGroup], current, today, monitorEnd);
+        if (analysis.status === 'baseline') {
+          db.scheduleSnapshots[scheduleGroup] = analysis.snapshot;
           saveDb();
           console.log('[schedule changes] baseline saved:', scheduleGroup, Object.keys(current).length);
           continue;
         }
-        // Пустой ответ источника может быть временным сбоем — не рассылаем ложное удаление всех пар.
-        if (!Object.keys(current).length && Object.keys(previous).length) {
+        if (analysis.status === 'empty-response') {
           console.warn('[schedule changes] empty response ignored:', scheduleGroup);
           continue;
         }
 
-        const { added, removed, changed } = diffScheduleSnapshots(previous, current, today, monitorEnd);
+        const { added, removed, changed } = analysis.changes;
 
         if (added.length || removed.length || changed.length) {
           const message = buildScheduleChangeMessage(scheduleGroup, { added, removed, changed }, escapeHtml);
