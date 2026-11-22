@@ -12,5 +12,6 @@ export {
   assignStudyGroupRoleByNumber,
   removeGroupRolesAndSetStudent,
   getStudentRosterPage,
-  getStudentCard
+  getStudentCard,
+  replaceStudentRoster
 } from './.build/student-management.js';
