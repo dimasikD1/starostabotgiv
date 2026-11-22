@@ -31,6 +31,7 @@ import { resolveTimeZone } from './utils/time-zone-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { readJsonBody } from './api/json-body-entry.mjs';
+import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
@@ -2541,10 +2542,10 @@ async function handleMiniAppApi(req,res,url) {
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
       const body=await readJsonBody(req);
-      const fullName=String(body.fullName||'').replace(/\s+/g,' ').trim();
-      if(fullName.length<5 || fullName.length>100) return sendJson(res,400,{error:'Укажи ФИО длиной от 5 до 100 символов.'});
-      if(!/^[\p{L}][\p{L}\s.'’-]*$/u.test(fullName) || fullName.split(' ').filter(Boolean).length<2) return sendJson(res,400,{error:'Укажи корректные фамилию и имя (при наличии — отчество).'});
-      u.fullName=fullName.split(' ').map(part=>part[0].toLocaleUpperCase('ru-RU')+part.slice(1)).join(' ');
+      const nameValidation=validateMiniAppProfileName(body.fullName);
+      if(!nameValidation.ok && nameValidation.reason==='length') return sendJson(res,400,{error:'Укажи ФИО длиной от 5 до 100 символов.'});
+      if(!nameValidation.ok) return sendJson(res,400,{error:'Укажи корректные фамилию и имя (при наличии — отчество).'});
+      u.fullName=nameValidation.value;
       saveDb();
       return sendJson(res,200,{ok:true,fullName:u.fullName});
     } catch(e) {
