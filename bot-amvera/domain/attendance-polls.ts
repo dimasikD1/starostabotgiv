@@ -66,18 +66,24 @@ export function applyAttendancePollAnswer(
   const userId = String(answer.user?.id || '');
   if (!userId) return null;
 
-  const option = Number(answer.option_ids?.[0]);
+  const options = Array.isArray(answer.option_ids) ? answer.option_ids : [];
+  const option = options[0];
+  const withdrawn = options.length === 0;
   const status: AttendancePollResponse['status'] =
     option === 0 ? 'present' : option === 1 ? 'absent' : 'unknown';
 
   record.responses ||= {};
-  record.responses[userId] = {
-    userId,
-    username: answer.user?.username || '',
-    firstName: answer.user?.first_name || '',
-    status,
-    answeredAt
-  };
+  if (withdrawn) {
+    delete record.responses[userId];
+  } else {
+    record.responses[userId] = {
+      userId,
+      username: answer.user?.username || '',
+      firstName: answer.user?.first_name || '',
+      status,
+      answeredAt
+    };
+  }
 
   const group = groups[String(record.groupId)];
   const student = group?.students?.find(item => {
@@ -91,8 +97,12 @@ export function applyAttendancePollAnswer(
   if (group && student && record.lessonKey) {
     group.lessonAttendance ||= {};
     group.lessonAttendance[String(record.lessonKey)] ||= {};
-    group.lessonAttendance[String(record.lessonKey)][String(attendanceKey(student))] =
-      option === 0 ? 'present' : option === 1 ? 'absent' : 'unmarked';
+    const studentKey = String(attendanceKey(student));
+    if (withdrawn || status === 'unknown') {
+      delete group.lessonAttendance[String(record.lessonKey)][studentKey];
+    } else {
+      group.lessonAttendance[String(record.lessonKey)][studentKey] = status;
+    }
     attendanceUpdated = true;
   }
 
@@ -101,4 +111,20 @@ export function applyAttendancePollAnswer(
     groupName: String(record.groupName || ''),
     attendanceUpdated
   };
+}
+
+/** Keep the persistent key format stable for already-sent polls. */
+export function buildAttendancePollKey(
+  groupId: unknown,
+  date: unknown,
+  time: unknown,
+  subject: unknown
+): string {
+  return [groupId, date, time, subject].map(value => String(value ?? '')).join('|');
+}
+
+/** The scheduler runs every minute and sends once in the -10/-9 minute window. */
+export function isAttendancePollDue(currentMinutes: number, lessonStartMinutes: number): boolean {
+  if (!Number.isFinite(currentMinutes) || !Number.isFinite(lessonStartMinutes)) return false;
+  return currentMinutes >= lessonStartMinutes - 10 && currentMinutes <= lessonStartMinutes - 9;
 }
