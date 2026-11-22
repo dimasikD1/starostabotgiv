@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildWeeklySchedulePublicationKey,
+  getPendingWeeklyScheduleTargets,
   groupScheduleTargetsByGroup,
   getScheduleChangeMonitorEnd,
   buildScheduleChangeMessage,
@@ -12,6 +13,12 @@ import {
 
 test('weekly publication key remains chat- and week-specific', () => {
   assert.equal(buildWeeklySchedulePublicationKey(-100123, '2026-11-23'), '-100123:2026-11-23');
+});
+
+test('selects only chats without a sent weekly schedule marker', () => {
+  const targets = [{ chatId: -1, title: 'sent' }, { chatId: -2, title: 'pending' }, { title: 'without chat' }];
+  const pending = getPendingWeeklyScheduleTargets(targets, { '-1:2026-11-23': 'sent' }, '2026-11-23');
+  assert.deepEqual(pending, [{ target: targets[1], key: '-2:2026-11-23' }]);
 });
 
 test('schedule notification targets are grouped by trimmed schedule group', () => {
