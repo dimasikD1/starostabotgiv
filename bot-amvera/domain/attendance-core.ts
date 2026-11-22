@@ -41,3 +41,31 @@ export function classifyAttendance<T, R>(
   }
   return result;
 }
+
+export interface LessonAttendanceGroup {
+  lessonAttendance?: Record<string, Record<string, unknown>>;
+}
+
+export type LessonAttendanceStatus = 'present' | 'absent' | 'unmarked';
+
+/** Update one student's status for one exact lesson without touching other lessons. */
+export function setLessonAttendanceStatus(
+  group: LessonAttendanceGroup,
+  lessonKey: string,
+  studentKey: string,
+  status: LessonAttendanceStatus
+): boolean {
+  if (!lessonKey.trim() || !studentKey.trim()) return false;
+  if (!['present', 'absent', 'unmarked'].includes(status)) return false;
+
+  group.lessonAttendance ||= {};
+  if (status === 'unmarked') {
+    const record = group.lessonAttendance[lessonKey];
+    if (record) delete record[studentKey];
+    return true;
+  }
+
+  group.lessonAttendance[lessonKey] ||= {};
+  group.lessonAttendance[lessonKey][studentKey] = status;
+  return true;
+}
