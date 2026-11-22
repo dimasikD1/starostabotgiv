@@ -25,6 +25,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
+import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -1226,7 +1227,9 @@ bot.on('text', async (ctx,next) => {
    return ctx.reply('❌ Публикация объявления отменена.');
   }
   if (raw.startsWith('/')) return ctx.reply('Отправь текст объявления или /cancel для отмены.');
-  if (raw.length > 3000) return ctx.reply('❌ Объявление слишком длинное. Максимум 3000 символов.');
+  const announcementValidation = normalizeAnnouncementText(raw);
+  if (!announcementValidation.ok) return ctx.reply(announcementValidation.reason === 'empty' ? '❌ Напиши текст объявления.' : '❌ Объявление слишком длинное. Максимум 3000 символов.');
+  const announcementText = announcementValidation.text;
   const chatId = String(u.pendingAnnouncementChatId);
   const exists = Object.entries(db.groups || {}).some(([id, g]) => String(g.chatId || id) === chatId);
   if (!exists) {
@@ -1234,7 +1237,7 @@ bot.on('text', async (ctx,next) => {
    return ctx.reply('❌ Выбранный чат больше не подключён. Запусти /announce ещё раз.');
   }
   try {
-   await ctx.telegram.sendMessage(chatId, '📢 <b>Объявление</b>\\n\\n' + escapeHtml(raw), { parse_mode: 'HTML' });
+   await ctx.telegram.sendMessage(chatId, formatAnnouncementMessage(announcementText, 'Объявление', escapeHtml), { parse_mode: 'HTML' });
    delete u.pendingAnnouncementChatId; saveDb();
    console.log('[owner announcement] sent to chat ' + chatId + ' by ' + ctx.from.id);
    return ctx.reply('✅ Объявление отправлено в выбранный чат.');
@@ -2495,15 +2498,13 @@ async function handleMiniAppApi(req,res,url) {
           return sendJson(res,200,{ok:true,message:'Всем участникам разрешено писать в чат.'});
         }
         if(action==='announce') {
-          const message=String(body.text||'').trim();
-          if(!message) return sendJson(res,400,{error:'Напиши текст объявления.'});
-          if(message.length>3000) return sendJson(res,400,{error:'Максимум 3000 символов.'});
+          const validation=normalizeAnnouncementText(body.text);
+          if(!validation.ok) return sendJson(res,400,{error:validation.reason==='empty'?'Напиши текст объявления.':'Максимум 3000 символов.'});
+          const message=validation.text;
           await bot.telegram.sendMessage(chat.chatId,'📢 <b>Объявление</b>\n\n'+escapeHtml(message),{parse_mode:'HTML'});
-          const item={id:crypto.randomUUID(),text:message,authorId:String(tgUser.id),authorName:String(u.fullName||tgUser.first_name||'Староста'),createdAt:new Date().toISOString()};
+          const item=createAnnouncementRecord({id:crypto.randomUUID(),text:message,authorId:tgUser.id,authorName:String(u.fullName||tgUser.first_name||'Староста'),createdAt:new Date().toISOString()});
           for(const group of ensureStudyGroups(chat)) {
-            group.announcements ||= [];
-            group.announcements.push(item);
-            if(group.announcements.length>100) group.announcements=group.announcements.slice(-100);
+            group.announcements=appendAnnouncement(group.announcements,item);
           }
           saveDb();
           return sendJson(res,200,{ok:true,message:'Объявление опубликовано в чате.'});
@@ -2608,15 +2609,14 @@ async function handleMiniAppApi(req,res,url) {
   if(req.method==='POST' && url.pathname==='/api/announcements') {
     try {
       const body=await readJsonBody(req);
-      const message=String(body.text||'').trim();
-      if(!message) return sendJson(res,400,{error:'Напиши текст объявления.'});
-      if(message.length>3000) return sendJson(res,400,{error:'Объявление слишком длинное. Максимум 3000 символов.'});
+      const validation=normalizeAnnouncementText(body.text);
+      if(!validation.ok) return sendJson(res,400,{error:validation.reason==='empty'?'Напиши текст объявления.':'Объявление слишком длинное. Максимум 3000 символов.'});
+      const message=validation.text;
       if(!g.chatId) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
       await bot.telegram.sendMessage(g.chatId,'📢 <b>Объявление группы</b>\n\n'+escapeHtml(message),{parse_mode:'HTML'});
       g.announcements ||= [];
-      const item={id:crypto.randomUUID(),text:message,authorId:String(tgUser.id),authorName:String(tgUser.first_name||'Староста'),createdAt:new Date().toISOString()};
-      g.announcements.push(item);
-      if(g.announcements.length>100) g.announcements=g.announcements.slice(-100);
+      const item=createAnnouncementRecord({id:crypto.randomUUID(),text:message,authorId:tgUser.id,authorName:String(tgUser.first_name||'Староста'),createdAt:new Date().toISOString()});
+      g.announcements=appendAnnouncement(g.announcements,item);
       saveDb();
       return sendJson(res,200,{ok:true,announcement:item});
     } catch(e) {
