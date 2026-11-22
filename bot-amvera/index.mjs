@@ -2501,7 +2501,7 @@ async function handleMiniAppApi(req,res,url) {
           const validation=normalizeAnnouncementText(body.text);
           if(!validation.ok) return sendJson(res,400,{error:validation.reason==='empty'?'Напиши текст объявления.':'Максимум 3000 символов.'});
           const message=validation.text;
-          await bot.telegram.sendMessage(chat.chatId,'📢 <b>Объявление</b>\n\n'+escapeHtml(message),{parse_mode:'HTML'});
+          await bot.telegram.sendMessage(chat.chatId,formatAnnouncementMessage(message,'Объявление',escapeHtml),{parse_mode:'HTML'});
           const item=createAnnouncementRecord({id:crypto.randomUUID(),text:message,authorId:tgUser.id,authorName:String(u.fullName||tgUser.first_name||'Староста'),createdAt:new Date().toISOString()});
           for(const group of ensureStudyGroups(chat)) {
             group.announcements=appendAnnouncement(group.announcements,item);
@@ -2613,7 +2613,7 @@ async function handleMiniAppApi(req,res,url) {
       if(!validation.ok) return sendJson(res,400,{error:validation.reason==='empty'?'Напиши текст объявления.':'Объявление слишком длинное. Максимум 3000 символов.'});
       const message=validation.text;
       if(!g.chatId) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
-      await bot.telegram.sendMessage(g.chatId,'📢 <b>Объявление группы</b>\n\n'+escapeHtml(message),{parse_mode:'HTML'});
+      await bot.telegram.sendMessage(g.chatId,formatAnnouncementMessage(message,'Объявление группы',escapeHtml),{parse_mode:'HTML'});
       g.announcements ||= [];
       const item=createAnnouncementRecord({id:crypto.randomUUID(),text:message,authorId:tgUser.id,authorName:String(tgUser.first_name||'Староста'),createdAt:new Date().toISOString()});
       g.announcements=appendAnnouncement(g.announcements,item);
