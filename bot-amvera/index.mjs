@@ -7,6 +7,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
+import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
@@ -583,19 +584,7 @@ async function checkScheduleChanges() {
         monitorEndDate.setUTCDate(monitorEndDate.getUTCDate() + 7);
         const monitorEnd = monitorEndDate.toISOString().slice(0, 10);
         const inAlertWindow = date => date >= today && date <= monitorEnd;
-        const current = {};
-        for (const lesson of lessons) {
-          if (!lesson?.date || !lesson?.subject) continue;
-          const key = [lesson.date, lesson.timeStart || lesson.time || '', lesson.subject].join('|');
-          current[key] = {
-            date: lesson.date,
-            time: lesson.timeStart || lesson.time || '',
-            subject: lesson.subject || '',
-            teacher: lesson.teacher || '',
-            room: lesson.room || '',
-            timeEnd: lesson.timeEnd || ''
-          };
-        }
+        const current = buildScheduleSnapshot(lessons);
 
         const previous = db.scheduleSnapshots[scheduleGroup];
         // Не считаем первое успешное получение расписания изменением.
@@ -611,22 +600,7 @@ async function checkScheduleChanges() {
           continue;
         }
 
-        const added = [], removed = [], changed = [];
-        for (const [key, item] of Object.entries(current)) {
-          const old = previous[key];
-          const label = (x) => [x.date, x.time, x.subject].filter(Boolean).join(' · ');
-          if (!old && inAlertWindow(item.date)) added.push('➕ ' + label(item));
-          else if (inAlertWindow(item.date) && (old.room !== item.room || old.teacher !== item.teacher || old.timeEnd !== item.timeEnd)) {
-            const details = [];
-            if (old.timeEnd !== item.timeEnd && (old.timeEnd || item.timeEnd)) details.push('время окончания: ' + (old.timeEnd || '—') + ' → ' + (item.timeEnd || '—'));
-            if (old.room !== item.room) details.push('аудитория: ' + (old.room || '—') + ' → ' + (item.room || '—'));
-            if (old.teacher !== item.teacher) details.push('преподаватель изменён');
-            changed.push('✏️ ' + label(item) + (details.length ? '\n   ' + details.join('; ') : ''));
-          }
-        }
-        for (const [key, item] of Object.entries(previous)) {
-          if (!current[key] && inAlertWindow(item.date)) removed.push('➖ ' + [item.date, item.time, item.subject].filter(Boolean).join(' · '));
-        }
+        const { added, removed, changed } = diffScheduleSnapshots(previous, current, today, monitorEnd);
 
         if (added.length || removed.length || changed.length) {
           const lines = ['🔔 <b>Обнаружены изменения в расписании</b>', 'Учебная группа: <b>' + escapeHtml(scheduleGroup) + '</b>', ''];
@@ -2284,7 +2258,12 @@ bot.command('publishweek', async ctx => {
   const details = [];
   let built;
   try {
-    built = await buildWeeklyScheduleText(range);
+    built = await buildWeeklyScheduleText({
+      groups: Object.values(STUDY_GROUPS),
+      range,
+      loadSchedule: getSchedule,
+      logger: console
+    });
   } catch (error) {
     console.error('[publishweek] schedule build failed:', error?.message || error);
     return ctx.reply('❌ Не удалось получить расписание учебных групп. Подробности есть в логах Amvera.');
