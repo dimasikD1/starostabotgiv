@@ -92,9 +92,11 @@ export function ensureStudyGroups(
     const firstName = names[0];
     if (firstName) {
       const first = chat.studyGroups[firstName] ||= {};
+      const target = first as Record<string, unknown>;
+      const source = chat as Record<string, unknown>;
       for (const field of legacyFields) {
-        const legacyValue = chat[field];
-        if (first[field] == null && legacyValue != null) first[field] = cloneLegacyValue(legacyValue);
+        const legacyValue = source[field];
+        if (target[field] == null && legacyValue != null) target[field] = cloneLegacyValue(legacyValue);
       }
     }
     chat._studyGroupsMigratedV1 = true;
