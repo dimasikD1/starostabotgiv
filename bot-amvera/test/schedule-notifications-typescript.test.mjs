@@ -29,7 +29,7 @@ test('schedule monitoring end date is inclusive and crosses month/year boundarie
 });
 
 test('schedule change message escapes values and caps each category at 12 items', () => {
-  const escaped: string[] = [];
+  const escaped = [];
   const message = buildScheduleChangeMessage(
     'Group <A>',
     {
