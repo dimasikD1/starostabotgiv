@@ -2114,6 +2114,8 @@ bot.command('linkgroup', async ctx => {
   if (!canManageGroup(ctx.from.id, studyGroup)) return ctx.reply('❌ Нет прав на изменение структуры этой учебной группы.');
   const institution = db.institutions?.[String(studyGroup.institutionId || DEFAULT_INSTITUTION_ID)];
   if (!institution) return ctx.reply('❌ Учебное заведение группы не найдено.');
+  // Legacy groups without institutionId belong to the configured default institution.
+  studyGroup.institutionId ||= institution.id;
   const linked = linkStudyGroupToCourse(institution, studyGroup, courseId, new Date().toISOString());
   if (!linked.ok) {
     if (linked.reason === 'institution_mismatch') return ctx.reply('❌ Учебная группа и структура относятся к разным учебным заведениям.');
