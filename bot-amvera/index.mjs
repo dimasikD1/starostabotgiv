@@ -27,6 +27,7 @@ import { resolveTimeZone } from './utils/time-zone-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
+import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId } from './domain/role-report-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -1416,20 +1417,15 @@ bot.command(['allroles', 'roleslist'], async ctx => {
   }
   const rawGroups=allStudyGroups().filter(g=>owner || adminInstitutionIds.includes(String(g.institutionId||'')));
   // Один и тот же курс/группа может быть зарегистрирован в нескольких чатах.
-  // Показываем одну карточку на сочетание учебного заведения и учебной группы.
-  const grouped=new Map();
-  for (const g of rawGroups) {
-    const key=String(g.institutionId||'')+'::'+String(g.studyGroup||g.title||'');
-    if (!grouped.has(key)) grouped.set(key,{...g,_sourceGroups:[]});
-    grouped.get(key)._sourceGroups.push(g);
-  }
+  // Объединение карточек выполняет типизированный доменный модуль.
+  const grouped=groupRoleReportSources(rawGroups);
   if(!grouped.size) return ctx.reply('Пока нет доступных учебных групп.');
   const blocks=[];
   for(const g of grouped.values()) {
     const institutionName=db.institutions?.[String(g.institutionId||'')]?.name||'Учебное заведение';
-    const sourceChatIds=new Set(g._sourceGroups.map(x=>String(x.chatId||'')));
-    const starostaId=g._sourceGroups.map(x=>String(x.starostaId||'')).find(Boolean)||'';
-    const zamId=g._sourceGroups.map(x=>String(x.zamId||'')).find(Boolean)||'';
+    const sourceChatIds=roleReportSourceChatIds(g);
+    const starostaId=firstAssignedRoleId(g,'starostaId');
+    const zamId=firstAssignedRoleId(g,'zamId');
     const members=Object.entries(db.users||{}).filter(([uid,u])=>
       !isOwner(uid) &&
       String(u.group||'')===String(g.studyGroup||'') &&
