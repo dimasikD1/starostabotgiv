@@ -15,6 +15,27 @@ export function buildWeeklySchedulePublicationKey(chatId: string | number, start
   return String(chatId) + ':' + String(startDate);
 }
 
+export interface PendingWeeklyScheduleTarget<T extends ScheduleNotificationTarget> {
+  target: T;
+  key: string;
+}
+
+/** Select chats that have not yet received the weekly schedule for this Monday. */
+export function getPendingWeeklyScheduleTargets<T extends ScheduleNotificationTarget>(
+  targets: readonly T[],
+  sent: Readonly<Record<string, unknown>>,
+  startDate: string
+): PendingWeeklyScheduleTarget<T>[] {
+  const pending: PendingWeeklyScheduleTarget<T>[] = [];
+  for (const target of targets) {
+    if (target.chatId === undefined || target.chatId === null || target.chatId === '') continue;
+    const key = buildWeeklySchedulePublicationKey(target.chatId, startDate);
+    if (sent[key]) continue;
+    pending.push({ target, key });
+  }
+  return pending;
+}
+
 /** Group registered chats by the exact schedule group they subscribe to. */
 export function groupScheduleTargetsByGroup<T extends ScheduleNotificationTarget>(
   targets: readonly T[]
