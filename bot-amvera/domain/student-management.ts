@@ -144,3 +144,24 @@ export function setStudentRole(user: StudentUser, chatId?: string | number): voi
     delete user.groupChatId;
   }
 }
+
+
+export type StudentContactNormalization =
+  | { ok: true; value: string }
+  | { ok: false };
+
+/** Normalize a Telegram username using the legacy command's accepted format. */
+export function normalizeStudentUsername(input: string): StudentContactNormalization {
+  const value = input === '-' ? '' : input.replace(/^@/, '').trim();
+  return !value || /^[A-Za-z0-9_]{5,32}$/.test(value)
+    ? { ok: true, value }
+    : { ok: false };
+}
+
+/** Normalize a phone number while preserving the legacy international format check. */
+export function normalizeStudentPhone(input: string): StudentContactNormalization {
+  const value = input === '-' ? '' : input.replace(/[^0-9+]/g, '');
+  return !value || /^\+[1-9][0-9]{5,14}$/.test(value)
+    ? { ok: true, value }
+    : { ok: false };
+}
