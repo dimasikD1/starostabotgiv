@@ -6,7 +6,7 @@ import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
-import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
+import { formatSchedule, nextWeekDateRange, nextMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName } from './schedule/schedule-view-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
@@ -2201,16 +2201,7 @@ bot.command('publishweek', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Команду /publishweek используй в личных сообщениях с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу бота.');
 
-  const today = attendanceDate();
-  const base = new Date(today + 'T12:00:00Z');
-  const weekday = base.getUTCDay();
-  const daysUntilMonday = (8 - weekday) % 7 || 7;
-  const start = new Date(base);
-  start.setUTCDate(start.getUTCDate() + daysUntilMonday);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  const iso = d => d.toISOString().slice(0, 10);
-  const range = { start: iso(start), end: iso(end) };
+  const range = nextMondayDateRange(attendanceDate());
 
   const targetGroups = Object.values(db.groups).filter(g => g.chatId);
   if (!targetGroups.length) {
