@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApiRateLimiter, API_WINDOW_MS, API_READ_LIMIT, API_WRITE_LIMIT } from '../../.test-build/rate-limit.js';
+import { createApiRateLimiter, API_WINDOW_MS, API_READ_LIMIT, API_WRITE_LIMIT } from '../../.test-build/api/rate-limit.js';
 
 test('API rate limiter applies independent read and write limits per user', () => {
   let now = 1_000_000;
