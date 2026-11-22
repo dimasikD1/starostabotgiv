@@ -7,6 +7,7 @@ import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
+import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
@@ -409,8 +410,13 @@ function createAttendanceHtml(g, period='all') {
 
 async function show(ctx, days, offset) {
   const u = user(ctx.from.id);
-  const selectedGroup = String(u.group || '').trim();
-  if (!Object.values(STUDY_GROUPS).includes(selectedGroup)) {
+  const view = buildScheduleView(
+    String(u.group || ''),
+    Object.values(STUDY_GROUPS),
+    [],
+    offset
+  );
+  if (!view.ok) {
     return ctx.reply(
       'Выбери корректную учебную группу, чтобы загрузить расписание:',
       Markup.inlineKeyboard([
@@ -419,11 +425,12 @@ async function show(ctx, days, offset) {
       ])
     );
   }
-  await ctx.reply('⏳ Загружаю расписание для «' + selectedGroup + '»…');
+  await ctx.reply('⏳ Загружаю расписание для «' + view.group + '»…');
   try {
-    let items = await getSchedule(selectedGroup, days);
-    if (offset) items = items.filter(x => Number(x.dayOffset) === offset);
-    await ctx.reply(formatSchedule(items, selectedGroup), menuFor(ctx));
+    const lessons = await getCachedSchedule(view.group, days);
+    const prepared = buildScheduleView(view.group, Object.values(STUDY_GROUPS), lessons, offset);
+    if (!prepared.ok) throw new Error('Selected schedule group became invalid');
+    await ctx.reply(formatSchedule(prepared.lessons, prepared.group), menuFor(ctx));
   } catch (e) {
     console.error('[schedule]', e);
     await ctx.reply('❌ Не удалось получить расписание с сайта. Проверь источник или SCHEDULE_API_URL.', menuFor(ctx));
