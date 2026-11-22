@@ -165,3 +165,36 @@ export function normalizeStudentPhone(input: string): StudentContactNormalizatio
     ? { ok: true, value }
     : { ok: false };
 }
+
+
+export type GroupRoleAssignmentResult =
+  | { status: 'assigned'; group: StudentRosterGroup }
+  | { status: 'group-not-found' }
+  | { status: 'target-is-starosta' };
+
+/** Resolve a numbered study group and assign its role without crossing group boundaries. */
+export function assignStudyGroupRoleByNumber(
+  groups: StudentRosterGroup[],
+  user: StudentUser,
+  role: 'starosta' | 'zam',
+  userId: string | number,
+  groupNumber: string,
+  studyGroupNames: Record<string, string>,
+  options: { username?: string; chatId: string | number; institutionId: string }
+): GroupRoleAssignmentResult {
+  if (groupNumber !== '1' && groupNumber !== '2') return { status: 'group-not-found' };
+  const groupName = studyGroupNames[groupNumber];
+  if (!groupName) return { status: 'group-not-found' };
+  const group = groups.find(item => item.studyGroup === groupName);
+  if (!group) return { status: 'group-not-found' };
+  if (role === 'zam' && String(group.starostaId || '') === String(userId)) {
+    return { status: 'target-is-starosta' };
+  }
+  assignStudyGroupRole(group, user, role, userId, {
+    username: options.username,
+    chatId: options.chatId,
+    institutionId: options.institutionId,
+    groupName
+  });
+  return { status: 'assigned', group };
+}
