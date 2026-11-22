@@ -12,7 +12,7 @@ import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
-import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus } from './domain/attendance-core-entry.mjs';
+import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
@@ -385,11 +385,13 @@ function formatLessonAttendance(g,lesson) {
   (unmarked.length?'\n\n▫️ <b>Не отмечены ('+unmarked.length+')</b>\n'+unmarked.map((n,i)=>(i+1)+'. '+n).join('\n'):'');
 }
 function attendancePairButtons(g,lesson,userId,page=0) {
- const students=g.students||[],size=10,pages=Math.max(1,Math.ceil(students.length/size));
- page=Math.max(0,Math.min(Number(page)||0,pages-1));
+ const students=g.students||[],size=10;
+ const pageData=paginateAttendanceStudents(students,Number(page)||0,size);
+ page=pageData.page;
+ const pages=pageData.pageCount;
  const record=g.lessonAttendance?.[attendanceLessonKey(lesson)]||{};
- const rows=students.slice(page*size,(page+1)*size).map((student,offset)=>{
-  const i=page*size+offset,status=record[attendanceKey(student)];
+ const rows=pageData.items.map((student,offset)=>{
+  const i=pageData.startIndex+offset,status=record[attendanceKey(student)];
   return [Markup.button.callback((status==='present'?'✅ Был':'▫️ Был')+' '+(i+1),'attpairmark:'+i+':present'),Markup.button.callback((status==='absent'?'❌ Нет':'▫️ Нет')+' '+(i+1),'attpairmark:'+i+':absent')];
  });
  const nav=[];if(page>0)nav.push(Markup.button.callback('⬅️','attpairpage:'+(page-1)));
@@ -2007,7 +2009,7 @@ bot.action(/^attstudent:(\d+)$/,async ctx=>{
 bot.action(/^attlesson:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
- const lesson=g.todayAttendanceLessons?.[Number(ctx.match[1])];if(!lesson)return ctx.answerCbQuery('Список пар устарел. Отправь /attendance ещё раз.');
+ const lesson=getAttendanceLessonAt(g.todayAttendanceLessons||[],Number(ctx.match[1]));if(!lesson)return ctx.answerCbQuery('Список пар устарел. Отправь /attendance ещё раз.');
  g.activeAttendanceLessons[String(ctx.from.id)]=lesson;g.lessonAttendance||={};saveDb();
  await ctx.answerCbQuery();
  return ctx.editMessageText(formatLessonAttendance(g,lesson),{parse_mode:'HTML',...attendancePairButtons(g,lesson,ctx.from.id)});
