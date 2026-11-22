@@ -59,7 +59,7 @@ const BOT_RELEASE_NOTES = [
   'Разделены данные двух учебных групп; добавлены роли старост, заместителей и двух владельцев.',
   'Обновлены списки студентов, проверка новых участников и импорт студентов текстом.',
   'Улучшены расписание, автоматические уведомления и публикация недельного расписания.',
-  'В Mini App добавлены календарь, объявления, профиль, домашние задания с фото и видео.',
+  'В Mini App добавлены объявления, профиль и домашние задания с фото и видео.',
   'Добавлены статистика посещаемости и ДЗ, а также HTML-отчёты.',
   'Улучшены загрузка Mini App, обновление данных и стабильность работы.',
   'Добавлена структура учебных заведений: факультеты, направления и курсы.',
@@ -427,36 +427,6 @@ function timeZoneParts(date = new Date()) {
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
   }).formatToParts(date);
   return Object.fromEntries(parts.map(p => [p.type, p.value]));
-}
-
-let calendarReminderCheckRunning = false;
-async function checkCalendarEventReminders() {
-  if (calendarReminderCheckRunning) return;
-  calendarReminderCheckRunning = true;
-  try {
-    const now=timeZoneParts();
-    const nowStamp=Date.UTC(+now.year,+now.month-1,+now.day,+now.hour,+now.minute);
-    db.sentCalendarReminders ||= {};
-    for (const g of Object.values(db.groups)) {
-      if (!g.chatId) continue;
-      for (const event of (g.calendarEvents||[])) {
-        if (!event.date || !event.time) continue;
-        const match=String(event.time).match(/^([01]\d|2[0-3]):([0-5]\d)$/);
-        if (!match) continue;
-        const [year,month,day]=String(event.date).split('-').map(Number);
-        const eventStamp=Date.UTC(year,month-1,day,+match[1],+match[2]);
-        const left=Math.round((eventStamp-nowStamp)/60000);
-        for (const [offset,label] of [[1440,'за день'],[60,'за час']]) {
-          const key=[g.chatId,event.id,offset].join('|');
-          if (left!==offset || db.sentCalendarReminders[key]) continue;
-          const labels={exam:'экзамен',test:'зачёт',control:'контрольная',event:'мероприятие',other:'событие'};
-          const message='⏰ <b>Напоминание: '+label+'</b>\n\n'+(labels[event.type]||'событие')+': <b>'+escapeHtml(event.title)+'</b>\n📅 '+escapeHtml(event.date)+' в '+escapeHtml(event.time)+(event.description?'\n\n'+escapeHtml(event.description):'');
-          try { await bot.telegram.sendMessage(g.chatId,message,{parse_mode:'HTML'}); db.sentCalendarReminders[key]=new Date().toISOString(); saveDb(); }
-          catch(e) { console.error('[calendar reminder]',e.message||e); }
-        }
-      }
-    }
-  } finally { calendarReminderCheckRunning=false; }
 }
 
 let attendancePollCheckRunning = false;
@@ -909,19 +879,6 @@ bot.on('poll_answer', async ctx => {
   saveDb();
   console.log('[attendance poll] Answer recorded for ' + result.userId + ' in ' + result.groupName);
 });
-bot.command('events', async ctx => {
-  if (!isPrivate(ctx)) return ctx.reply('📩 Список событий доступен в личных сообщениях.');
-  const g = managedGroup(ctx.from.id);
-  if (!g) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
-  const today = attendanceDate();
-  const items = (g.calendarEvents || []).filter(x => String(x.date || '') >= today)
-    .sort((a,b) => String(a.date).localeCompare(String(b.date)) || String(a.time || '').localeCompare(String(b.time || ''))).slice(0,20);
-  if (!items.length) return ctx.reply('🗓 В календаре пока нет предстоящих событий.');
-  const labels = { exam:'🎓 Экзамен', test:'📝 Зачёт', control:'📚 Контрольная', event:'📌 Мероприятие', other:'📅 Событие' };
-  const lines = items.map((x,i) => (i+1)+'. <b>'+escapeHtml(x.title)+'</b>\n📅 '+escapeHtml(x.date)+(x.time?' · '+escapeHtml(x.time):'')+'\n'+(labels[x.type]||labels.other)+(x.description?'\n'+escapeHtml(x.description):''));
-  return ctx.reply('🗓 <b>Предстоящие события · '+escapeHtml(g.title || 'Группа')+'</b>\n\n'+lines.join('\n\n'), { parse_mode:'HTML' });
-});
-
 bot.command('pollreport', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Отчёт доступен в личных сообщениях.');
   const g = managedGroup(ctx.from.id);
@@ -2414,8 +2371,8 @@ function helpMessage(ctx) {
         '• список студентов и управление им;\n' +
         '• посещаемость по отдельным парам и отчёты;\n' +
         '• создание опросов и домашних заданий;\n' +
-        '• объявления и календарь важных дат в Mini App.\n\n'
-      : '📱 <b>Mini App</b> — удобный кабинет с расписанием, объявлениями и календарём.\n\n') +
+        '• объявления и важная информация в Mini App.\n\n'
+      : '📱 <b>Mini App</b> — удобный кабинет с расписанием и объявлениями.\n\n') +
     'Выбирай нужный раздел кнопками внизу. Если бот только что добавили в группу, сначала подтверди ФИО и выбери свою учебную группу.',
     { parse_mode: 'HTML', ...menuFor(ctx) }
   );
@@ -2565,7 +2522,6 @@ async function handleMiniAppApi(req,res,url) {
     'POST /api/announcements',
     'POST /api/homework-media-upload',
     'POST /api/homework','PUT /api/homework','DELETE /api/homework',
-    'POST /api/events','PUT /api/events','DELETE /api/events',
     'POST /api/attendance'
   ]);
   if (managerWriteRoutes.has(req.method+' '+url.pathname) && !canManageGroup(tgUser.id,g)) {
@@ -2624,7 +2580,7 @@ async function handleMiniAppApi(req,res,url) {
     };
     const attendanceHistory={week:summarizeHistory(7),month:summarizeHistory(30),recent:historyEntries.slice(0,12)};
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>{const attendance={present:0,absent:0,marked:0,rate:0},bySubject={};for(const entry of historyEntries){const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];if(status==='present')attendance.present++;else if(status==='absent')attendance.absent++;if(status==='present'||status==='absent'){const subject=String(entry.subject||'Занятие').trim()||'Занятие';bySubject[subject]||={subject,present:0,absent:0,marked:0,rate:0};bySubject[subject][status]++;}}attendance.marked=attendance.present+attendance.absent;attendance.rate=attendance.marked?Math.round(attendance.present/attendance.marked*100):0;const attendanceBySubject=Object.values(bySubject).map(x=>{x.marked=x.present+x.absent;x.rate=x.marked?Math.round(x.present/x.marked*100):0;return x;}).sort((a,b)=>a.subject.localeCompare(b.subject,'ru'));return {index:i,name:studentName(s),attendanceBySubject,statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked'])),attendance30d:attendance,attendanceHistory:historyEntries.map(entry=>{const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];return status==='present'||status==='absent'?{date:entry.date,timeStart:entry.timeStart,subject:entry.subject,status}:null;}).filter(Boolean)};}),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,calendarEvents:(g.calendarEvents||[]).filter(x=>x.date>=today).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')))),attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>{const attendance={present:0,absent:0,marked:0,rate:0},bySubject={};for(const entry of historyEntries){const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];if(status==='present')attendance.present++;else if(status==='absent')attendance.absent++;if(status==='present'||status==='absent'){const subject=String(entry.subject||'Занятие').trim()||'Занятие';bySubject[subject]||={subject,present:0,absent:0,marked:0,rate:0};bySubject[subject][status]++;}}attendance.marked=attendance.present+attendance.absent;attendance.rate=attendance.marked?Math.round(attendance.present/attendance.marked*100):0;const attendanceBySubject=Object.values(bySubject).map(x=>{x.marked=x.present+x.absent;x.rate=x.marked?Math.round(x.present/x.marked*100):0;return x;}).sort((a,b)=>a.subject.localeCompare(b.subject,'ru'));return {index:i,name:studentName(s),attendanceBySubject,statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked'])),attendance30d:attendance,attendanceHistory:historyEntries.map(entry=>{const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];return status==='present'||status==='absent'?{date:entry.date,timeStart:entry.timeStart,subject:entry.subject,status}:null;}).filter(Boolean)};}),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,attendanceHistory,scheduleLoading});
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
     const count=(g.students||[]).length;
@@ -2755,71 +2711,6 @@ async function handleMiniAppApi(req,res,url) {
       if(g.homework.length===before)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
       saveDb();return sendJson(res,200,{ok:true});
     } catch(e) {console.error('[miniapp homework delete]',e?.message||e);return sendJson(res,400,{error:'Не удалось удалить ДЗ.'});}
-  }
-  if(req.method==='POST' && url.pathname==='/api/events') {
-    try {
-      const body=await readJsonBody(req);
-      const title=String(body.title||'').trim();
-      const date=String(body.date||'').trim();
-      const time=String(body.time||'').trim();
-      const type=String(body.type||'other').trim();
-      const description=String(body.description||'').trim();
-      if(!title) return sendJson(res,400,{error:'Укажи название события.'});
-      if(title.length>120) return sendJson(res,400,{error:'Название слишком длинное (максимум 120 символов).'});
-      if(!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date+'T00:00:00Z')) || new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) return sendJson(res,400,{error:'Укажи корректную дату.'});
-      if(time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return sendJson(res,400,{error:'Укажи время в формате ЧЧ:ММ.'});
-      if(!['exam','test','control','event','other'].includes(type)) return sendJson(res,400,{error:'Неизвестный тип события.'});
-      if(description.length>500) return sendJson(res,400,{error:'Описание слишком длинное (максимум 500 символов).'});
-      g.calendarEvents ||= [];
-      const event={id:crypto.randomUUID(),title,date,time,type,description,authorId:String(tgUser.id),createdAt:new Date().toISOString()};
-      g.calendarEvents.push(event);
-      g.calendarEvents.sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||''))));
-      saveDb();
-      if (g.chatId) {
-        const typeLabels={exam:'Экзамен',test:'Зачёт',control:'Контрольная',event:'Мероприятие',other:'Событие'};
-        const notice='📌 <b>Добавлено событие в календарь</b>\n\n<b>'+escapeHtml(event.title)+'</b>\n📅 '+escapeHtml(event.date)+(event.time?' · '+escapeHtml(event.time):'')+'\n'+(typeLabels[event.type]||'Событие')+(event.description?'\n'+escapeHtml(event.description):'');
-        try { await bot.telegram.sendMessage(g.chatId,notice,{parse_mode:'HTML'}); }
-        catch(e) { console.error('[calendar event notify]',e?.message||e); }
-      }
-      return sendJson(res,200,{ok:true,event});
-    } catch(e) {
-      console.error('[miniapp event create]',e?.message||e);
-      return sendJson(res,400,{error:'Не удалось сохранить событие.'});
-    }
-  }
-  if(req.method==='PUT' && url.pathname==='/api/events') {
-    try {
-      const body=await readJsonBody(req), id=String(body.id||'');
-      const event=(g.calendarEvents||[]).find(x=>String(x.id)===id);
-      if(!event) return sendJson(res,404,{error:'Событие не найдено.'});
-      const title=String(body.title||'').trim(), date=String(body.date||'').trim();
-      const time=String(body.time||'').trim(), type=String(body.type||'other').trim();
-      const description=String(body.description||'').trim();
-      if(!title || title.length>120) return sendJson(res,400,{error:'Укажи название до 120 символов.'});
-      if(!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date+'T00:00:00Z')) || new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date) return sendJson(res,400,{error:'Укажи корректную дату.'});
-      if(time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return sendJson(res,400,{error:'Укажи время в формате ЧЧ:ММ.'});
-      if(!['exam','test','control','event','other'].includes(type)) return sendJson(res,400,{error:'Неизвестный тип события.'});
-      if(description.length>500) return sendJson(res,400,{error:'Описание слишком длинное (максимум 500 символов).'});
-      Object.assign(event,{title,date,time,type,description,updatedAt:new Date().toISOString()});
-      g.calendarEvents.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.time||'').localeCompare(String(b.time||'')));
-      for(const key of Object.keys(db.sentCalendarReminders||{})) if(key.includes('|'+id+'|')) delete db.sentCalendarReminders[key];
-      saveDb();
-      return sendJson(res,200,{ok:true,event});
-    } catch(e) { console.error('[miniapp event update]',e?.message||e); return sendJson(res,400,{error:'Не удалось обновить событие.'}); }
-  }
-  if(req.method==='DELETE' && url.pathname==='/api/events') {
-    try {
-      const body=await readJsonBody(req);
-      const id=String(body.id||'');
-      const before=(g.calendarEvents||[]).length;
-      g.calendarEvents=(g.calendarEvents||[]).filter(x=>String(x.id)!==id);
-      if(g.calendarEvents.length===before) return sendJson(res,404,{error:'Событие уже удалено или не найдено.'});
-      saveDb();
-      return sendJson(res,200,{ok:true});
-    } catch(e) {
-      console.error('[miniapp event delete]',e?.message||e);
-      return sendJson(res,400,{error:'Не удалось удалить событие.'});
-    }
   }
   if(req.method==='POST' && url.pathname==='/api/attendance') {
     try {
@@ -3112,7 +3003,6 @@ async function main() {
     { command: 'students', description: 'Список студентов группы' },
     { command: 'importstudents', description: 'Импорт списка студентов из текста' },
     { command: 'pollreport', description: 'Ответы на последний опрос' },
-    { command: 'events', description: 'Предстоящие события группы' },
     { command: 'help', description: 'Что умеет бот' }
   ], { scope: { type: 'all_private_chats' } }));
 
@@ -3152,8 +3042,6 @@ async function main() {
   await bot.launch({ dropPendingUpdates: false, allowedUpdates: ['message', 'callback_query', 'poll_answer', 'pre_checkout_query', 'chat_member', 'my_chat_member'] });
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
-  await checkCalendarEventReminders();
-  setInterval(checkCalendarEventReminders, 30000).unref();
   await checkWeeklySchedules();
   setInterval(checkWeeklySchedules, 60000).unref();
 setInterval(checkScheduleChanges, 5 * 60 * 1000).unref();
