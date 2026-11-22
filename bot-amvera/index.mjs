@@ -29,6 +29,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
+import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
@@ -2384,23 +2385,7 @@ bot.catch(e => console.error('[bot]', e));
 
 
 function verifyMiniAppInitData(initData) {
-  if (!initData || typeof initData !== 'string' || initData.length > 8192) throw new Error('Открой мини-приложение из Telegram.');
-  const params = new URLSearchParams(initData);
-  const receivedHash = params.get('hash');
-  if (!receivedHash || !/^[a-f0-9]{64}$/i.test(receivedHash)) throw new Error('Некорректные данные Telegram.');
-  params.delete('hash');
-  const checkString = [...params.entries()].sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0).map(([k,v]) => k+'='+v).join('\n');
-  const secretKey = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
-  const expectedHash = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
-  const a = Buffer.from(receivedHash, 'hex'), b = Buffer.from(expectedHash, 'hex');
-  if (a.length !== b.length || !crypto.timingSafeEqual(a,b)) throw new Error('Не удалось подтвердить аккаунт Telegram.');
-  const authDate = Number(params.get('auth_date') || 0);
-  const ageSeconds = Date.now()/1000 - authDate;
-  if (!Number.isFinite(authDate) || ageSeconds < -30 || ageSeconds > 3600) throw new Error('Сессия устарела. Закрой и снова открой мини-приложение.');
-  let tgUser;
-  try { tgUser = JSON.parse(params.get('user') || 'null'); } catch {}
-  if (!tgUser?.id || !/^\d+$/.test(String(tgUser.id))) throw new Error('Telegram не передал корректные данные пользователя.');
-  return tgUser;
+  return verifyTelegramWebAppInitData(initData, { token });
 }
 function sendJson(res, status, data, headers = {}) {
   res.writeHead(status, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff', ...headers});
