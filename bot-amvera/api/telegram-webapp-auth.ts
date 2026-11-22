@@ -55,9 +55,17 @@ export function verifyTelegramWebAppInitData(
   } catch {
     user = null;
   }
-  if (!user || typeof user !== 'object' || !('id' in user) ||
-      !(typeof user.id === 'number' || typeof user.id === 'string') ||
-      !/^\d+$/.test(String(user.id)) || String(user.id) === '0') {
+  if (!user || typeof user !== 'object') {
+    throw new Error('Telegram не передал корректные данные пользователя.');
+  }
+  const userRecord = user as Record<string, unknown>;
+  const rawUserId = userRecord.id;
+  const userId = typeof rawUserId === 'number'
+    ? rawUserId
+    : typeof rawUserId === 'string' && /^\d+$/.test(rawUserId)
+      ? Number(rawUserId)
+      : Number.NaN;
+  if (!Number.isSafeInteger(userId) || userId <= 0) {
     throw new Error('Telegram не передал корректные данные пользователя.');
   }
   return user as TelegramWebAppUser;
