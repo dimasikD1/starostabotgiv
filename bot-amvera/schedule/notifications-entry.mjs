@@ -3,5 +3,8 @@ export {
   buildWeeklySchedulePublicationKey,
   groupScheduleTargetsByGroup,
   getScheduleChangeMonitorEnd,
-  buildScheduleChangeMessage
+  buildScheduleChangeMessage,
+  isWeeklySchedulePublicationWindow,
+  WEEKLY_SCHEDULE_CHECK_INTERVAL_MS,
+  SCHEDULE_CHANGE_CHECK_INTERVAL_MS
 } from './.build/notifications.js';
