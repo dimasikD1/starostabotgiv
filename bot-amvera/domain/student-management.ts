@@ -216,3 +216,55 @@ export function removeGroupRolesAndSetStudent(
   setStudentRole(user, chatId);
   return { removed, user };
 }
+
+
+export interface StudentCardData {
+  index: number;
+  name: string;
+  username: string;
+  phone: string;
+  telegramId: string;
+}
+
+export interface StudentRosterItem {
+  index: number;
+  name: string;
+}
+
+/** Return a bounded page of roster entries with stable zero-based indexes. */
+export function getStudentRosterPage(
+  group: StudentRosterGroup,
+  page = 0,
+  pageSize = 10
+): { items: StudentRosterItem[]; page: number; pages: number; total: number } {
+  const students = Array.isArray(group.students) ? group.students : [];
+  const size = Number.isInteger(pageSize) && pageSize > 0 ? pageSize : 10;
+  const pages = Math.max(1, Math.ceil(students.length / size));
+  const currentPage = Math.max(0, Math.min(Number.isFinite(page) ? Math.trunc(page) : 0, pages - 1));
+  const start = currentPage * size;
+  return {
+    items: students.slice(start, start + size).map((item, offset) => ({
+      index: start + offset,
+      name: typeof item === 'string' ? item : String(studentObject(item).name || 'Без имени')
+    })),
+    page: currentPage,
+    pages,
+    total: students.length
+  };
+}
+
+/** Read a student's contact card without changing legacy string/object records. */
+export function getStudentCard(group: StudentRosterGroup, index: number): StudentCardData | undefined {
+  if (!Array.isArray(group.students) || !Number.isInteger(index) || index < 0 || index >= group.students.length) {
+    return undefined;
+  }
+  const item = group.students[index];
+  const record = typeof item === 'string' ? { name: item } : studentObject(item);
+  return {
+    index,
+    name: String(record.name || 'Без имени'),
+    username: String(record.username || ''),
+    phone: String(record.phone || ''),
+    telegramId: String(record.telegramId || '')
+  };
+}
