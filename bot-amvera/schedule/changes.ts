@@ -42,6 +42,29 @@ export function buildScheduleSnapshot(lessons: ScheduleLesson[]): ScheduleSnapsh
   return snapshot;
 }
 
+export type ScheduleSnapshotAnalysis =
+  | { status: 'baseline'; snapshot: ScheduleSnapshot }
+  | { status: 'empty-response'; snapshot: ScheduleSnapshot }
+  | { status: 'compared'; snapshot: ScheduleSnapshot; changes: ScheduleChangeSummary };
+
+/** Decide whether a fetched schedule is a baseline, an unreliable empty response, or a diff. */
+export function analyzeScheduleSnapshot(
+  previous: ScheduleSnapshot | null | undefined,
+  current: ScheduleSnapshot,
+  windowStart: string,
+  windowEnd: string
+): ScheduleSnapshotAnalysis {
+  if (!previous) return { status: 'baseline', snapshot: current };
+  if (Object.keys(current).length === 0 && Object.keys(previous).length > 0) {
+    return { status: 'empty-response', snapshot: current };
+  }
+  return {
+    status: 'compared',
+    snapshot: current,
+    changes: diffScheduleSnapshots(previous, current, windowStart, windowEnd)
+  };
+}
+
 /** Compares snapshots and returns only changes in the requested alert window. */
 export function diffScheduleSnapshots(
   previous: ScheduleSnapshot,
