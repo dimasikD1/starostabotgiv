@@ -8,7 +8,7 @@ import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
-import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage } from './schedule/notifications-entry.mjs';
+import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
@@ -500,8 +500,7 @@ async function checkWeeklySchedules() {
   if (weeklyScheduleCheckRunning) return;
   const now = timeZoneParts();
   // Публикуем расписание по воскресеньям начиная с 18:00 по часовому поясу TIME_ZONE.
-  if (new Date(now.year + '-' + now.month + '-' + now.day + 'T12:00:00Z').getUTCDay() !== 0 ||
-      Number(now.hour) < 18) return;
+  if (!isWeeklySchedulePublicationWindow(now)) return;
 
   weeklyScheduleCheckRunning = true;
   try {
@@ -3025,8 +3024,8 @@ async function main() {
   await checkAutomaticAttendancePolls();
   setInterval(checkAutomaticAttendancePolls, 30000).unref();
   await checkWeeklySchedules();
-  setInterval(checkWeeklySchedules, 60000).unref();
-setInterval(checkScheduleChanges, 5 * 60 * 1000).unref();
+  setInterval(checkWeeklySchedules, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS).unref();
+setInterval(checkScheduleChanges, SCHEDULE_CHANGE_CHECK_INTERVAL_MS).unref();
 }
 
 function shutdown(signal) {
