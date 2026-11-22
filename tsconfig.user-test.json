@@ -15,10 +15,8 @@
     "bot-amvera/domain/homework.ts",
     "bot-amvera/domain/student-management.ts",
     "bot-amvera/domain/institution-structure.ts",
-    "bot-amvera/domain/institution-admins.ts"
+    "bot-amvera/domain/institution-admins.ts",
+    "bot-amvera/domain/institutions.ts"
   ],
-  "exclude": [
-    "node_modules",
-    ".test-build"
-  ]
+  "exclude": ["node_modules", ".test-build"]
 }
