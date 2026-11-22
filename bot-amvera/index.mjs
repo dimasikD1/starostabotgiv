@@ -14,7 +14,7 @@ import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey }
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
-import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
+import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollKey, isAttendancePollDue } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
@@ -455,7 +455,7 @@ async function checkAutomaticAttendancePolls() {
           const match = String(lesson.timeStart).match(/^(\\d{1,2}):(\\d{2})$/);
           if (!match) continue;
           const startMinutes = Number(match[1]) * 60 + Number(match[2]);
-          const key = [g.chatId, lesson.date, lesson.timeStart, lesson.subject].join('|');
+          const key = buildAttendancePollKey(g.chatId, lesson.date, lesson.timeStart, lesson.subject);
           db.sentLessonNotices ||= {};
           if (currentMinutes >= startMinutes - 30 && currentMinutes <= startMinutes - 29 && !db.sentLessonNotices[key]) {
             await bot.telegram.sendMessage(g.chatId,
@@ -466,7 +466,7 @@ async function checkAutomaticAttendancePolls() {
             db.sentLessonNotices[key] = new Date().toISOString();
             saveDb();
           }
-          if (currentMinutes < startMinutes - 10 || currentMinutes > startMinutes - 9) continue;
+          if (!isAttendancePollDue(currentMinutes, startMinutes)) continue;
           if (db.sentAttendancePolls[key]) continue;
           const sent = await bot.telegram.sendPoll(
             g.chatId,
