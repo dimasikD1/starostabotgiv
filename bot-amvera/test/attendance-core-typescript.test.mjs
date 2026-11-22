@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus } from '../../.test-build/domain-user/attendance-core.js';
+import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from '../../.test-build/domain-user/attendance-core.js';
 
 test('builds the lesson key from date, start/end time and subject', () => {
   assert.equal(
@@ -74,4 +74,34 @@ test('rejects empty keys without creating journal entries', () => {
   assert.equal(setLessonAttendanceStatus(group, '', '7', 'present'), false);
   assert.equal(setLessonAttendanceStatus(group, 'lesson', ' ', 'absent'), false);
   assert.equal(group.lessonAttendance, undefined);
+});
+
+test('paginates students and clamps page indexes', () => {
+  const students = Array.from({length: 23}, (_, index) => index + 1);
+  assert.deepEqual(paginateAttendanceStudents(students, 1), {
+    items: [11,12,13,14,15,16,17,18,19,20],
+    page: 1,
+    pageCount: 3,
+    startIndex: 10,
+    pageSize: 10
+  });
+  assert.equal(paginateAttendanceStudents(students, 99).page, 2);
+  assert.equal(paginateAttendanceStudents(students, -5).page, 0);
+});
+
+test('uses a safe page size and returns one empty page for an empty group', () => {
+  assert.deepEqual(paginateAttendanceStudents([], 0, 0), {
+    items: [],
+    page: 0,
+    pageCount: 1,
+    startIndex: 0,
+    pageSize: 1
+  });
+});
+
+test('resolves only valid integer lesson indexes', () => {
+  const lessons = ['first', 'second'];
+  assert.equal(getAttendanceLessonAt(lessons, 1), 'second');
+  assert.equal(getAttendanceLessonAt(lessons, -1), undefined);
+  assert.equal(getAttendanceLessonAt(lessons, 1.5), undefined);
 });
