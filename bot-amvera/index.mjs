@@ -16,7 +16,7 @@ import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendanc
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
@@ -1393,12 +1393,10 @@ bot.command(['delrole', 'removerole'], async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Снимать роли других пользователей в личке может только владелец бота.');
   const targetId = String(ctx.message?.text || '').trim().split(/\s+/)[1] || '';
   if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
-  const removed = clearStudyGroupRoles(allStudyGroups(),targetId);
   const target = db.users?.[targetId];
-  if (target) {
-    const u = normalizeUser(target);
-    setStudentRole(u);
-  }
+  const targetUser = target ? normalizeUser(target) : {};
+  const result = removeGroupRolesAndSetStudent(allStudyGroups(),targetUser,targetId);
+  const removed = result.removed;
   saveDb();
   return ctx.reply(removed
     ? '✅ Управленческие назначения пользователя <code>' + escapeHtml(targetId) + '</code> сняты (' + removed + '). Роль пользователя — студент.'
@@ -1516,9 +1514,9 @@ bot.command('setstudent', async ctx => {
   const target = ctx.message.reply_to_message?.from;
   if (!target) return ctx.reply('Ответь командой /setstudent на сообщение нужного человека.');
   const chat=db.groups[String(ctx.chat.id)];
-  if(chat) clearStudyGroupRoles(ensureStudyGroups(chat),target.id,ctx.chat.id);
   const u = normalizeUser(user(target.id));
-  setStudentRole(u,ctx.chat.id);
+  if(chat) removeGroupRolesAndSetStudent(ensureStudyGroups(chat),u,target.id,ctx.chat.id);
+  else setStudentRole(u,ctx.chat.id);
   saveDb();
   await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' снят с управленческих ролей в этом учебном чате.');
 });
