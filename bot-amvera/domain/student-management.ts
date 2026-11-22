@@ -268,3 +268,23 @@ export function getStudentCard(group: StudentRosterGroup, index: number): Studen
     telegramId: String(record.telegramId || '')
   };
 }
+
+
+export interface StudentRosterReplacementResult {
+  count: number;
+  truncated: boolean;
+}
+
+/** Replace a roster from a reviewed list, preserving the legacy 100-entry limit and attendance object. */
+export function replaceStudentRoster(
+  group: StudentRosterGroup,
+  user: StudentUser,
+  names: string[],
+  limit = 100
+): StudentRosterReplacementResult {
+  const accepted = names.slice(0, Math.max(0, limit));
+  group.students = accepted.slice();
+  if (!group.attendance || typeof group.attendance !== 'object') group.attendance = {};
+  user.students = accepted.slice();
+  return { count: accepted.length, truncated: names.length > accepted.length };
+}
