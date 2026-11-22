@@ -10,5 +10,7 @@ export {
   normalizeStudentUsername,
   normalizeStudentPhone,
   assignStudyGroupRoleByNumber,
-  removeGroupRolesAndSetStudent
+  removeGroupRolesAndSetStudent,
+  getStudentRosterPage,
+  getStudentCard
 } from './.build/student-management.js';
