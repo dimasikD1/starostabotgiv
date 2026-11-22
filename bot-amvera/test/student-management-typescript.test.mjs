@@ -10,7 +10,8 @@ import {
   setStudentRole,
   normalizeStudentUsername,
   normalizeStudentPhone,
-  assignStudyGroupRoleByNumber
+  assignStudyGroupRoleByNumber,
+  removeGroupRolesAndSetStudent
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -134,4 +135,32 @@ test('reports missing numbered groups without modifying users', () => {
   );
   assert.deepEqual(result, { status: 'group-not-found' });
   assert.deepEqual(user, {});
+});
+
+
+test('removes roles globally and synchronizes an existing profile to student', () => {
+  const groups = [
+    { chatId: '-1', starostaId: '7', zamId: '' },
+    { chatId: '-2', starostaId: '', zamId: '7' }
+  ];
+  const user = { role: 'zam', groupChatId: '-2' };
+  const result = removeGroupRolesAndSetStudent(groups, user, '7');
+  assert.equal(result.removed, 2);
+  assert.equal(user.role, 'student');
+  assert.equal(groups[0].starostaId, '');
+  assert.equal(groups[1].zamId, '');
+});
+
+test('removes roles only from the requested chat and preserves another chat assignment', () => {
+  const groups = [
+    { chatId: '-1', starostaId: '7', zamId: '' },
+    { chatId: '-2', starostaId: '', zamId: '7' }
+  ];
+  const user = { role: 'zam', groupChatId: '-1' };
+  const result = removeGroupRolesAndSetStudent(groups, user, '7', '-1');
+  assert.equal(result.removed, 1);
+  assert.equal(groups[0].starostaId, '');
+  assert.equal(groups[1].zamId, '7');
+  assert.equal(user.role, 'student');
+  assert.equal('groupChatId' in user, false);
 });
