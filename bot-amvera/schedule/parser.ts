@@ -9,7 +9,7 @@ export interface ParsedScheduleRow {
   group: string;
 }
 
-const clean = (value: unknown): string => String(value || '').replace(/\\s+/g, ' ').trim();
+const clean = (value: unknown): string => String(value || '').replace(/\s+/g, ' ').trim();
 
 /** Parse the legacy table-based schedule format, preserving its original output shape. */
 export function parseScheduleHtml(html: string, requestedGroup = ''): ParsedScheduleRow[] {
