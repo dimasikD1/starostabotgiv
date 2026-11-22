@@ -69,7 +69,7 @@ export interface ScheduleClockParts {
 /** Preserve the existing Sunday-at-or-after-18:00 publication window. */
 export function isWeeklySchedulePublicationWindow(parts: ScheduleClockParts): boolean {
   const dateText = parts.year + '-' + parts.month + '-' + parts.day;
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(dateText)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return false;
   const date = new Date(dateText + 'T12:00:00Z');
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== dateText) return false;
   const hour = Number(parts.hour);
