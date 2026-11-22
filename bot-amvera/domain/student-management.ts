@@ -198,3 +198,21 @@ export function assignStudyGroupRoleByNumber(
   });
   return { status: 'assigned', group };
 }
+
+
+export interface RemoveGroupRolesResult {
+  removed: number;
+  user: StudentUser;
+}
+
+/** Remove role assignments in all groups or one chat, then synchronize the user's student role. */
+export function removeGroupRolesAndSetStudent(
+  groups: StudentRosterGroup[],
+  user: StudentUser,
+  userId: string | number,
+  chatId?: string | number
+): RemoveGroupRolesResult {
+  const removed = clearStudyGroupRoles(groups, userId, chatId);
+  setStudentRole(user, chatId);
+  return { removed, user };
+}
