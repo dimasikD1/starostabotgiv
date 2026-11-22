@@ -30,6 +30,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
+import { readJsonBody } from './api/json-body-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
@@ -2394,12 +2395,6 @@ function sendJson(res, status, data, headers = {}) {
 
 // TypeScript module owns the Mini App API rate-limit policy and counters.
 const checkApiRate = createApiRateLimiter();
-async function readJsonBody(req, maxBytes=32768) {
-  const chunks=[];let size=0;
-  for await (const chunk of req) { size+=chunk.length;if(size>maxBytes)throw new Error('Слишком большой запрос.');chunks.push(chunk); }
-  const raw=Buffer.concat(chunks).toString('utf8');
-  return raw ? JSON.parse(raw) : {};
-}
 async function getMiniAppTodayLessons(g) {
  let timer;
  try {
