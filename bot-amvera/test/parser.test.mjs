@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseScheduleHtml } from '../schedule/parser.mjs';
+import { parseScheduleHtml } from '../../.test-build/parser.js';
 
 const html = `
 <table>
