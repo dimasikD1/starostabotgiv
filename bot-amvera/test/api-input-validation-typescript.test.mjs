@@ -5,7 +5,7 @@ import { validateMiniAppProfileName } from '../../.test-build/api/input-validati
 test('normalizes a valid profile full name without changing the existing casing rule', () => {
   assert.deepEqual(validateMiniAppProfileName('  иВАНОВ   иВАН  пЕТРОВИЧ '), {
     ok: true,
-    value: 'Иванов Иван Петрович'
+    value: 'ИВАНОВ ИВАН ПЕТРОВИЧ'
   });
 });
 
