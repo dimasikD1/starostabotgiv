@@ -8,7 +8,7 @@ test('formats lesson number, time, type, teacher and room', () => {
   const text = formatSchedule([lesson], 'БИ(ЭБ)2');
   assert.match(text, /1\\. 09:00–10:30 — Математика \\(лекция\\)/);
   assert.match(text, /Иванов И\\. И\\./);
-  assert.match(text, /Аудитория: 204/);
+  assert.ok(text.includes('Аудитория: 204'));
 });
 
 test('uses the legacy time field and empty schedule message', () => {
