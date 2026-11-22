@@ -17,6 +17,7 @@ import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentFiel
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
+import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-groups-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -358,71 +359,17 @@ async function getTodayLessons(g) {
  return (lessons||[]).filter(x=>x.date===attendanceDate()&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
 }
 function ensureStudyGroups(chat) {
- if (!chat) return [];
- chat.studyGroups ||= {};
- const names=Object.values(STUDY_GROUPS);
- const needsSave=!chat._studyGroupsMigratedV1 || !chat._institutionMigrationV1 || !chat._groupRoleScopeV1 || !db.defaultRoleSeededChatId;
- // Мягкая миграция: все уже существующие группы относятся к первому заведению.
- if (!chat.institutionId) chat.institutionId=DEFAULT_INSTITUTION_ID;
- const institutionId=String(chat.institutionId);
- if (!db.defaultRoleSeededChatId) {
-  const firstDefaultChat=Object.keys(db.groups).find(chatId=>!db.groups[chatId]?.institutionId || String(db.groups[chatId].institutionId)===DEFAULT_INSTITUTION_ID);
-  db.defaultRoleSeededChatId=String(firstDefaultChat || chat.chatId || '');
- }
- const isPrimaryLegacyChat=String(chat.chatId||'')===String(db.defaultRoleSeededChatId||'');
- db.institutions ||= {};
- db.institutions[institutionId] ||= {
-  id: institutionId,
-  name: institutionId===DEFAULT_INSTITUTION_ID?'Основное учебное заведение':'Учебное заведение',
-  shortName: '',
-  city: '',
-  status: 'active',
-  createdAt: new Date().toISOString(),
-  faculties: {}
- };
- const legacyFields=['students','attendance','lessonAttendance','activeAttendanceLessons','announcements','calendarEvents','homework','todayAttendanceLessons'];
- if (!chat._studyGroupsMigratedV1) {
-  const first=chat.studyGroups[names[0]] ||= {};
-  for (const field of legacyFields) if (first[field] == null && chat[field] != null) first[field]=JSON.parse(JSON.stringify(chat[field]));
-  chat._studyGroupsMigratedV1=true;
- }
- for (const name of names) {
-  const item=chat.studyGroups[name] ||= {};
-  item.institutionId=institutionId; // The parent Telegram chat is the source of truth for tenant ownership.
-  item.chatId=chat.chatId; item.chatTitle=chat.title || 'Общий чат';
-  item.title=name; item.studyGroup=name; item.scheduleGroup=name;
-  if (!item._roleAssignmentsInitialized) {
-   // Keep the original RUK appointments only in the first legacy Telegram chat.
-   if (institutionId === DEFAULT_INSTITUTION_ID && isPrimaryLegacyChat) {
-    if (!item.starostaId && STUDY_GROUP_STAROSTAS[name]) item.starostaId=String(STUDY_GROUP_STAROSTAS[name]);
-    if (!item.zamId && STUDY_GROUP_ZAMS[name]) item.zamId=String(STUDY_GROUP_ZAMS[name]);
-   } else {
-    // Older versions copied these platform defaults into every attached chat.
-    // Remove only those copied defaults; preserve any distinct explicit assignment.
-    if (String(item.starostaId||'')===String(STUDY_GROUP_STAROSTAS[name]||'')) delete item.starostaId;
-    if (String(item.zamId||'')===String(STUDY_GROUP_ZAMS[name]||'')) delete item.zamId;
-   }
-   item._roleAssignmentsInitialized=true;
-  }
-  item.students ||= []; item.attendance ||= {}; item.lessonAttendance ||= {};
-  item.activeAttendanceLessons ||= {}; item.announcements ||= [];
-  item.calendarEvents ||= []; item.homework ||= [];
- }
- // Migrate the former chat-wide /starosta appointment to the first legacy cohort once.
- if (!chat._groupRoleScopeV1 && chat.starostaId) {
-  const first=chat.studyGroups[names[0]];
-  if (first && (!first.starostaId || String(first.starostaId)===String(STUDY_GROUP_STAROSTAS[names[0]]))) {
-   first.starostaId=String(chat.starostaId);
-   first._roleAssignmentsInitialized=true;
-  }
- }
- chat._institutionMigrationV1=true;
- chat._groupRoleScopeV1=true;
- if (needsSave) {
+ const result = ensureStudyGroupsData(db, chat, {
+  defaultInstitutionId: DEFAULT_INSTITUTION_ID,
+  names: Object.values(STUDY_GROUPS),
+  starostas: STUDY_GROUP_STAROSTAS,
+  zams: STUDY_GROUP_ZAMS
+ });
+ if (result.changed) {
   saveDb();
-  console.log('[institutions] Existing study groups assigned to institution:', institutionId);
+  console.log('[institutions] Existing study groups assigned to institution:', result.institutionId);
  }
- return names.map(name=>chat.studyGroups[name]);
+ return result.groups;
 }
 function allStudyGroups() { return Object.values(db.groups).flatMap(chat=>ensureStudyGroups(chat)); }
 const {
