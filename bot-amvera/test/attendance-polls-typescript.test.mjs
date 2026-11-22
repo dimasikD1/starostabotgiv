@@ -44,7 +44,7 @@ test('records a negative answer without requiring a username', () => {
   assert.equal(record.responses?.['202'].username, '');
 });
 
-test('stores unknown poll options and maps a linked student to unmarked', () => {
+test('stores unknown poll options and clears the linked lesson mark', () => {
   const record = { groupId: '-1001', lessonKey: 'lesson' };
   const groups = {
     '-1001': { students: [{ name: 'Вера', telegramId: 303 }], lessonAttendance: {} }
@@ -55,7 +55,7 @@ test('stores unknown poll options and maps a linked student to unmarked', () => 
   }, groups, 'now');
   assert.equal(result?.attendanceUpdated, true);
   assert.equal(record.responses?.['303'].status, 'unknown');
-  assert.equal(groups['-1001'].lessonAttendance.lesson['303'], 'unmarked');
+  assert.equal(groups['-1001'].lessonAttendance.lesson['303'], undefined);
 });
 
 test('does not auto-link attendance by username or name alone', () => {
