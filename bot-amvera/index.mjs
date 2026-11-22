@@ -16,7 +16,7 @@ import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendanc
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
@@ -1310,12 +1310,10 @@ bot.on('text', async (ctx,next) => {
 });
 
 function studentListKeyboard(g,page=0){
- const size=10,pages=Math.max(1,Math.ceil((g.students||[]).length/size));
- page=Math.max(0,Math.min(Number(page)||0,pages-1));
- const rows=(g.students||[]).slice(page*size,(page+1)*size).map((s,offset)=>{
-  const i=page*size+offset;
-  const name=typeof s==='string'?s:String(s?.name||'Без имени');
-  return [Markup.button.callback('👤 '+(i+1)+'. '+name.slice(0,42),'studentcard:'+i)];
+ const rosterPage=getStudentRosterPage(g,page,10);
+ const pages=rosterPage.pages;
+ const rows=rosterPage.items.map(({index,name})=>{
+  return [Markup.button.callback('👤 '+(index+1)+'. '+name.slice(0,42),'studentcard:'+index)];
  });
  const nav=[];
  if(page>0)nav.push(Markup.button.callback('⬅️','studentpage:'+(page-1)));
@@ -1325,10 +1323,12 @@ function studentListKeyboard(g,page=0){
  return Markup.inlineKeyboard(rows);
 }
 function studentCardText(g,i){
- const s=g.students[i],name=typeof s==='string'?s:String(s?.name||'Без имени');
- const username=typeof s==='object'&&s?.username?'@'+String(s.username).replace(/^@/,''):'не указан';
- const phone=typeof s==='object'&&s?.phone?String(s.phone):'не указан';
- const id=typeof s==='object'&&s?.telegramId?String(s.telegramId):'не указан';
+ const card=getStudentCard(g,i);
+ if(!card)return '❌ Студент не найден.';
+ const name=card.name;
+ const username=card.username?'@'+card.username.replace(/^@/,''):'не указан';
+ const phone=card.phone||'не указан';
+ const id=card.telegramId||'не указан';
  return '👤 <b>'+escapeHtml(name)+'</b>\n\n🔹 Username: '+escapeHtml(username)+'\n📞 Телефон: <code>'+escapeHtml(phone)+'</code>\n🆔 Telegram ID: <code>'+escapeHtml(id)+'</code>';
 }
 function studentCardKeyboard(i){
