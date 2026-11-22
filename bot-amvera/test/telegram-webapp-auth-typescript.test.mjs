@@ -8,7 +8,7 @@ const now = 1_800_000_000_000;
 
 function signedInitData(fields) {
   const params = new URLSearchParams(fields);
-  const checkString = [...params.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, value]) => key + '=' + value).join('\\n');
+  const checkString = [...params.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, value]) => key + '=' + value).join('\n');
   const secret = createHmac('sha256', 'WebAppData').update(token).digest();
   const hash = createHmac('sha256', secret).update(checkString).digest('hex');
   params.set('hash', hash);
