@@ -15,7 +15,7 @@ import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/at
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
-import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins } from './domain/institution-admins-entry.mjs';
+import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
@@ -72,7 +72,7 @@ function isOwner(userId) {
 
 function isInstitutionAdmin(userId, institutionId) {
   const institution = db.institutions?.[String(institutionId)];
-  return isInstitutionAdminId(institution, userId, isOwner(userId));
+  return checkInstitutionAccess(institution, userId, OWNER_TELEGRAM_IDS).allowed;
 }
 
 function subscriptionUntil(u) {
