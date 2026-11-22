@@ -1109,7 +1109,7 @@ bot.command('setsubgroup', async ctx => {
 bot.command('setgroup', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Команду нужно выполнить в учебной группе Telegram.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Указать учебную группу может только администратор чата.');
-  const requestedScheduleGroup = (ctx.message.text || '').trim().split(/\\s+/).slice(1).join(' ');
+  const requestedScheduleGroup = (ctx.message.text || '').trim().split(/\s+/).slice(1).join(' ');
   registerGroup(ctx);
   const availableGroups = ensureStudyGroups(db.groups[String(ctx.chat.id)]);
   const resolution = resolveScheduleGroupName(requestedScheduleGroup, availableGroups.map(g => String(g.studyGroup || '')));
@@ -1121,7 +1121,7 @@ bot.command('setgroup', async ctx => {
   if (!selected) return ctx.reply('❌ Не удалось найти выбранную учебную группу. Повтори команду /setgroup.');
   selected.scheduleGroup = resolution.group;
   saveDb();
-  return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '».\n\n🗓 Каждое воскресенье после 18:00 бот будет автоматически отправлять сюда расписание на следующую неделю (понедельник–воскресенье).\n⏰ Напоминание приходит за 30 минут, опрос посещаемости — за 10 минут до пары.');
+  return ctx.reply('✅ Для этого чата установлена учебная группа «' + resolution.group + '».\n\n🗓 Каждое воскресенье после 18:00 бот будет автоматически отправлять сюда расписание на следующую неделю (понедельник–воскресенье).\n⏰ Напоминание приходит за 30 минут, опрос посещаемости — за 10 минут до пары.');
 });
 
 bot.command('attach', async ctx => {
