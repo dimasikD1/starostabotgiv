@@ -25,6 +25,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
+import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
@@ -2920,12 +2921,8 @@ async function main() {
   console.log('Бот запущен: @' + me.username);
 
   // Отправляем список изменений и уведомление о перезапуске всем владельцам.
-  if (OWNER_TELEGRAM_IDS.length && db.lastNotifiedRelease !== BOT_RELEASE_VERSION) {
-    const releaseMessage =
-      '🚀 <b>Староста Бот обновлён</b>\n' +
-      'Версия: <b>' + BOT_RELEASE_VERSION + '</b>\n\n' +
-      '<b>Что нового:</b>\n' +
-      BOT_RELEASE_NOTES.map(item => '• ' + escapeHtml(item)).join('\n');
+  if (shouldNotifyRelease(OWNER_TELEGRAM_IDS, db.lastNotifiedRelease, BOT_RELEASE_VERSION)) {
+    const releaseMessage = buildReleaseMessage(BOT_RELEASE_VERSION, BOT_RELEASE_NOTES, escapeHtml);
     let releaseSent = false;
     for (const ownerId of OWNER_TELEGRAM_IDS) {
       try {
@@ -2978,7 +2975,7 @@ async function main() {
     try {
       await bot.telegram.sendMessage(
         ownerId,
-        '🔄 <b>Староста Бот перезапущен</b>\nБот снова работает и готов принимать команды.',
+        buildRestartMessage(),
         { parse_mode: 'HTML' }
       );
       console.log('[startup] Уведомление о перезапуске отправлено владельцу: ' + ownerId);
