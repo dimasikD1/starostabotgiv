@@ -16,7 +16,7 @@ import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendanc
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
@@ -1285,8 +1285,9 @@ bot.on('text', async (ctx,next) => {
   if(raw.toLowerCase()==='/cancel'){delete u.pendingStudentField;saveDb();return ctx.reply('Изменение отменено.');}
   let value='';
   if(pending.type==='username'){
-   value=raw==='-'?'':raw.replace(/^@/,'').trim();
-   if(value&&!/^[A-Za-z0-9_]{5,32}$/.test(value))return ctx.reply('❌ Неверный username. Введи @username или /cancel.');
+   const normalized=normalizeStudentUsername(raw);
+   if(!normalized.ok)return ctx.reply('❌ Неверный username. Введи @username или /cancel.');
+   value=normalized.value;
   } else {
    value=raw==='-'?'':raw.replace(/[^0-9+]/g,'');
    if(value&&!/^\+[1-9][0-9]{5,14}$/.test(value))return ctx.reply('❌ Неверный номер. Укажи международный формат с плюсом, например +79181651870 или +37255555555. Для отмены: /cancel.');
@@ -1419,7 +1420,7 @@ bot.command(['allroles', 'roleslist'], async ctx => {
   // Один и тот же курс/группа может быть зарегистрирован в нескольких чатах.
   // Объединение карточек выполняет типизированный доменный модуль.
   const grouped=groupRoleReportSources(rawGroups);
-  if(!grouped.size) return ctx.reply('Пока нет доступных учебных групп.');
+  if(!grouped.length) return ctx.reply('Пока нет доступных учебных групп.');
   const blocks=[];
   for(const g of grouped.values()) {
     const institutionName=db.institutions?.[String(g.institutionId||'')]?.name||'Учебное заведение';
