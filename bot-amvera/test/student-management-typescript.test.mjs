@@ -11,7 +11,9 @@ import {
   normalizeStudentUsername,
   normalizeStudentPhone,
   assignStudyGroupRoleByNumber,
-  removeGroupRolesAndSetStudent
+  removeGroupRolesAndSetStudent,
+  getStudentRosterPage,
+  getStudentCard
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -163,4 +165,28 @@ test('removes roles only from the requested chat and preserves another chat assi
   assert.equal(groups[1].zamId, '7');
   assert.equal(user.role, 'student');
   assert.equal('groupChatId' in user, false);
+});
+
+
+test('builds paginated roster entries with stable indexes and clamps page bounds', () => {
+  const group = { students: ['A', { name: 'B' }, 'C'] };
+  assert.deepEqual(getStudentRosterPage(group, 1, 2), {
+    items: [{ index: 2, name: 'C' }], page: 1, pages: 2, total: 3
+  });
+  assert.deepEqual(getStudentRosterPage(group, 99, 2), {
+    items: [{ index: 2, name: 'C' }], page: 1, pages: 2, total: 3
+  });
+});
+
+test('reads student contact cards from both legacy and object records', () => {
+  const group = { students: ['Иван Иванов', {
+    name: 'Анна', username: 'anna_1', phone: '+37255555555', telegramId: '42'
+  }] };
+  assert.deepEqual(getStudentCard(group, 0), {
+    index: 0, name: 'Иван Иванов', username: '', phone: '', telegramId: ''
+  });
+  assert.deepEqual(getStudentCard(group, 1), {
+    index: 1, name: 'Анна', username: 'anna_1', phone: '+37255555555', telegramId: '42'
+  });
+  assert.equal(getStudentCard(group, 2), undefined);
 });
