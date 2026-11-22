@@ -8,5 +8,6 @@ export {
   clearStudyGroupRoles,
   setStudentRole,
   normalizeStudentUsername,
-  normalizeStudentPhone
+  normalizeStudentPhone,
+  assignStudyGroupRoleByNumber
 } from './.build/student-management.js';
