@@ -16,7 +16,7 @@ import { buildAttendanceLessonKey, classifyAttendance } from './domain/attendanc
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
@@ -1464,12 +1464,11 @@ bot.command('starosta', async ctx => {
   if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи учебную группу: /starosta 1 или /starosta 2.');
   registerGroup(ctx);
   const chat=db.groups[String(ctx.chat.id)];
-  const studyGroup=ensureStudyGroups(chat).find(g=>g.studyGroup===STUDY_GROUPS[groupNumber]);
-  if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
   const u = normalizeUser(user(ctx.from.id));
-  assignStudyGroupRole(studyGroup,u,'starosta',ctx.from.id,{username:ctx.from.username||'',chatId:ctx.chat.id,institutionId:String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID),groupName:studyGroup.studyGroup});
+  const assignment=assignStudyGroupRoleByNumber(ensureStudyGroups(chat),u,'starosta',ctx.from.id,groupNumber,STUDY_GROUPS,{username:ctx.from.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID});
+  if(assignment.status!=='assigned') return ctx.reply('❌ Учебная группа не найдена.');
   saveDb();
-  return ctx.reply('👑 Ты назначен старостой учебной группы «'+escapeHtml(studyGroup.studyGroup)+'».', studentMenu);
+  return ctx.reply('👑 Ты назначен старостой учебной группы «'+escapeHtml(String(assignment.group.studyGroup||''))+'».', studentMenu);
 });
 
 bot.command('zam', async ctx => {
@@ -1482,13 +1481,12 @@ bot.command('zam', async ctx => {
   const groupName=STUDY_GROUPS[groupNumber];
   const chat=db.groups[String(ctx.chat.id)];
   if(!chat) return ctx.reply('❌ Сначала подключи чат командой /attach.');
-  const studyGroup=ensureStudyGroups(chat).find(x=>x.studyGroup===groupName);
-  if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
-  if(String(studyGroup.starostaId||'')===String(target.id)) return ctx.reply('Этот пользователь уже назначен старостой выбранной группы.');
   const u=normalizeUser(user(target.id));
-  assignStudyGroupRole(studyGroup,u,'zam',target.id,{username:target.username||'',chatId:ctx.chat.id,institutionId:String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID),groupName});
+  const assignment=assignStudyGroupRoleByNumber(ensureStudyGroups(chat),u,'zam',target.id,groupNumber,STUDY_GROUPS,{username:target.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID});
+  if(assignment.status==='group-not-found') return ctx.reply('❌ Учебная группа не найдена.');
+  if(assignment.status==='target-is-starosta') return ctx.reply('Этот пользователь уже назначен старостой выбранной группы.');
   saveDb();
-  return ctx.reply('⭐ '+(target.first_name||'Пользователь')+' назначен заместителем старосты группы «'+groupName+'». Теперь он может добавлять студентов командой /student, удалять через /delstudent и загружать список через /importstudents в личном чате с ботом.',studentMenu);
+  return ctx.reply('⭐ '+(target.first_name||'Пользователь')+' назначен заместителем старосты группы «'+escapeHtml(String(assignment.group.studyGroup||''))+'». Теперь он может добавлять студентов командой /student, удалять через /delstudent и загружать список через /importstudents в личном чате с ботом.',studentMenu);
 });
 
 bot.command('setstarosta', async ctx => {
@@ -1499,12 +1497,11 @@ bot.command('setstarosta', async ctx => {
   const groupNumber=String(ctx.message?.text||'').trim().split(/\s+/)[1]||'';
   if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи номер учебной группы: /setstarosta 1 или /setstarosta 2.');
   registerGroup(ctx);
-  const studyGroup=ensureStudyGroups(db.groups[String(ctx.chat.id)]).find(g=>g.studyGroup===STUDY_GROUPS[groupNumber]);
-  if(!studyGroup) return ctx.reply('❌ Учебная группа не найдена.');
   const u = normalizeUser(user(target.id));
-  assignStudyGroupRole(studyGroup,u,'starosta',target.id,{username:target.username||'',chatId:ctx.chat.id,institutionId:String(studyGroup.institutionId||DEFAULT_INSTITUTION_ID),groupName:studyGroup.studyGroup});
+  const assignment=assignStudyGroupRoleByNumber(ensureStudyGroups(db.groups[String(ctx.chat.id)]),u,'starosta',target.id,groupNumber,STUDY_GROUPS,{username:target.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID});
+  if(assignment.status!=='assigned') return ctx.reply('❌ Учебная группа не найдена.');
   saveDb();
-  await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой группы «'+escapeHtml(studyGroup.studyGroup)+'».');
+  await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой группы «'+escapeHtml(String(assignment.group.studyGroup||''))+'».');
 });
 
 bot.command('appointstarosta', async ctx => {
