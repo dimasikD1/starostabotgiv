@@ -8,6 +8,7 @@ import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
+import { resolveScheduleGroupName } from './schedule/schedule-view-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
@@ -1108,12 +1109,18 @@ bot.command('setsubgroup', async ctx => {
 bot.command('setgroup', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Команду нужно выполнить в учебной группе Telegram.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Указать учебную группу может только администратор чата.');
-  const scheduleGroup = (ctx.message.text || '').trim().split(' ').filter(Boolean).slice(1).join(' ');
-  if (!scheduleGroup) return ctx.reply('Формат: /setgroup ИСП-21\nУкажи точное название группы из расписания.');
+  const requestedScheduleGroup = (ctx.message.text || '').trim().split(/\\s+/).slice(1).join(' ');
   registerGroup(ctx);
-  const selected=ensureStudyGroups(db.groups[String(ctx.chat.id)]).find(g=>g.studyGroup===scheduleGroup);
-  if(!selected)return ctx.reply('❌ Укажи одну из двух учебных групп: '+Object.values(STUDY_GROUPS).join(' или ')+'.');
-  selected.scheduleGroup=scheduleGroup; saveDb();
+  const availableGroups = ensureStudyGroups(db.groups[String(ctx.chat.id)]);
+  const resolution = resolveScheduleGroupName(requestedScheduleGroup, availableGroups.map(g => String(g.studyGroup || '')));
+  if (!resolution.ok) {
+    if (resolution.reason === 'missing') return ctx.reply('Формат: /setgroup ИСП-21\\nУкажи точное название группы из расписания.');
+    return ctx.reply('❌ Укажи одну из двух учебных групп: ' + Object.values(STUDY_GROUPS).join(' или ') + '.');
+  }
+  const selected = availableGroups.find(g => String(g.studyGroup || '') === resolution.group);
+  if (!selected) return ctx.reply('❌ Не удалось найти выбранную учебную группу. Повтори команду /setgroup.');
+  selected.scheduleGroup = resolution.group;
+  saveDb();
   return ctx.reply('✅ Для этого чата установлена учебная группа «' + scheduleGroup + '».\n\n🗓 Каждое воскресенье после 18:00 бот будет автоматически отправлять сюда расписание на следующую неделю (понедельник–воскресенье).\n⏰ Напоминание приходит за 30 минут, опрос посещаемости — за 10 минут до пары.');
 });
 
