@@ -35,3 +35,11 @@ test('returns an empty list when the requested day has no lessons', () => {
   assert.equal(result.ok, true);
   if (result.ok) assert.deepEqual(result.lessons, []);
 });
+
+import { resolveScheduleGroupName } from '../../.test-build/schedule-view.js';
+
+test('resolves only an exact configured schedule group name', () => {
+  assert.deepEqual(resolveScheduleGroupName('  ' + groups[1] + '  ', groups), { ok: true, group: groups[1] });
+  assert.deepEqual(resolveScheduleGroupName('', groups), { ok: false, reason: 'missing' });
+  assert.deepEqual(resolveScheduleGroupName('БИ(ЭБ)2', groups), { ok: false, reason: 'unknown' });
+});
