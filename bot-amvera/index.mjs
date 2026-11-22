@@ -26,6 +26,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
+import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -102,7 +103,13 @@ async function registrationMiddleware(ctx, next) {
   if (isOwner(ctx.from.id)) return next();
   const u = normalizeUser(user(ctx.from.id));
   // Капча отключена. Пользователь определяется по Telegram ID, username не требуется.
-  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.group && !String(ctx.message?.text || '').startsWith('/')) {
+  if (shouldPromptStudyGroup({
+    isOwner: false,
+    updateType: ctx.updateType,
+    chatType: ctx.chat?.type,
+    hasGroup: Boolean(u.group),
+    messageText: ctx.message?.text
+  })) {
     await ctx.reply(
       '👋 Выбери свою учебную группу, чтобы получать правильное расписание и домашние задания:',
       Markup.inlineKeyboard([
@@ -217,13 +224,8 @@ db.schemaVersion = Math.max(Number(db.schemaVersion) || 1, 2);
 bot.action(/^studygroup:(1|2)$/, async ctx => {
   const selected = STUDY_GROUPS[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
-  u.group = selected;
-  if (!['starosta', 'zam'].includes(String(u.role || ''))) u.role = 'student';
   const linkedGroup = allStudyGroups().find(g => String(g.studyGroup || '') === selected);
-  if (linkedGroup) {
-    u.groupChatId = String(linkedGroup.chatId || '');
-    u.institutionId = String(linkedGroup.institutionId || DEFAULT_INSTITUTION_ID);
-  }
+  Object.assign(u, applyStudyGroupSelection(u, selected, linkedGroup, DEFAULT_INSTITUTION_ID));
   const verificationChatId = String(u.pendingVerificationChatId || '');
   if (verificationChatId) {
     try {
@@ -1247,11 +1249,11 @@ bot.on('text', async (ctx,next) => {
   }
  }
  if (u.pendingFullName && !raw.startsWith('/')) {
-  const words = raw.replace(/\\s+/g, ' ').trim().split(' ').filter(Boolean);
-  if (words.length < 2 || words.length > 5 || !/^[a-zа-яё -]+$/i.test(raw)) {
+  const nameValidation = validateAndNormalizeFullName(raw);
+  if (!nameValidation.ok) {
    return ctx.reply('❌ Не получилось распознать ФИО. Отправь фамилию и имя (при наличии — отчество) буквами, одним сообщением.');
   }
-  const fullName = words.map(word => word[0].toLocaleUpperCase('ru-RU') + word.slice(1).toLocaleLowerCase('ru-RU')).join(' ');
+  const fullName = nameValidation.value;
   u.fullName = fullName;
   u.pendingFullName = false;
   const verificationChatId = String(u.pendingVerificationChatId || '');
