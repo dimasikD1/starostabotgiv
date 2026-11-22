@@ -294,16 +294,17 @@ bot-amvera/
 
 ## Выполнено в ходе миграции
 
-Следующие части посещаемости и домашних заданий уже вынесены из `index.mjs` в TypeScript:
+Следующие части посещаемости, домашних заданий, управления студентами и структуры учебных заведений уже вынесены из `index.mjs` в TypeScript:
 
 - `bot-amvera/domain/attendance-core.ts` — ключи занятий и классификация отметок.
 - `bot-amvera/domain/attendance-report.ts` — построение HTML-отчёта, сводная статистика по студентам, фильтр периодов и старые записи.
 - `bot-amvera/domain/attendance-polls.ts` — поиск опроса по Telegram poll ID, запись ответов и привязка отметки к студенту строго по Telegram ID.
 - `bot-amvera/domain/homework.ts` — разбор команды `/hw`, создание совместимой записи ДЗ, ограничение истории, отметка выполнения и выборка последних заданий по учебной группе.
 - `bot-amvera/domain/student-management.ts` — добавление/обновление Telegram-студента, добавление ФИО без дублей, удаление по индексу, изменение username/телефона, назначение групповых ролей и снятие назначений.
-- Runtime bridges: `attendance-core-entry.mjs`, `attendance-report-entry.mjs`, `attendance-polls-entry.mjs`, `homework-entry.mjs`, `student-management-entry.mjs`.
+- `bot-amvera/domain/institution-structure.ts` — создание факультетов, направлений и курсов с проверкой дубликатов; привязка учебной группы к курсу с проверкой принадлежности одному заведению и сохранением существующих данных группы.
+- Runtime bridges: `attendance-core-entry.mjs`, `attendance-report-entry.mjs`, `attendance-polls-entry.mjs`, `homework-entry.mjs`, `student-management-entry.mjs`. Добавлен `institution-structure-entry.mjs`.
 - Тесты: `attendance-core-typescript.test.mjs`, `attendance-report-typescript.test.mjs`, `attendance-polls-typescript.test.mjs`, `homework-typescript.test.mjs`, `student-management-typescript.test.mjs`.
 
-Для этих модулей добавлены TypeScript build/test конфигурации и команды проверки синтаксиса собранных файлов. Команды `/hw` и `/homework`, публикация ДЗ, список последних заданий и callback `hwcomplete` теперь используют TypeScript-доменные функции; Telegram-сообщения, callback data и формат JSON-записей сохранены. Команды `/student`, `/delstudent`, `/role`, `/delrole`, `/starosta`, `/zam`, `/setstarosta`, `/setstudent`, а также редактирование контактов карточки студента делегируют операции над данными в `student-management.ts`; проверки прав, Telegram-ответы и callback data остаются в `index.mjs`. Проверка GitHub Actions для коммита `8ebfce7a1293ea11c5b837b6f9d3141af57a0e1f` завершилась успешно: `npm install`, `npm run typecheck`, `npm run check` и `npm test` прошли. Перед каждым будущим переключением ветки в production проверки нужно повторить на актуальном коммите.
+Для этих модулей добавлены TypeScript build/test конфигурации и команды проверки синтаксиса собранных файлов. Команды `/hw` и `/homework`, публикация ДЗ, список последних заданий и callback `hwcomplete` теперь используют TypeScript-доменные функции; Telegram-сообщения, callback data и формат JSON-записей сохранены. Команды `/addfaculty`, `/adddirection`, `/addcourse` и `/linkgroup` делегируют создание структуры и привязку группы в `institution-structure.ts`; вывод структуры и права остаются в `index.mjs`. Legacy-группы без `institutionId` сохраняют привязку к заведению по умолчанию. Команды `/student`, `/delstudent`, `/role`, `/delrole`, `/starosta`, `/zam`, `/setstarosta`, `/setstudent`, а также редактирование контактов карточки студента делегируют операции над данными в `student-management.ts`; проверки прав, Telegram-ответы и callback data остаются в `index.mjs`. Проверка GitHub Actions для коммита `8ebfce7a1293ea11c5b837b6f9d3141af57a0e1f` завершилась успешно: `npm install`, `npm run typecheck`, `npm run check` и `npm test` прошли. Перед каждым будущим переключением ветки в production проверки нужно повторить на актуальном коммите.
 
 **Production не переключён:** изменения остаются в `typescript-migration`; `main` и Amvera не менялись.
