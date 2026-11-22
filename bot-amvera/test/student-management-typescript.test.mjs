@@ -7,7 +7,9 @@ import {
   updateStudentField,
   assignStudyGroupRole,
   clearStudyGroupRoles,
-  setStudentRole
+  setStudentRole,
+  normalizeStudentUsername,
+  normalizeStudentPhone
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -81,4 +83,17 @@ test('sets the student role and only clears matching chat context', () => {
   setStudentRole(user, '-100');
   assert.equal(user.role, 'student');
   assert.equal('groupChatId' in user, false);
+});
+
+
+test('normalizes student usernames with the legacy validation rules', () => {
+  assert.deepEqual(normalizeStudentUsername('@student_1'), { ok: true, value: 'student_1' });
+  assert.deepEqual(normalizeStudentUsername('-'), { ok: true, value: '' });
+  assert.deepEqual(normalizeStudentUsername('bad username'), { ok: false });
+});
+
+test('normalizes student phone numbers with the legacy international format rules', () => {
+  assert.deepEqual(normalizeStudentPhone('+372 5555 5555'), { ok: true, value: '+37255555555' });
+  assert.deepEqual(normalizeStudentPhone('-'), { ok: true, value: '' });
+  assert.deepEqual(normalizeStudentPhone('12345'), { ok: false });
 });
