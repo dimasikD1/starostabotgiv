@@ -34,7 +34,7 @@ test('links a group by reference and stores structure ids on the original group'
   createCourse(institution.faculties.fac_1.directions.dir_1, '1 курс', 'course_1', 'now');
   const group = { chatId: '-100', institutionId: 'inst_a', studyGroup: 'Группа 1', students: ['А'] };
   const result = linkStudyGroupToCourse(institution, group, 'course_1', 'linked');
-  assert.deepEqual(result, { ok: true, id: '-100::Группа 1' });
+  assert.deepEqual(result, { ok: true, id: '-100::Группа 1', facultyName: 'Факультет', directionName: 'Направление', courseName: '1 курс' });
   assert.equal(group.courseId, 'course_1');
   assert.equal(institution.faculties.fac_1.directions.dir_1.courses.course_1.groups['-100::Группа 1'].chatId, '-100');
   assert.deepEqual(group.students, ['А']);
