@@ -15,6 +15,7 @@ import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/at
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
+import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins } from './domain/institution-admins-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -69,10 +70,8 @@ function isOwner(userId) {
 }
 
 function isInstitutionAdmin(userId, institutionId) {
-  if (isOwner(userId)) return true;
   const institution = db.institutions?.[String(institutionId)];
-  return Boolean(institution && Array.isArray(institution.adminIds) &&
-    institution.adminIds.map(String).includes(String(userId)));
+  return isInstitutionAdminId(institution, userId, isOwner(userId));
 }
 
 function subscriptionUntil(u) {
@@ -1972,8 +1971,8 @@ bot.command('setinstadmin', async ctx => {
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено. Сначала проверь ID командой /institutions.');
   if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /setinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
   if (isOwner(userId)) return ctx.reply('Этот пользователь уже является владельцем платформы.');
-  institution.adminIds ||= [];
-  if (!institution.adminIds.map(String).includes(String(userId))) institution.adminIds.push(String(userId));
+  const assignment = addInstitutionAdmin(institution, userId, OWNER_TELEGRAM_IDS);
+  if (!assignment.ok) return ctx.reply('❌ Не удалось назначить администратора.');
   saveDb();
   console.log('[institutions] Admin assigned:', userId, 'institution:', institutionId, 'by owner:', String(ctx.from.id));
   return ctx.reply(
@@ -1992,10 +1991,9 @@ bot.command('removeinstadmin', async ctx => {
   const institution = db.institutions?.[String(institutionId || '')];
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено.');
   if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /removeinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
-  institution.adminIds ||= [];
-  const before = institution.adminIds.length;
-  institution.adminIds = institution.adminIds.filter(id => String(id) !== String(userId));
-  if (institution.adminIds.length === before) return ctx.reply('ℹ️ Этот пользователь не числится администратором данного заведения.');
+  const removal = removeInstitutionAdmin(institution, userId);
+  if (!removal.ok) return ctx.reply('Формат: /removeinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
+  if (removal.status === 'not_found') return ctx.reply('ℹ️ Этот пользователь не числится администратором данного заведения.');
   saveDb();
   console.log('[institutions] Admin removed:', userId, 'institution:', institutionId, 'by owner:', String(ctx.from.id));
   return ctx.reply('✅ Администратор <code>' + escapeHtml(userId) + '</code> снят с должности в заведении «' + escapeHtml(institution.name || institutionId) + '».', { parse_mode: 'HTML' });
@@ -2008,7 +2006,7 @@ bot.command('instadmins', async ctx => {
   if (!institutionId) return ctx.reply('Формат: /instadmins ID_ЗАВЕДЕНИЯ');
   const institution = db.institutions?.[institutionId];
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено.');
-  const admins = Array.isArray(institution.adminIds) ? institution.adminIds : [];
+  const admins = listInstitutionAdmins(institution);
   return ctx.reply(
     '👥 <b>Администраторы заведения</b>\n🏫 ' + escapeHtml(institution.name || institutionId) + '\n\n' +
     (admins.length ? admins.map((id, i) => (i + 1) + '. <code>' + escapeHtml(String(id)) + '</code>').join('\n') : 'Администраторы пока не назначены.'),
