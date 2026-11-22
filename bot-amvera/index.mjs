@@ -2122,8 +2122,8 @@ bot.command('linkgroup', async ctx => {
   const linkId = linked.id;
   saveDb();
   console.log('[institution-structure] Study group linked:', linkId, 'course:', courseId);
-  return ctx.reply('✅ Учебная группа привязана к структуре.\n\n🎓 ' + escapeHtml(course.faculty.name) +
-    '\n📚 ' + escapeHtml(course.direction.name) + '\n🧑‍🎓 ' + escapeHtml(course.course.name) +
+  return ctx.reply('✅ Учебная группа привязана к структуре.\n\n🎓 ' + escapeHtml(linked.facultyName || 'Факультет') +
+    '\n📚 ' + escapeHtml(linked.directionName || 'Направление') + '\n🧑‍🎓 ' + escapeHtml(linked.courseName || 'Курс') +
     '\n👥 ' + escapeHtml(studyGroup.studyGroup) +
     '\n\nСуществующие студенты, посещаемость, расписание и роли сохранены.', { parse_mode: 'HTML' });
 });
