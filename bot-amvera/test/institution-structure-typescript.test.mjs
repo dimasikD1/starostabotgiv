@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createFaculty, createDirection, createCourse, hasDuplicateStructureName,
-  linkStudyGroupToCourse
+  linkStudyGroupToCourse, unlinkStudyGroupFromStructure
 } from '../domain/.build/institution-structure.js';
 
 function fixture() {
@@ -46,5 +46,33 @@ test('does not link a group across institutions or to a missing course', () => {
   assert.deepEqual(linkStudyGroupToCourse(institution, group, 'missing', 'now'), { ok: false, reason: 'institution_mismatch' });
   group.institutionId = 'inst_a';
   assert.deepEqual(linkStudyGroupToCourse(institution, group, 'missing', 'now'), { ok: false, reason: 'course_not_found' });
+  assert.equal(group.courseId, undefined);
+});
+
+test('moving a study group replaces its previous course link instead of duplicating it', () => {
+  const institution = fixture();
+  createFaculty(institution, 'Факультет', 'fac_1', 'now');
+  createDirection(institution.faculties.fac_1, 'Направление', 'dir_1', 'now');
+  createCourse(institution.faculties.fac_1.directions.dir_1, '1 курс', 'course_1', 'now');
+  createCourse(institution.faculties.fac_1.directions.dir_1, '2 курс', 'course_2', 'now');
+  const group = { chatId: '-100', institutionId: 'inst_a', studyGroup: 'Группа 1' };
+  linkStudyGroupToCourse(institution, group, 'course_1', 'first');
+  linkStudyGroupToCourse(institution, group, 'course_2', 'second');
+  const courses = institution.faculties.fac_1.directions.dir_1.courses;
+  assert.equal(courses.course_1.groups['-100::Группа 1'], undefined);
+  assert.equal(courses.course_2.groups['-100::Группа 1'].courseId, 'course_2');
+  assert.equal(group.courseId, 'course_2');
+});
+
+test('unlinks a group only from its own institution structure', () => {
+  const institution = fixture();
+  createFaculty(institution, 'Факультет', 'fac_1', 'now');
+  createDirection(institution.faculties.fac_1, 'Направление', 'dir_1', 'now');
+  createCourse(institution.faculties.fac_1.directions.dir_1, '1 курс', 'course_1', 'now');
+  const group = { chatId: '-100', institutionId: 'inst_a', studyGroup: 'Группа 1', facultyId: 'fac_1', directionId: 'dir_1', courseId: 'course_1' };
+  linkStudyGroupToCourse(institution, group, 'course_1', 'linked');
+  assert.deepEqual(unlinkStudyGroupFromStructure({ ...institution, id: 'inst_other' }, group), { ok: false, reason: 'institution_mismatch' });
+  assert.deepEqual(unlinkStudyGroupFromStructure(institution, group), { ok: true, removed: 1 });
+  assert.equal(institution.faculties.fac_1.directions.dir_1.courses.course_1.groups['-100::Группа 1'], undefined);
   assert.equal(group.courseId, undefined);
 });
