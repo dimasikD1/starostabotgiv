@@ -9,7 +9,8 @@ import {
   clearStudyGroupRoles,
   setStudentRole,
   normalizeStudentUsername,
-  normalizeStudentPhone
+  normalizeStudentPhone,
+  assignStudyGroupRoleByNumber
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -96,4 +97,41 @@ test('normalizes student phone numbers with the legacy international format rule
   assert.deepEqual(normalizeStudentPhone('+372 5555 5555'), { ok: true, value: '+37255555555' });
   assert.deepEqual(normalizeStudentPhone('-'), { ok: true, value: '' });
   assert.deepEqual(normalizeStudentPhone('12345'), { ok: false });
+});
+
+
+test('assigns a role only to the numbered study group in the current chat', () => {
+  const groups = [
+    { studyGroup: 'Группа 1', chatId: '-100', starostaId: '' },
+    { studyGroup: 'Группа 2', chatId: '-100', starostaId: '' }
+  ];
+  const user = {};
+  const result = assignStudyGroupRoleByNumber(
+    groups, user, 'zam', 42, '2',
+    { '1': 'Группа 1', '2': 'Группа 2' },
+    { username: 'student42', chatId: '-100', institutionId: 'inst_001' }
+  );
+  assert.equal(result.status, 'assigned');
+  assert.equal(groups[0].zamId, undefined);
+  assert.equal(groups[1].zamId, '42');
+  assert.equal(user.group, 'Группа 2');
+});
+
+test('rejects assigning a deputy role to the current group starosta', () => {
+  const groups = [{ studyGroup: 'Группа 1', starostaId: '42' }];
+  const result = assignStudyGroupRoleByNumber(
+    groups, {}, 'zam', 42, '1', { '1': 'Группа 1' },
+    { chatId: '-100', institutionId: 'inst_001' }
+  );
+  assert.deepEqual(result, { status: 'target-is-starosta' });
+});
+
+test('reports missing numbered groups without modifying users', () => {
+  const user = {};
+  const result = assignStudyGroupRoleByNumber(
+    [], user, 'starosta', 42, '2', { '1': 'Группа 1' },
+    { chatId: '-100', institutionId: 'inst_001' }
+  );
+  assert.deepEqual(result, { status: 'group-not-found' });
+  assert.deepEqual(user, {});
 });
