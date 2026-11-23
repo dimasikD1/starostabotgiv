@@ -1,5 +1,6 @@
 export {
   validateAndNormalizeFullName,
   applyStudyGroupSelection,
-  shouldPromptStudyGroup
+  shouldPromptStudyGroup,
+  completeFullNameRegistration
 } from './.build/registration.js';
