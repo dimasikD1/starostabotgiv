@@ -4,5 +4,6 @@ export {
   addNamedStudentAndSave,
   removeStudentAtAndSave,
   updateStudentContactAndSave,
-  confirmStudentRosterImportAndSave
+  confirmStudentRosterImportAndSave,
+  cancelStudentRosterImportAndSave
 } from './.build/student-roster-workflows.js';
