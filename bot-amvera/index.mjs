@@ -32,6 +32,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
+import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { readJsonBody } from './api/json-body-entry.mjs';
 import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
@@ -2456,14 +2457,7 @@ async function handleMiniAppApi(req,res,url) {
   const selectedGroupId=String(url.searchParams.get('groupId')||'');
   const g=managedGroup(tgUser.id,selectedGroupId);
   if(!g || !canManageGroup(tgUser.id,g)) return sendJson(res,403,{error:'Нет доступа к выбранной группе. Обнови список групп.'});
-  const managerWriteRoutes = new Set([
-    'DELETE /api/students',
-    'POST /api/announcements',
-    'POST /api/homework-media-upload',
-    'POST /api/homework','PUT /api/homework','DELETE /api/homework',
-    'POST /api/attendance'
-  ]);
-  if (managerWriteRoutes.has(req.method+' '+url.pathname) && !canManageGroup(tgUser.id,g)) {
+  if (isMiniAppManagerWriteRoute(req.method, url.pathname) && !canManageGroup(tgUser.id,g)) {
     return sendJson(res,403,{error:'Недостаточно прав для изменения данных этой учебной группы.'});
   }
   if(req.method==='GET' && url.pathname==='/api/data') {
