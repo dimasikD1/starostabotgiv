@@ -18,6 +18,7 @@ import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey }
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 import { getMissingTelegramBotPermissions } from './domain/telegram-bot-permissions-entry.mjs';
+import { buildOpenChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -2285,18 +2286,7 @@ bot.command('openchat', async ctx => {
     return ctx.reply('🔒 Открыть возможность писать может только владелец бота или администратор чата.');
   }
   try {
-    await ctx.telegram.setChatPermissions(ctx.chat.id, {
-      can_send_messages: true,
-      can_send_audios: true,
-      can_send_documents: true,
-      can_send_photos: true,
-      can_send_videos: true,
-      can_send_video_notes: true,
-      can_send_voice_notes: true,
-      can_send_polls: true,
-      can_send_other_messages: true,
-      can_add_web_page_previews: true
-    }, { use_independent_chat_permissions: true });
+    await ctx.telegram.setChatPermissions(ctx.chat.id, buildOpenChatPermissions(), { use_independent_chat_permissions: true });
     return ctx.reply('🔓 <b>В чате разрешена отправка сообщений всем участникам.</b>\n\nЕсли отдельные пользователи были ограничены персонально (мут), их ограничения нужно снять отдельно в настройках участников.', { parse_mode: 'HTML' });
   } catch (error) {
     console.error('[openchat] setChatPermissions failed:', error?.message || error);
