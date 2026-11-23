@@ -1,6 +1,8 @@
 import {
   assignStudyGroupRoleByNumber,
   removeGroupRolesAndSetStudent,
+  clearStudyGroupRoles,
+  setStudentRole,
   type StudentRosterGroup,
   type StudentUser,
   type GroupRoleAssignmentResult,
@@ -34,4 +36,17 @@ export function removeAndPersistStudyGroupRoles(
   const result = removeGroupRolesAndSetStudent(groups, user, userId, chatId);
   save();
   return result;
+}
+
+/** Let a user relinquish every group-level role and persist the student profile. */
+export function setSelfAsStudentAndSave(
+  groups: StudentRosterGroup[],
+  user: StudentUser,
+  userId: string | number,
+  save: () => void
+): number {
+  const removed = clearStudyGroupRoles(groups, userId, undefined, false);
+  setStudentRole(user);
+  save();
+  return removed;
 }
