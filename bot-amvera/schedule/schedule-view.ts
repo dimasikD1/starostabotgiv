@@ -47,5 +47,5 @@ export function resolveScheduleGroupName(
 
 /** Extract the group name from a Telegram /setgroup command, including bot mentions. */
 export function parseSetScheduleGroupArgument(messageText: unknown): string {
-  return String(messageText ?? '').replace(/^\\/setgroup(?:@\\S+)?/i, '').trim();
+  return String(messageText ?? '').replace(/^\/setgroup(?:@\S+)?/i, '').trim();
 }
