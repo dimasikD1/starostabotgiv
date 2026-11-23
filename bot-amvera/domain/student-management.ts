@@ -305,3 +305,11 @@ export function confirmStudentRosterImport(
   delete user.pendingStudentImportReview;
   return result;
 }
+
+
+/** Convert the one-based /delstudent argument to a validated zero-based roster index. */
+export function parseStudentRemovalIndex(input: string, studentCount: number): number | undefined {
+  const index = Number(input.trim()) - 1;
+  if (!Number.isInteger(index) || index < 0 || index >= studentCount) return undefined;
+  return index;
+}
