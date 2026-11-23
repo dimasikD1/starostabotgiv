@@ -18,6 +18,7 @@ import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey }
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
+import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
@@ -365,15 +366,12 @@ const {
   ensureStudyGroups
 });
 function formatAttendance(g) {
- const students=g?.students||[],attendance=g?.attendance||{};
- if(!students.length)return '📋 <b>Посещаемость</b>\n\nСписок группы пуст. Добавь студентов командой /student.';
- const today=attendanceDate();
- const {present,absent,unmarked}=classifyAttendance(
-  students,
-  student=>attendance[attendanceKey(student)]?.[today],
-  student=>escapeHtml(studentName(student))
- );
- return '📋 <b>Посещаемость за '+today+'</b>\n👥 <b>'+escapeHtml(g.title||'Группа')+'</b>\n\n'+'👨‍🎓 Всего: <b>'+students.length+'</b>\n\n'+'✅ <b>Были ('+present.length+')</b>\n'+(present.length?present.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+'\n\n'+'❌ <b>Не были ('+absent.length+')</b>\n'+(absent.length?absent.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+(unmarked.length?'\n\n▫️ <b>Не отмечены ('+unmarked.length+')</b>\n'+unmarked.map((n,i)=>(i+1)+'. '+n).join('\n'):'');
+ return formatDailyAttendance(g, {
+  today: attendanceDate(),
+  getStudentKey: attendanceKey,
+  getStudentName: studentName,
+  escapeHtml
+ });
 }
 function attendanceLessonsKeyboard(lessons) {
  const rows=lessons.map((lesson,i)=>{
@@ -383,18 +381,12 @@ function attendanceLessonsKeyboard(lessons) {
  return Markup.inlineKeyboard(rows);
 }
 function formatLessonAttendance(g,lesson) {
- const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{},students=g.students||[];
- const {present,absent,unmarked}=classifyAttendance(
-  students,
-  student=>record[attendanceKey(student)],
-  student=>escapeHtml(studentName(student))
- );
- const time=lesson.timeStart?(lesson.timeStart+(lesson.timeEnd?'–'+lesson.timeEnd:'')):'Время не указано';
- return '📋 <b>Посещаемость пары</b>\n📅 '+lesson.date+' · '+time+'\n📚 <b>'+escapeHtml(lesson.subject||'Занятие')+'</b>'+
-  (lesson.room?'\n🚪 Аудитория: '+escapeHtml(lesson.room):'')+
-  '\n\n👨‍🎓 Всего: <b>'+students.length+'</b>\n\n✅ <b>Были ('+present.length+')</b>\n'+(present.length?present.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+
-  '\n\n❌ <b>Не были ('+absent.length+')</b>\n'+(absent.length?absent.map((n,i)=>(i+1)+'. '+n).join('\n'):'—')+
-  (unmarked.length?'\n\n▫️ <b>Не отмечены ('+unmarked.length+')</b>\n'+unmarked.map((n,i)=>(i+1)+'. '+n).join('\n'):'');
+ return formatSingleLessonAttendance(g, lesson, attendanceLessonKey(lesson), {
+  today: attendanceDate(),
+  getStudentKey: attendanceKey,
+  getStudentName: studentName,
+  escapeHtml
+ });
 }
 function attendancePairButtons(g,lesson,userId,page=0) {
  const students=g.students||[],size=10;
