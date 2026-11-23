@@ -1,4 +1,5 @@
 import type { ScheduleLesson } from './types.js';
+import type { DateRange } from './presentation.js';
 
 export type ScheduleViewResult =
   | { ok: false; reason: 'invalid-group' }
@@ -9,13 +10,16 @@ export function buildScheduleView(
   selectedGroup: string,
   allowedGroups: readonly string[],
   lessons: readonly ScheduleLesson[],
-  dayOffset = 0
+  dayOffset = 0,
+  range?: DateRange
 ): ScheduleViewResult {
   const group = String(selectedGroup || '').trim();
   if (!group || !allowedGroups.includes(group)) return { ok: false, reason: 'invalid-group' };
-  const filtered = dayOffset
-    ? lessons.filter(lesson => Number(lesson.dayOffset) === dayOffset)
-    : [...lessons];
+  const filtered = range
+    ? lessons.filter(lesson => lesson.date >= range.start && lesson.date <= range.end)
+    : dayOffset
+      ? lessons.filter(lesson => Number(lesson.dayOffset) === dayOffset)
+      : [...lessons];
   return {
     ok: true,
     group,
