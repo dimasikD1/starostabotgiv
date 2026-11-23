@@ -19,7 +19,8 @@ import {
   formatStudentRosterSummary,
   formatStudentCardText,
   parseStudentNameArgument,
-  parseStudentContactInput
+  parseStudentContactInput,
+  parseStudentRosterAction
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -293,4 +294,16 @@ test('parses student contact edits using the field-specific legacy validators', 
   assert.deepEqual(parseStudentContactInput('phone', '+372 5555 5555'), { ok: true, value: '+37255555555' });
   assert.deepEqual(parseStudentContactInput('phone', '-'), { ok: true, value: '' });
   assert.deepEqual(parseStudentContactInput('phone', '37255555555'), { ok: false, field: 'phone' });
+});
+
+
+test('parses student roster card, edit and page callback data safely', () => {
+  assert.deepEqual(parseStudentRosterAction('studentcard:12'), { type: 'card', index: 12 });
+  assert.deepEqual(parseStudentRosterAction('studentedit:phone:3'), { type: 'edit', field: 'phone', index: 3 });
+  assert.deepEqual(parseStudentRosterAction('studentedit:username:0'), { type: 'edit', field: 'username', index: 0 });
+  assert.deepEqual(parseStudentRosterAction('studentpage:4'), { type: 'page', page: 4 });
+  assert.equal(parseStudentRosterAction('studentedit:email:2'), undefined);
+  assert.equal(parseStudentRosterAction('studentcard:-1'), undefined);
+  assert.equal(parseStudentRosterAction('studentpage:1x'), undefined);
+  assert.equal(parseStudentRosterAction('studentpage:999999999999999999999'), undefined);
 });
