@@ -58,7 +58,7 @@ import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId } from './domain/role-report-entry.mjs';
-import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
+import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -1524,8 +1524,7 @@ bot.command('setstudent', async ctx => {
   if (!target) return ctx.reply('Ответь командой /setstudent на сообщение нужного человека.');
   const chat=db.groups[String(ctx.chat.id)];
   const u = normalizeUser(user(target.id));
-  if(chat) removeAndPersistStudyGroupRoles(ensureStudyGroups(chat),u,target.id,ctx.chat.id,saveDb);
-  else { setStudentRole(u,ctx.chat.id); saveDb(); }
+  setGroupMemberAsStudentAndSave(chat ? ensureStudyGroups(chat) : undefined,u,target.id,ctx.chat.id,saveDb);
   await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' снят с управленческих ролей в этом учебном чате.');
 });
 
