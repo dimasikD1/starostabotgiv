@@ -313,3 +313,13 @@ export function parseStudentRemovalIndex(input: string, studentCount: number): n
   if (!Number.isInteger(index) || index < 0 || index >= studentCount) return undefined;
   return index;
 }
+
+
+/** Format the /students header while escaping the group title for Telegram HTML. */
+export function formatStudentRosterSummary(groupTitle: string, studentCount: number): string {
+  const escapedTitle = groupTitle.replace(/[&<>"]/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+  })[character] || character);
+  const count = Number.isFinite(studentCount) ? Math.max(0, Math.trunc(studentCount)) : 0;
+  return '👥 <b>' + escapedTitle + '</b>\\n👨‍🎓 Всего студентов: <b>' + count + '</b>\\n\\nНажми на студента, чтобы открыть карточку и изменить контакты.';
+}
