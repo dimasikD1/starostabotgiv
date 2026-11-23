@@ -24,7 +24,7 @@ test('parseStudentNames accepts unknown input safely and caps output at 100 name
 test('formats the student import preview with escaped HTML and the legacy text layout', () => {
   assert.equal(
     formatStudentImportPreview('Группа <1> & "А"', ['Иванов Иван', 'Петров <Пётр>']),
-    '📝 <b>Проверь список студентов</b>\n👥 Группа: <b>Группа &lt;1&gt; & "А"</b>\n👨‍🎓 Найдено: <b>2</b>\n\nИванов Иван\nПетров &lt;Пётр&gt;\n\nПосле подтверждения текущий список группы будет заменён этим списком.'
+    '📝 <b>Проверь список студентов</b>\n👥 Группа: <b>Группа &lt;1&gt; &amp; "А"</b>\n👨‍🎓 Найдено: <b>2</b>\n\nИванов Иван\nПетров &lt;Пётр&gt;\n\nПосле подтверждения текущий список группы будет заменён этим списком.'
   );
 });
 
