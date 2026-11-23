@@ -61,7 +61,7 @@ import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } fr
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
-import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId, filterRoleReportGroups } from './domain/role-report-entry.mjs';
+import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
@@ -1433,27 +1433,10 @@ bot.command(['allroles', 'roleslist'], async ctx => {
   const blocks=[];
   for(const g of grouped.values()) {
     const institutionName=db.institutions?.[String(g.institutionId||'')]?.name||'Учебное заведение';
-    const sourceChatIds=roleReportSourceChatIds(g);
-    const starostaId=firstAssignedRoleId(g,'starostaId');
-    const zamId=firstAssignedRoleId(g,'zamId');
-    const members=Object.entries(db.users||{}).filter(([uid,u])=>
-      !isOwner(uid) &&
-      String(u.group||'')===String(g.studyGroup||'') &&
-      (!u.groupChatId || sourceChatIds.has(String(u.groupChatId)))
+    const members = buildRoleReportMemberRows(g, db.users || {}, isOwner);
+    const lines = members.map(member =>
+      '• ' + member.role + ' — ' + escapeHtml(member.name) + ' <code>' + escapeHtml(member.id) + '</code>'
     );
-    const roleFor=uid=>starostaId===uid?'👑 Староста':zamId===uid?'⭐ Заместитель':'👨‍🎓 Студент';
-    const lines=[];
-    for(const [uid,u] of members) {
-      const name=escapeHtml(u.fullName||u.fio||u.username&&('@'+u.username)||('ID '+uid));
-      lines.push('• '+roleFor(String(uid))+' — '+name+' <code>'+escapeHtml(uid)+'</code>');
-    }
-    for(const [uid,label] of [[starostaId,'👑 Староста'],[zamId,'⭐ Заместитель']]) {
-      if(uid && !members.some(([memberId])=>String(memberId)===uid)) {
-        const u=db.users?.[uid]||{};
-        const name=escapeHtml(u.fullName||u.fio||u.username&&('@'+u.username)||('ID '+uid));
-        lines.unshift('• '+label+' — '+name+' <code>'+escapeHtml(uid)+'</code>');
-      }
-    }
     blocks.push('🏫 <b>'+escapeHtml(institutionName)+'</b>\n📚 <b>'+escapeHtml(g.studyGroup||'Учебная группа')+'</b>\n'+(lines.length?lines.join('\n'):'Пока нет пользователей, выбравших эту группу.'));
   }
   let output='👥 <b>Роли пользователей по учебным группам</b>\n\n'+blocks.join('\n\n');
