@@ -31,7 +31,7 @@ import { registerGroup as registerGroupData, removeGroup as removeGroupData } fr
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
-import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
+import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
 import { sendJsonResponse as sendJson, sendTextResponse as sendText } from './api/http-response-entry.mjs';
 import { sanitizeMiniAppClientError } from './api/miniapp-client-error-entry.mjs';
@@ -2379,11 +2379,7 @@ bot.hears('ℹ️ Помощь', ctx => ctx.reply('Нажми «❔ Что ум�
 bot.catch(e => console.error('[bot]', e));
 
 
-function verifyMiniAppInitData(initData) {
-  return verifyTelegramWebAppInitData(initData, { token });
-}
-// TypeScript module owns the Mini App API rate-limit policy and counters.
-const checkApiRate = createApiRateLimiter();
+
 async function getMiniAppTodayLessons(g) {
  let timer;
  try {
@@ -2399,12 +2395,24 @@ async function getMiniAppTodayLessons(g) {
 }
 
 async function handleMiniAppApi(req,res,url) {
-  let tgUser;
-  try { tgUser=verifyMiniAppInitData(req.headers['x-telegram-init-data']); }
-  catch(e) { return sendJson(res,401,{error:e.message}); }
-  const u=normalizeUser(user(tgUser.id));
-  const rate=checkApiRate(tgUser.id,req.method);
-  if(rate.limited) return sendJson(res,429,{error:'Слишком много запросов. Подожди '+rate.retryAfter+' с и попробуй снова.'},{'Retry-After':String(rate.retryAfter)});
+  const requestContext = resolveMiniAppRequestContext(
+    req.headers['x-telegram-init-data'],
+    req.method,
+    {
+      verifyInitData: initData => verifyTelegramWebAppInitData(initData, { token }),
+      getUser: user,
+      normalizeUser,
+      checkRate: checkApiRate
+    }
+  );
+  if (requestContext.kind === 'unauthorized') {
+    return sendJson(res,401,{error:requestContext.message});
+  }
+  if (requestContext.kind === 'rate-limited') {
+    const retryAfter = requestContext.retryAfter;
+    return sendJson(res,429,{error:'Слишком много запросов. Подожди '+retryAfter+' с и попробуй снова.'},{'Retry-After':String(retryAfter)});
+  }
+  const { telegramUser: tgUser, user: u } = requestContext;
   // Подписка временно отключена: Mini App доступен без оплаты.
   if(req.method==='GET' && url.pathname==='/api/groups') {
     const groups=accessibleGroups(tgUser.id);
