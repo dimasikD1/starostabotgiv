@@ -117,3 +117,30 @@ test('sends automatic polls only in the existing ten-minute window', () => {
   assert.equal(isAttendancePollDue(472, 480), false);
   assert.equal(isAttendancePollDue(NaN, 480), false);
 });
+
+
+test('builds latest poll report counts and display names without mutating the record', async () => {
+  const { buildAttendancePollReport } = await import('../../.test-build/domain-user/attendance-polls.js');
+  const latest = {
+    subject: 'Математика',
+    date: '2026-11-23',
+    time: '09:00',
+    responses: {
+      '1': { firstName: 'Анна', username: 'anna', status: 'present' },
+      '2': { firstName: 'Борис', username: '', status: 'absent' },
+      '3': { firstName: '', username: '', status: 'unknown' }
+    }
+  };
+  const before = structuredClone(latest);
+  assert.deepEqual(buildAttendancePollReport(5, latest), {
+    subject: 'Математика',
+    date: '2026-11-23',
+    time: '09:00',
+    presentCount: 1,
+    absentCount: 1,
+    unansweredCount: 2,
+    names: ['Анна (@anna) — ✅ Будет', 'Борис — ❌ Не будет', 'Студент']
+  });
+  assert.deepEqual(latest, before);
+  assert.equal(buildAttendancePollReport(1, { responses: { a: { status: 'present' }, b: { status: 'absent' } } }).unansweredCount, 0);
+});
