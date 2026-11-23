@@ -3,6 +3,8 @@ import {
   addNamedStudent,
   removeStudentAt,
   updateStudentField,
+  confirmStudentRosterImport,
+  type StudentUser,
   type StudentField,
   type StudentRecord,
   type StudentRosterGroup,
@@ -51,6 +53,19 @@ export function updateStudentContactAndSave(
   const result = updateStudentField(group, index, field, value);
   if (!result) return undefined;
   clearPending();
+  save();
+  return result;
+}
+
+
+/** Commit a reviewed student roster, clear its pending state, and persist once. */
+export function confirmStudentRosterImportAndSave(
+  group: StudentRosterGroup,
+  user: StudentUser,
+  names: string[],
+  save: () => void
+): { count: number; truncated: boolean } {
+  const result = confirmStudentRosterImport(group, user, names);
   save();
   return result;
 }
