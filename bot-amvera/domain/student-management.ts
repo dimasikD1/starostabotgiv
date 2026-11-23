@@ -343,3 +343,18 @@ export function formatStudentCardText(card: StudentCardData | undefined): string
     '\n📞 Телефон: <code>' + escape(phone) + '</code>\n🆔 Telegram ID: <code>' +
     escape(telegramId) + '</code>';
 }
+
+export type StudentContactInputResult =
+  | { ok: true; value: string }
+  | { ok: false; field: StudentField };
+
+/** Validate and normalize the text entered for a student's contact field. */
+export function parseStudentContactInput(
+  field: StudentField,
+  input: string
+): StudentContactInputResult {
+  const result = field === 'username'
+    ? normalizeStudentUsername(input)
+    : normalizeStudentPhone(input);
+  return result.ok ? result : { ok: false, field };
+}
