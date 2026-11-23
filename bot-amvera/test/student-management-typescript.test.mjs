@@ -17,6 +17,7 @@ import {
   replaceStudentRoster,
   confirmStudentRosterImport,
   formatStudentRosterSummary,
+  formatStudentCardText,
   parseStudentNameArgument
 } from '../../.test-build/domain-user/student-management.js';
 
@@ -263,4 +264,22 @@ test('parses /student name arguments with optional bot username and surrounding 
   assert.equal(parseStudentNameArgument('/student@starostagivbot Анна Петрова'), 'Анна Петрова');
   assert.equal(parseStudentNameArgument('/student'), '');
   assert.equal(parseStudentNameArgument('/student   Пётр   '), 'Пётр');
+});
+
+
+test('formats student contact cards with Telegram HTML escaping and legacy fallbacks', () => {
+  assert.equal(
+    formatStudentCardText({
+      index: 0, name: 'Иван <Иванов>', username: '@ivan&1',
+      phone: '+372<555>', telegramId: '42&'
+    }),
+    '👤 <b>Иван &lt;Иванов&gt;</b>\n\n🔹 Username: @ivan&amp;1\n📞 Телефон: <code>+372&lt;555&gt;</code>\n🆔 Telegram ID: <code>42&amp;</code>'
+  );
+  assert.equal(
+    formatStudentCardText({
+      index: 1, name: 'Анна', username: '', phone: '', telegramId: ''
+    }),
+    '👤 <b>Анна</b>\n\n🔹 Username: не указан\n📞 Телефон: <code>не указан</code>\n🆔 Telegram ID: <code>не указан</code>'
+  );
+  assert.equal(formatStudentCardText(undefined), '❌ Студент не найден.');
 });
