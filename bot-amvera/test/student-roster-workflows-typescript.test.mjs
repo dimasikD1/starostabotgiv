@@ -323,3 +323,32 @@ test('caps confirmed imports at 100 and persists the capped roster once', () => 
   assert.equal(user.students.length, 100);
   assert.equal(saves, 1);
 });
+
+
+import { cancelStudentRosterImportAndSave } from '../../.test-build/domain/student-roster-workflows.js';
+
+test('cancels a student roster import, clears only its temporary fields and saves once', () => {
+  const user = {
+    pendingStudentImport: false,
+    pendingStudentImportChatId: '-100',
+    pendingStudentImportReview: ['Pending student'],
+    pendingAnnouncementChatId: '-200',
+    fullName: 'Keep profile'
+  };
+  let saves = 0;
+  cancelStudentRosterImportAndSave(user, () => saves++);
+  assert.equal('pendingStudentImport' in user, false);
+  assert.equal('pendingStudentImportChatId' in user, false);
+  assert.equal('pendingStudentImportReview' in user, false);
+  assert.equal(user.pendingAnnouncementChatId, '-200');
+  assert.equal(user.fullName, 'Keep profile');
+  assert.equal(saves, 1);
+});
+
+test('cancellation is safe when no student roster import is active', () => {
+  const user = { fullName: 'Keep profile', pendingStudentField: { index: 0, type: 'phone' } };
+  let saves = 0;
+  cancelStudentRosterImportAndSave(user, () => saves++);
+  assert.deepEqual(user, { fullName: 'Keep profile', pendingStudentField: { index: 0, type: 'phone' } });
+  assert.equal(saves, 1);
+});
