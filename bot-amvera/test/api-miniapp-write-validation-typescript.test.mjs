@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateMiniAppHomeworkFields,
-  validateMiniAppAttendanceMark
+  validateMiniAppAttendanceMark,
+  validateHomeworkRecordId
 } from '../../.test-build/api/miniapp-write-validation.js';
 
 test('validates homework fields with the existing trim and length limits', () => {
@@ -34,4 +35,11 @@ test('validates attendance indices, preserving numeric coercion and supported st
   assert.equal(validateMiniAppAttendanceMark({ studentIndex: 0.5, status: 'present' }, 1).ok, false);
   assert.equal(validateMiniAppAttendanceMark({ studentIndex: 0, status: 'unknown' }, 1).ok, false);
   assert.equal(validateMiniAppAttendanceMark(null, 1).ok, false);
+});
+
+test('normalizes homework record IDs and retains empty-ID rejection semantics', () => {
+  assert.deepEqual(validateHomeworkRecordId(' task-123 '), { ok: true, id: ' task-123 ' });
+  assert.deepEqual(validateHomeworkRecordId(123), { ok: true, id: '123' });
+  assert.deepEqual(validateHomeworkRecordId(''), { ok: false, id: '' });
+  assert.deepEqual(validateHomeworkRecordId(null), { ok: false, id: '' });
 });
