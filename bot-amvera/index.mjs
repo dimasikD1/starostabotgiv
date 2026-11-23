@@ -19,7 +19,7 @@ import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
-import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
+import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
@@ -2492,20 +2492,11 @@ async function handleMiniAppApi(req,res,url) {
     const today=attendanceDate();
     const lessons=scheduleItems.filter(x=>x.date===today&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
     const students=g.students||[];
-    const homeworkItems=(g.homework||[]).map(h=>{
-      const completedBy=h.completedBy||{},completedIds=new Set(Object.keys(completedBy));
-      const completedUserNames=new Set([...completedIds].map(id=>String(db.users?.[id]?.fullName||'').trim().toLocaleLowerCase('ru-RU')).filter(Boolean));
-      const isCompleted=student=>{const id=typeof student==='object'?String(student.telegramId||''):'';return (id&&completedIds.has(id))||completedUserNames.has(studentName(student).trim().toLocaleLowerCase('ru-RU'));};
-      const completedStudents=students.filter(isCompleted).map(studentName);
-      const pendingStudents=students.filter(student=>!isCompleted(student)).map(studentName);
-      const matchedIds=new Set(students.filter(student=>typeof student==='object'&&student.telegramId).map(student=>String(student.telegramId)));
-      const matchedNames=new Set(students.map(student=>studentName(student).trim().toLocaleLowerCase('ru-RU')));
-      const unmatchedCompletions=[...completedIds].filter(id=>!matchedIds.has(id)&&!matchedNames.has(String(db.users?.[id]?.fullName||'').trim().toLocaleLowerCase('ru-RU'))).map(id=>String(db.users?.[id]?.fullName||db.users?.[id]?.username||'Участник без записи в списке'));
-      return {id:h.id||'',subject:h.subject||'',homework:h.homework||'',attachments:(h.attachments||[]).map(a=>({type:a.type||'photo',fileName:a.fileName||'Вложение'})),createdAt:h.createdAt||'',completedCount:completedStudents.length,totalStudents:students.length,completionRate:students.length?Math.round(completedStudents.length/students.length*100):0,completedStudents,pendingStudents,unmatchedCompletions};
-    }).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).slice(0,100);
-    const homeworkWeek=homeworkItems.filter(h=>{const t=Date.parse(h.createdAt||'');return Number.isFinite(t)&&t>=Date.now()-7*86400000;});
-    const homeworkWeekCompleted=homeworkWeek.reduce((n,h)=>n+h.completedCount,0),homeworkWeekPossible=homeworkWeek.reduce((n,h)=>n+h.totalStudents,0);
-    const homeworkStats={week:{assignments:homeworkWeek.length,completed:homeworkWeekCompleted,possible:homeworkWeekPossible,rate:homeworkWeekPossible?Math.round(homeworkWeekCompleted/homeworkWeekPossible*100):0},all:{assignments:homeworkItems.length,completed:homeworkItems.reduce((n,h)=>n+h.completedCount,0),possible:homeworkItems.reduce((n,h)=>n+h.totalStudents,0)}};
+    const homeworkStatistics=buildHomeworkCompletionStatistics(
+      g.homework||[],students,db.users||{},studentName
+    );
+    const homeworkItems=homeworkStatistics.items;
+    const homeworkStats={week:homeworkStatistics.week,all:homeworkStatistics.all};
     const mapLesson=lesson=>{
       const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
       let present=0,absent=0;
