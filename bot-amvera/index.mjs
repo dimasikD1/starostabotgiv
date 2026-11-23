@@ -37,7 +37,7 @@ import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark, validateH
 import { validateHomeworkMediaUpload } from './api/homework-media-validation-entry.mjs';
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
-import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
+import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId } from './domain/role-report-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
@@ -2509,7 +2509,7 @@ async function handleMiniAppApi(req,res,url) {
     const historyEntries=attendanceStatistics.historyEntries;
     const attendanceHistory=attendanceStatistics.attendanceHistory;
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:attendanceStatistics.students.map((student,i)=>({...student,name:studentName(students[i])})),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:attendanceStatistics.students.map((student,i)=>({...student,name:studentName(students[i])})),announcements:getRecentAnnouncements(g.announcements,30),homework:homeworkItems,homeworkStats,attendanceHistory,scheduleLoading});
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
     const count=(g.students||[]).length;
