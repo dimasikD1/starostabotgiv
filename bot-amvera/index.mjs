@@ -34,6 +34,7 @@ import { readJsonBody } from './api/json-body-entry.mjs';
 import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
 import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark } from './api/miniapp-write-validation-entry.mjs';
 import { validateHomeworkMediaUpload } from './api/homework-media-validation-entry.mjs';
+import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
@@ -2607,9 +2608,10 @@ async function handleMiniAppApi(req,res,url) {
       const subject=fields.subject,homework=fields.homework;
       if(!g.chatId)return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
       const pending=g.pendingHomeworkMedia?.[String(tgUser.id)]||{},requested=Array.isArray(body.attachments)?body.attachments:[];
-      if(requested.length>10)return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
-      const attachments=[];
-      for(const entry of requested){const media=pending[String(entry?.id||'')];if(!media)return sendJson(res,400,{error:'Одно из вложений устарело. Прикрепи файл ещё раз.'});attachments.push({fileId:media.fileId,type:media.type,fileName:media.fileName,mimeType:media.mimeType});}
+      const attachmentValidation=validateNewHomeworkAttachments(requested,pending);
+      if(!attachmentValidation.ok&&attachmentValidation.reason==='limit')return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
+      if(!attachmentValidation.ok)return sendJson(res,400,{error:'Одно из вложений устарело. Прикрепи файл ещё раз.'});
+      const attachments=attachmentValidation.attachments||[];
       const item={id:crypto.randomUUID(),subject,homework,attachments,createdAt:new Date().toISOString(),authorId:String(tgUser.id),completedBy:{}};
       g.homework||=[];g.homework.push(item);if(g.homework.length>100)g.homework=g.homework.slice(-100);
       for(const entry of requested)delete pending[String(entry.id)];
@@ -2632,17 +2634,15 @@ async function handleMiniAppApi(req,res,url) {
       const subject=fields.subject,homework=fields.homework;
       let added=[];
       if(Array.isArray(body.attachments)){
-        if(body.attachments.length>10)return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
-        const pending=g.pendingHomeworkMedia?.[String(tgUser.id)]||{},next=[];
-        for(const entry of body.attachments){
-          if(Number.isInteger(entry?.index)){
-            const old=item.attachments?.[entry.index];if(!old)return sendJson(res,400,{error:'Одно из старых вложений не найдено.'});next.push(old);
-          }else if(entry?.id){
-            const media=pending[String(entry.id)];if(!media)return sendJson(res,400,{error:'Новое вложение устарело. Прикрепи его ещё раз.'});
-            const saved={fileId:media.fileId,type:media.type,fileName:media.fileName,mimeType:media.mimeType};next.push(saved);added.push(saved);delete pending[String(entry.id)];
-          }else return sendJson(res,400,{error:'Некорректное вложение.'});
-        }
-        item.attachments=next;
+        const pending=g.pendingHomeworkMedia?.[String(tgUser.id)]||{};
+        const attachmentValidation=validateUpdatedHomeworkAttachments(body.attachments,pending,item.attachments);
+        for(const id of attachmentValidation.consumedIds||[])delete pending[id];
+        if(!attachmentValidation.ok&&attachmentValidation.reason==='limit')return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
+        if(!attachmentValidation.ok&&attachmentValidation.reason==='old')return sendJson(res,400,{error:'Одно из старых вложений не найдено.'});
+        if(!attachmentValidation.ok&&attachmentValidation.reason==='stale')return sendJson(res,400,{error:'Новое вложение устарело. Прикрепи его ещё раз.'});
+        if(!attachmentValidation.ok)return sendJson(res,400,{error:'Некорректное вложение.'});
+        item.attachments=attachmentValidation.attachments||[];
+        added=attachmentValidation.added||[];
       }
       Object.assign(item,{subject,homework,updatedAt:new Date().toISOString()});saveDb();
       if(g.chatId)try{
