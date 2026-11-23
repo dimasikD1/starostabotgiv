@@ -328,3 +328,18 @@ export function formatStudentRosterSummary(groupTitle: string, studentCount: num
 export function parseStudentNameArgument(messageText: string): string {
   return messageText.replace(/^\/student(?:@\S+)?/i, '').trim();
 }
+
+/** Format a student contact card using the legacy Telegram HTML layout. */
+export function formatStudentCardText(card: StudentCardData | undefined): string {
+  if (!card) return '❌ Студент не найден.';
+  const escape = (value: string): string => value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const username = card.username ? '@' + card.username.replace(/^@/, '') : 'не указан';
+  const phone = card.phone || 'не указан';
+  const telegramId = card.telegramId || 'не указан';
+  return '👤 <b>' + escape(card.name) + '</b>\\n\\n🔹 Username: ' + escape(username) +
+    '\\n📞 Телефон: <code>' + escape(phone) + '</code>\\n🆔 Telegram ID: <code>' +
+    escape(telegramId) + '</code>';
+}
