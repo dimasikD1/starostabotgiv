@@ -4,6 +4,7 @@ import {
   removeStudentAt,
   updateStudentField,
   confirmStudentRosterImport,
+  clearStudentRosterImport,
   type StudentUser,
   type StudentField,
   type StudentRecord,
@@ -68,4 +69,14 @@ export function confirmStudentRosterImportAndSave(
   const result = confirmStudentRosterImport(group, user, names);
   save();
   return result;
+}
+
+
+/** Cancel a student roster import and persist the cleared workflow state. */
+export function cancelStudentRosterImportAndSave(
+  user: StudentUser,
+  save: () => void
+): void {
+  clearStudentRosterImport(user);
+  save();
 }
