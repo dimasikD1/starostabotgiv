@@ -1216,7 +1216,7 @@ bot.action('studentimport:confirm', async ctx => {
 bot.action('studentimport:cancel', async ctx => {
  const u=normalizeUser(user(ctx.from.id));
  if(u.pendingStudentImportChatId && String(u.pendingStudentImportChatId)!==String(ctx.chat.id))return ctx.answerCbQuery('Открой сообщение в исходной группе.');
- delete u.pendingStudentImport;delete u.pendingStudentImportChatId;delete u.pendingStudentImportReview;saveDb();
+ cancelStudentRosterImportAndSave(u,saveDb);
  await ctx.answerCbQuery('Импорт отменён');
  return ctx.editMessageText('❌ Импорт списка отменён.');
 });
