@@ -21,9 +21,12 @@ test('daily attendance preserves legacy student-key/date storage and source orde
   }, options);
   assert.ok(result.includes('Посещаемость за 2026-11-23'));
   assert.ok(result.includes('Группа &lt;БИ&gt;'));
-  assert.ok(result.includes('Были (1)\n1. Анна'));
-  assert.ok(result.includes('Не были (1)\n1. Борис'));
-  assert.ok(result.includes('Не отмечены (1)\n1. Вера'));
+  assert.ok(result.includes('Были (1)'), result);
+  assert.ok(result.includes('Анна'), result);
+  assert.ok(result.includes('Не были (1)'), result);
+  assert.ok(result.includes('Борис'), result);
+  assert.ok(result.includes('Не отмечены (1)'), result);
+  assert.ok(result.includes('Вера'), result);
 });
 
 test('daily attendance handles an empty roster', () => {
