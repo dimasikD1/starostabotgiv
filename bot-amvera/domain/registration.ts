@@ -65,3 +65,16 @@ export function completeFullNameRegistration<T extends FullNameRegistrationUser>
   user.pendingFullName = false;
   return validation;
 }
+
+/** Resolve a /group argument to one of the configured study-group names. */
+export function parseStudyGroupSelection(
+  value: unknown,
+  groups: Record<string, string>
+): string | undefined {
+  const input = String(value ?? '').trim();
+  if (!input) return undefined;
+  for (const [number, name] of Object.entries(groups)) {
+    if (input === number || input === name) return name;
+  }
+  return undefined;
+}
