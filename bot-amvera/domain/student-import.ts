@@ -32,12 +32,12 @@ export function parseStudentNames(raw: unknown): string[] {
 }
 
 /** Build the Telegram HTML preview for a parsed roster before replacement. */
-export function formatStudentImportPreview(groupTitle: string, names: string[]): string {
+export function formatStudentImportPreview(groupTitle: string, names: string[], numbered = false): string {
   const escape = (value: string): string => value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  const preview = names.map(name => escape(name)).join('\n');
+  const preview = names.map((name, index) => (numbered ? String(index + 1) + '. ' : '') + escape(name)).join('\n');
   return '📝 <b>Проверь список студентов</b>\n👥 Группа: <b>' + escape(groupTitle) +
     '</b>\n👨‍🎓 Найдено: <b>' + names.length + '</b>\n\n' + preview +
     '\n\nПосле подтверждения текущий список группы будет заменён этим списком.';
