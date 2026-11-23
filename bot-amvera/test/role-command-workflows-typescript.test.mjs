@@ -47,3 +47,23 @@ test('removes roles within the requested chat and persists', () => {
   assert.equal(user.role, 'student');
   assert.equal(saves, 1);
 });
+
+import { setSelfAsStudentAndSave } from '../../.test-build/domain/role-command-workflows.js';
+
+test('self-demotion clears all group roles and persists the student role once', () => {
+  const groups = [
+    { starostaId: '77', zamId: '' },
+    { starostaId: '', zamId: '77' },
+    { starostaId: '88', zamId: '' }
+  ];
+  const user = { role: 'starosta', groupChatId: '-100' };
+  let saves = 0;
+  const removed = setSelfAsStudentAndSave(groups, user, '77', () => saves++);
+  assert.equal(removed, 2);
+  assert.equal(groups[0].starostaId, '');
+  assert.equal(groups[1].zamId, '');
+  assert.equal(groups[2].starostaId, '88');
+  assert.equal(user.role, 'student');
+  assert.equal(user.groupChatId, '-100');
+  assert.equal(saves, 1);
+});
