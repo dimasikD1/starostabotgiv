@@ -251,7 +251,7 @@ test('parses one-based student removal arguments and rejects invalid roster inde
 test('formats the student roster summary and escapes Telegram HTML characters', () => {
   assert.equal(
     formatStudentRosterSummary('Группа <1> & "А"', 12),
-    '👥 <b>Группа &lt;1&gt; &amp; &quot;А&quot;</b>\\n👨‍🎓 Всего студентов: <b>12</b>\\n\\nНажми на студента, чтобы открыть карточку и изменить контакты.'
+    '👥 <b>Группа &lt;1&gt; &amp; &quot;А&quot;</b>\n👨‍🎓 Всего студентов: <b>12</b>\n\nНажми на студента, чтобы открыть карточку и изменить контакты.'
   );
   assert.match(formatStudentRosterSummary('Группа', Number.NaN), /Всего студентов: <b>0<\\/b>/);
 });
