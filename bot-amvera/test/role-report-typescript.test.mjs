@@ -59,10 +59,12 @@ test('builds role report rows with scoped students, owners excluded, and unliste
     '999': { group: 'Group A', fullName: 'Platform owner' }
   };
   const rows = buildRoleReportMemberRows(group, users, id => id === '999');
+  // Existing profiles retain their database insertion order; only role holders
+  // missing from the roster are prepended by the legacy report behavior.
   assert.deepEqual(rows, [
-    { id: '102', name: '@deputy', role: '⭐ Заместитель' },
     { id: '100', name: 'Student One', role: '👨‍🎓 Студент' },
-    { id: '101', name: 'Starosta', role: '👑 Староста' }
+    { id: '101', name: 'Starosta', role: '👑 Староста' },
+    { id: '102', name: '@deputy', role: '⭐ Заместитель' }
   ]);
 });
 
