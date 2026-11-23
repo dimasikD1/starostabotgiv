@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttendanceStatistics } from '../../.test-build/domain/attendance-statistics.js';
+import { buildAttendanceStatistics, addAttendanceStudentNames } from '../../.test-build/domain/attendance-statistics.js';
 
 const students = [{ name: 'Аня', telegramId: 1 }, { name: 'Борис', telegramId: 2 }, { name: 'Вера', telegramId: 3 }];
 const key = student => student.telegramId || student.name;
