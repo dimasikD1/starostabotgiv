@@ -533,12 +533,8 @@ async function checkWeeklySchedules() {
       const chatId = g.chatId;
       const key = pending.key;
       try {
-        const scheduleGroup = String(g.scheduleGroup || '').trim();
-        if (!Object.values(STUDY_GROUPS).includes(scheduleGroup)) {
-          throw new Error('Для чата не настроена корректная учебная группа. Используй /setgroup.');
-        }
         const built = await buildWeeklyScheduleText({
-          groups: [scheduleGroup],
+          groups: Object.values(STUDY_GROUPS),
           range,
           loadSchedule: getSchedule,
           logger: console
@@ -2220,20 +2216,22 @@ bot.command('publishweek', async ctx => {
   let sent = 0;
   let pinned = 0;
   const details = [];
+  let built;
+  try {
+    built = await buildWeeklyScheduleText({
+      groups: Object.values(STUDY_GROUPS),
+      range,
+      loadSchedule: getSchedule,
+      logger: console
+    });
+  } catch (error) {
+    console.error('[publishweek] schedule build failed:', error?.message || error);
+    return ctx.reply('❌ Не удалось получить расписание учебных групп. Подробности есть в логах Amvera.');
+  }
+  const safeMessage = built.text.length > 3900 ? built.text.slice(0, 3850) + '\n\n… расписание сокращено.' : built.text;
 
   for (const g of targetGroups) {
     try {
-      const scheduleGroup = String(g.scheduleGroup || '').trim();
-      if (!Object.values(STUDY_GROUPS).includes(scheduleGroup)) {
-        throw new Error('Для чата не настроена корректная учебная группа. Используй /setgroup.');
-      }
-      const built = await buildWeeklyScheduleText({
-        groups: [scheduleGroup],
-        range,
-        loadSchedule: getSchedule,
-        logger: console
-      });
-      const safeMessage = built.text.length > 3900 ? built.text.slice(0, 3850) + '\n\n… расписание сокращено.' : built.text;
       const sentMessage = await ctx.telegram.sendMessage(g.chatId, safeMessage);
       sent++;
       try {
