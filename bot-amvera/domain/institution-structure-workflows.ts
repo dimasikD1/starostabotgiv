@@ -2,9 +2,12 @@ import {
   createFaculty,
   createDirection,
   createCourse,
+  linkStudyGroupToCourse,
+  unlinkStudyGroupFromStructure,
   type InstitutionStructure,
   type FacultyNode,
   type DirectionNode,
+  type StudyGroupReference,
   type StructureResult
 } from './institution-structure.js';
 
@@ -26,6 +29,28 @@ export function createCourseAndSave(
   direction: DirectionNode, name: string, id: string, createdAt: string, save: () => void
 ): StructureResult {
   const result = createCourse(direction, name, id, createdAt);
+  if (result.ok) save();
+  return result;
+}
+
+export function linkStudyGroupToCourseAndSave(
+  institution: InstitutionStructure,
+  group: StudyGroupReference,
+  courseId: string,
+  linkedAt: string,
+  save: () => void
+): StructureResult {
+  const result = linkStudyGroupToCourse(institution, group, courseId, linkedAt);
+  if (result.ok) save();
+  return result;
+}
+
+export function unlinkStudyGroupFromStructureAndSave(
+  institution: InstitutionStructure,
+  group: StudyGroupReference,
+  save: () => void
+): { ok: true; removed: number } | { ok: false; reason: 'institution_mismatch' | 'group_reference_invalid' } {
+  const result = unlinkStudyGroupFromStructure(institution, group);
   if (result.ok) save();
   return result;
 }
