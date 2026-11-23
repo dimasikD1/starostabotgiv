@@ -37,6 +37,7 @@ import { loadMiniAppSchedule } from './api/miniapp-schedule-loader-entry.mjs';
 import { updateMiniAppProfile, clearMiniAppStudentRoster } from './api/miniapp-profile-entry.mjs';
 import { updateMiniAppAttendance } from './api/miniapp-attendance-entry.mjs';
 import { publishMiniAppAnnouncement } from './api/miniapp-announcement-entry.mjs';
+import { createMiniAppHomework, updateMiniAppHomeworkRecord, deleteMiniAppHomeworkRecord } from './api/miniapp-records-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2594,16 +2595,20 @@ async function handleMiniAppApi(req,res,url) {
       if(!attachmentValidation.ok&&attachmentValidation.reason==='limit')return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
       if(!attachmentValidation.ok)return sendJson(res,400,{error:'Одно из вложений устарело. Прикрепи файл ещё раз.'});
       const attachments=attachmentValidation.attachments||[];
-      const item={id:crypto.randomUUID(),subject,homework,attachments,createdAt:new Date().toISOString(),authorId:String(tgUser.id),completedBy:{}};
-      g.homework||=[];g.homework.push(item);if(g.homework.length>100)g.homework=g.homework.slice(-100);
-      for(const entry of requested)delete pending[String(entry.id)];
-      saveDb();
-      try {
-        await bot.telegram.sendMessage(g.chatId,'📚 <b>Новое домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
-        if(attachments.length===1){const a=attachments[0];if(a.type==='photo')await bot.telegram.sendPhoto(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});else await bot.telegram.sendVideo(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});}
-        else if(attachments.length>1)await bot.telegram.sendMediaGroup(g.chatId,attachments.map(a=>({type:a.type,media:a.fileId})));
-      } catch(e) {console.error('[homework group publish]',e?.message||e);}
-      return sendJson(res,200,{ok:true,homework:item});
+      const result = await createMiniAppHomework(g, String(tgUser.id), {
+        id:crypto.randomUUID(),subject,homework,attachments,
+        createdAt:new Date().toISOString(),authorId:String(tgUser.id),
+        requestedAttachmentIds:requested.map(entry=>String(entry.id))
+      }, {
+        save:saveDb,
+        afterCreate:async item => {
+          await bot.telegram.sendMessage(g.chatId,'📚 <b>Новое домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
+          if(attachments.length===1){const a=attachments[0];if(a.type==='photo')await bot.telegram.sendPhoto(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});else await bot.telegram.sendVideo(g.chatId,a.fileId,{caption:'📎 Материал к ДЗ: '+subject});}
+          else if(attachments.length>1)await bot.telegram.sendMediaGroup(g.chatId,attachments.map(a=>({type:a.type,media:a.fileId})));
+        },
+        onPublishError:(_operation,error)=>console.error('[homework group publish]',error?.message||error)
+      });
+      return sendJson(res,200,{ok:true,homework:result.record});
     } catch(e) {console.error('[miniapp homework create]',e?.message||e);return sendJson(res,502,{error:'Не удалось создать домашнее задание.'});}
   }
   if(req.method==='PUT' && url.pathname==='/api/homework') {
@@ -2615,6 +2620,7 @@ async function handleMiniAppApi(req,res,url) {
       if(!fields.ok)return sendJson(res,400,{error:'Проверь предмет и текст задания.'});
       const subject=fields.subject,homework=fields.homework;
       let added=[];
+      let updatedAttachments;
       if(Array.isArray(body.attachments)){
         const pending=g.pendingHomeworkMedia?.[String(tgUser.id)]||{};
         const attachmentValidation=validateUpdatedHomeworkAttachments(body.attachments,pending,item.attachments);
@@ -2623,26 +2629,31 @@ async function handleMiniAppApi(req,res,url) {
         if(!attachmentValidation.ok&&attachmentValidation.reason==='old')return sendJson(res,400,{error:'Одно из старых вложений не найдено.'});
         if(!attachmentValidation.ok&&attachmentValidation.reason==='stale')return sendJson(res,400,{error:'Новое вложение устарело. Прикрепи его ещё раз.'});
         if(!attachmentValidation.ok)return sendJson(res,400,{error:'Некорректное вложение.'});
-        item.attachments=attachmentValidation.attachments||[];
+        updatedAttachments=attachmentValidation.attachments||[];
         added=attachmentValidation.added||[];
       }
-      Object.assign(item,{subject,homework,updatedAt:new Date().toISOString()});saveDb();
-      if(g.chatId)try{
-        await bot.telegram.sendMessage(g.chatId,'✏️ <b>Изменено домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
-        if(added.length===1){const a=added[0];if(a.type==='photo')await bot.telegram.sendPhoto(g.chatId,a.fileId,{caption:'📎 Дополнительный материал к ДЗ: '+subject});else await bot.telegram.sendVideo(g.chatId,a.fileId,{caption:'📎 Дополнительный материал к ДЗ: '+subject});}
-        else if(added.length>1)await bot.telegram.sendMediaGroup(g.chatId,added.map(a=>({type:a.type,media:a.fileId})));
-      }catch(e){console.error('[homework update notify]',e?.message||e);}
-      return sendJson(res,200,{ok:true,homework:item});
+      const result = await updateMiniAppHomeworkRecord(g,id,{
+        subject,homework,updatedAt:new Date().toISOString(),attachments:updatedAttachments
+      },added,{
+        save:saveDb,
+        afterUpdate:async (_record,newAttachments)=>{
+          if(!g.chatId)return;
+          await bot.telegram.sendMessage(g.chatId,'✏️ <b>Изменено домашнее задание</b>\n\n<b>'+escapeHtml(subject)+'</b>\n'+escapeHtml(homework),{parse_mode:'HTML'});
+          if(newAttachments.length===1){const a=newAttachments[0];if(a.type==='photo')await bot.telegram.sendPhoto(g.chatId,a.fileId,{caption:'📎 Дополнительный материал к ДЗ: '+subject});else await bot.telegram.sendVideo(g.chatId,a.fileId,{caption:'📎 Дополнительный материал к ДЗ: '+subject});}
+          else if(newAttachments.length>1)await bot.telegram.sendMediaGroup(g.chatId,newAttachments.map(a=>({type:a.type,media:a.fileId})));
+        },
+        onPublishError:(_operation,error)=>console.error('[homework update notify]',error?.message||error)
+      });
+      if(!result.ok)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
+      return sendJson(res,200,{ok:true,homework:result.record});
     } catch(e) {console.error('[miniapp homework update]',e?.message||e);return sendJson(res,400,{error:'Не удалось изменить ДЗ.'});}
   }
   if(req.method==='DELETE' && url.pathname==='/api/homework') {
     try {
-      const body=await readJsonBody(req),idValidation=validateHomeworkRecordId(body.id),before=(g.homework||[]).length;
+      const body=await readJsonBody(req),idValidation=validateHomeworkRecordId(body.id);
       if(!idValidation.ok)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
-      const id=idValidation.id;
-      g.homework=(g.homework||[]).filter(x=>String(x.id||'')!==id);
-      if(g.homework.length===before)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
-      saveDb();return sendJson(res,200,{ok:true});
+      if(!deleteMiniAppHomeworkRecord(g,idValidation.id,saveDb))return sendJson(res,404,{error:'Домашнее задание не найдено.'});
+      return sendJson(res,200,{ok:true});
     } catch(e) {console.error('[miniapp homework delete]',e?.message||e);return sendJson(res,400,{error:'Не удалось удалить ДЗ.'});}
   }
   if(req.method==='POST' && url.pathname==='/api/attendance') {
