@@ -280,7 +280,13 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
     u.groupChatId = String(linkedGroup.chatId || '');
     u.institutionId = String(linkedGroup.institutionId || DEFAULT_INSTITUTION_ID);
   }
+  // Сохраняем выбор до любых запросов к Telegram: ошибка прав бота
+  // не должна отменять регистрацию или показываться как ошибка выбора группы.
+  saveDb();
+  await ctx.answerCbQuery('Группа сохранена');
+
   const verificationChatId = String(u.pendingVerificationChatId || '');
+  let accessRestored = false;
   if (verificationChatId) {
     try {
       await ctx.telegram.restrictChatMember(verificationChatId, ctx.from.id, {
@@ -299,24 +305,36 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
         can_pin_messages: true,
         can_manage_topics: true
       });
-      await ctx.telegram.sendMessage(verificationChatId, '✅ <b>' + escapeHtml(u.fullName || 'Участник') + '</b> прошёл(ла) проверку, выбрал(а) группу «' + escapeHtml(selected) + '» и теперь может писать.', { parse_mode: 'HTML' });
+      accessRestored = true;
       delete u.pendingVerificationChatId;
       delete u.pendingVerificationChatTitle;
       delete u.pendingVerificationAt;
       delete u.verificationRestrictionApplied;
       saveDb();
-      await ctx.answerCbQuery('Проверка пройдена!');
-      return ctx.editMessageText('✅ ФИО сохранено. Учебная группа: <b>' + escapeHtml(selected) + '</b>.\n\nПроверка пройдена, доступ к группе открыт.', { parse_mode: 'HTML' });
+      try {
+        await ctx.telegram.sendMessage(verificationChatId, '✅ <b>' + escapeHtml(u.fullName || 'Участник') + '</b> выбрал(а) учебную группу «' + escapeHtml(selected) + '».', { parse_mode: 'HTML' });
+      } catch (notifyError) {
+        console.error('[registration] Не удалось отправить уведомление в исходную группу:', notifyError?.response?.description || notifyError?.message || notifyError);
+      }
     } catch (e) {
-      console.error('[registration] Не удалось открыть доступ после выбора группы:', e.message || e);
-      saveDb();
-      await ctx.answerCbQuery('Не удалось открыть доступ', { show_alert: true });
-      return ctx.reply('❌ Группа сохранена, но не удалось снять ограничение в исходной группе. Попроси администратора проверить права бота.', { parse_mode: 'HTML' });
+      const description = e?.response?.description || e?.description || e?.message || String(e);
+      const errorCode = e?.response?.error_code || e?.code || 'unknown';
+      console.error('[registration] Выбор группы сохранён, но Telegram не снял ограничение:', {
+        chatId: verificationChatId,
+        userId: String(ctx.from.id),
+        errorCode,
+        description
+      });
+      // pendingVerification* сохраняем: администратор сможет снять ограничение вручную,
+      // а повторный выбор группы снова попробует восстановить доступ.
     }
   }
-  saveDb();
-  await ctx.answerCbQuery('Группа сохранена');
-  await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.');
+
+  const statusText = accessRestored
+    ? '✅ Твоя учебная группа сохранена: <b>' + escapeHtml(selected) + '</b>.\\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.\\n\\n✅ Доступ к исходной группе восстановлен.'
+    : '✅ Твоя учебная группа сохранена: <b>' + escapeHtml(selected) + '</b>.\\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.' +
+      (verificationChatId ? '\\n\\n⚠️ Если в исходной группе ты пока не можешь писать, попроси администратора снять ограничение вручную.' : '');
+  return ctx.editMessageText(statusText, { parse_mode: 'HTML' });
 });
 
 const managerMenu = Markup.keyboard([
