@@ -5,7 +5,7 @@ export interface MiniAppAnnouncementGroup<TAnnouncement> {
 
 export type MiniAppAnnouncementTextResult =
   | { ok: true; text: string }
-  | { ok: false; reason: 'empty' | 'length' };
+  | { ok: false; reason: 'empty' | 'too_long' };
 
 export type MiniAppAnnouncementResult<TAnnouncement> =
   | { ok: false; reason: 'empty' | 'length' | 'no-chat' }
