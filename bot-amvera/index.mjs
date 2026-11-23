@@ -1643,9 +1643,8 @@ bot.command('addinstitution', async ctx => {
   const created = createInstitutionAndSave(db.institutions, {
     id, name, shortName, city, status: 'active', createdAt: new Date().toISOString(),
     createdBy: String(ctx.from.id), adminIds: [], faculties: {}
-  });
+  }, saveDb);
   if (!created.ok) return ctx.reply('❌ Не удалось зарегистрировать учебное заведение.');
-  saveDb();
   console.log('[institutions] Institution created:', id, 'by owner:', String(ctx.from.id));
   return ctx.reply('✅ <b>Учебное заведение зарегистрировано!</b>\n\n🏫 Название: <b>' + escapeHtml(name) + '</b>\n' +
     (shortName ? '🔖 Сокращение: ' + escapeHtml(shortName) + '\n' : '') +
@@ -1681,7 +1680,6 @@ bot.command('deleteinstitution', async ctx => {
     if (deletion.reason === 'has_groups') return ctx.reply('⛔ Удаление отменено: к этому заведению привязаны учебные группы. Сначала перенеси их в другое заведение.');
     return ctx.reply('❌ Не удалось удалить учебное заведение.');
   }
-  saveDb();
   console.log('[institutions] Institution deleted:', id, 'by owner:', String(ctx.from.id));
   return ctx.reply('✅ Учебное заведение «' + escapeHtml(institution.name || 'Без названия') + '» удалено.\n🆔 <code>' + escapeHtml(id) + '</code>\nОсновное заведение и его группы не затронуты.', { parse_mode: 'HTML' });
 });
@@ -1698,7 +1696,6 @@ bot.command('setinstadmin', async ctx => {
   if (isOwner(userId)) return ctx.reply('Этот пользователь уже является владельцем платформы.');
   const assignment = addInstitutionAdminAndSave(institution, userId, OWNER_TELEGRAM_IDS, saveDb);
   if (!assignment.ok) return ctx.reply('❌ Не удалось назначить администратора.');
-  saveDb();
   console.log('[institutions] Admin assigned:', userId, 'institution:', institutionId, 'by owner:', String(ctx.from.id));
   return ctx.reply(
     '✅ Администратор назначен.\n\n🏫 ' + escapeHtml(institution.name || institutionId) +
@@ -1719,7 +1716,6 @@ bot.command('removeinstadmin', async ctx => {
   const removal = removeInstitutionAdminAndSave(institution, userId, saveDb);
   if (!removal.ok) return ctx.reply('Формат: /removeinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
   if (removal.status === 'not_found') return ctx.reply('ℹ️ Этот пользователь не числится администратором данного заведения.');
-  saveDb();
   console.log('[institutions] Admin removed:', userId, 'institution:', institutionId, 'by owner:', String(ctx.from.id));
   return ctx.reply('✅ Администратор <code>' + escapeHtml(userId) + '</code> снят с должности в заведении «' + escapeHtml(institution.name || institutionId) + '».', { parse_mode: 'HTML' });
 });
