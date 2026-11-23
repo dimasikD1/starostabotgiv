@@ -42,3 +42,36 @@ test('filters role report groups by institution and keeps all groups for platfor
   assert.deepEqual(filterRoleReportGroups(groups, true, []), groups);
   assert.deepEqual(filterRoleReportGroups(groups, false, []), []);
 });
+
+
+import { buildRoleReportMemberRows } from '../domain/.build/role-report.js';
+
+test('builds role report rows with scoped students, owners excluded, and unlisted role holders retained', () => {
+  const [group] = groupRoleReportSources([
+    { institutionId: 'inst', studyGroup: 'Group A', chatId: '-10', starostaId: '101', zamId: '102' },
+    { institutionId: 'inst', studyGroup: 'Group A', chatId: '-11' }
+  ]);
+  const users = {
+    '100': { group: 'Group A', fullName: 'Student One', groupChatId: '-10' },
+    '101': { group: 'Group A', fullName: 'Starosta', groupChatId: '-10' },
+    '102': { group: 'Group A', username: 'deputy', groupChatId: '-11' },
+    '103': { group: 'Group A', fullName: 'Other chat', groupChatId: '-99' },
+    '999': { group: 'Group A', fullName: 'Platform owner' }
+  };
+  const rows = buildRoleReportMemberRows(group, users, id => id === '999');
+  assert.deepEqual(rows, [
+    { id: '102', name: '@deputy', role: '⭐ Заместитель' },
+    { id: '100', name: 'Student One', role: '👨‍🎓 Студент' },
+    { id: '101', name: 'Starosta', role: '👑 Староста' }
+  ]);
+});
+
+test('keeps assigned role holders even if their profile is missing', () => {
+  const [group] = groupRoleReportSources([
+    { institutionId: 'inst', studyGroup: 'Group B', chatId: '-20', starostaId: '201', zamId: '202' }
+  ]);
+  assert.deepEqual(buildRoleReportMemberRows(group, {}, () => false), [
+    { id: '202', name: 'ID 202', role: '⭐ Заместитель' },
+    { id: '201', name: 'ID 201', role: '👑 Староста' }
+  ]);
+});
