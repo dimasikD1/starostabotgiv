@@ -57,7 +57,7 @@ import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } fr
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
-import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId } from './domain/role-report-entry.mjs';
+import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId, filterRoleReportGroups } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
@@ -1426,7 +1426,7 @@ bot.command(['allroles', 'roleslist'], async ctx => {
   if(!owner && !adminInstitutionIds.length) {
     return ctx.reply('🔒 Общий список ролей доступен владельцу бота и администраторам учебных заведений.');
   }
-  const rawGroups=allStudyGroups().filter(g=>owner || adminInstitutionIds.includes(String(g.institutionId||'')));
+  const rawGroups=filterRoleReportGroups(allStudyGroups(),owner,adminInstitutionIds);
   // Один и тот же курс/группа может быть зарегистрирован в нескольких чатах.
   // Объединение карточек выполняет типизированный доменный модуль.
   const grouped=groupRoleReportSources(rawGroups);
