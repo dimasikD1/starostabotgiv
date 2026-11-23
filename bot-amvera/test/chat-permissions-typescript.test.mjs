@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOpenChatPermissions } from '../../.test-build/domain/chat-permissions.js';
+import { buildOpenChatPermissions, buildVerifiedMemberChatPermissions } from '../../.test-build/domain/chat-permissions.js';
 
 test('open-chat policy enables the same ten participant permissions', () => {
   assert.deepEqual(buildOpenChatPermissions(), {
