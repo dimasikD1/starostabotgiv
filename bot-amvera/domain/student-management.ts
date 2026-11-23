@@ -323,3 +323,8 @@ export function formatStudentRosterSummary(groupTitle: string, studentCount: num
   const count = Number.isFinite(studentCount) ? Math.max(0, Math.trunc(studentCount)) : 0;
   return '👥 <b>' + escapedTitle + '</b>\n👨‍🎓 Всего студентов: <b>' + count + '</b>\n\nНажми на студента, чтобы открыть карточку и изменить контакты.';
 }
+
+/** Extract the name supplied to /student, accepting an optional bot username. */
+export function parseStudentNameArgument(messageText: string): string {
+  return messageText.replace(/^\\/student(?:@\\S+)?/i, '').trim();
+}
