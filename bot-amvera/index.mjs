@@ -53,7 +53,7 @@ import { validateHomeworkMediaUpload } from './api/homework-media-validation-ent
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
-import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
+import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId } from './domain/role-report-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
@@ -1261,13 +1261,11 @@ bot.on('text', async (ctx,next) => {
   }
  }
  if (u.pendingFullName && !raw.startsWith('/')) {
-  const nameValidation = validateAndNormalizeFullName(raw);
+  const nameValidation = completeFullNameRegistration(u, raw);
   if (!nameValidation.ok) {
    return ctx.reply('❌ Не получилось распознать ФИО. Отправь фамилию и имя (при наличии — отчество) буквами, одним сообщением.');
   }
   const fullName = nameValidation.value;
-  u.fullName = fullName;
-  u.pendingFullName = false;
   const verificationChatId = String(u.pendingVerificationChatId || '');
   saveDb();
   if (verificationChatId) {
