@@ -128,3 +128,45 @@ export function isAttendancePollDue(currentMinutes: number, lessonStartMinutes: 
   if (!Number.isFinite(currentMinutes) || !Number.isFinite(lessonStartMinutes)) return false;
   return currentMinutes >= lessonStartMinutes - 10 && currentMinutes <= lessonStartMinutes - 9;
 }
+
+
+export interface AttendancePollReportInput {
+  subject?: unknown;
+  date?: unknown;
+  time?: unknown;
+  responses?: Record<string, Partial<AttendancePollResponse>>;
+}
+
+export interface AttendancePollReport {
+  subject: string;
+  date: string;
+  time: string;
+  presentCount: number;
+  absentCount: number;
+  unansweredCount: number;
+  names: string[];
+}
+
+/** Prepare the latest poll report while preserving the legacy display labels and counts. */
+export function buildAttendancePollReport(
+  studentCount: number,
+  latest: AttendancePollReportInput
+): AttendancePollReport {
+  const answers = Object.values(latest.responses || {});
+  const presentCount = answers.filter(answer => answer.status === 'present').length;
+  const absentCount = answers.filter(answer => answer.status === 'absent').length;
+  const names = answers.map(answer =>
+    (answer.firstName || 'Студент') +
+    (answer.username ? ' (@' + answer.username + ')' : '') +
+    (answer.status === 'present' ? ' — ✅ Будет' : answer.status === 'absent' ? ' — ❌ Не будет' : '')
+  );
+  return {
+    subject: String(latest.subject ?? ''),
+    date: String(latest.date ?? ''),
+    time: String(latest.time ?? ''),
+    presentCount,
+    absentCount,
+    unansweredCount: Math.max(0, studentCount - answers.length),
+    names
+  };
+}
