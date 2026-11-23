@@ -17,6 +17,7 @@ import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
+import { getMissingTelegramBotPermissions } from './domain/telegram-bot-permissions-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -185,10 +186,7 @@ bot.on('my_chat_member', async ctx => {
     let memberInfo = null;
     try { memberInfo = await ctx.telegram.getChatMember(chat.id, ctx.botInfo.id); } catch {}
     const rights = memberInfo || newMember;
-    const missing = [];
-    if (!rights?.can_delete_messages) missing.push('удаление сообщений');
-    if (!rights?.can_restrict_members) missing.push('ограничение участников');
-    if (!rights?.can_pin_messages) missing.push('закрепление сообщений');
+    const missing = getMissingTelegramBotPermissions(rights);
     const message = missing.length
       ? '⚠️ <b>Бот добавлен в чат, но не все права выданы.</b>\n\nВ настройках администраторов включи: ' + missing.join(', ') + '.'
       : '✅ <b>Бот подключён к существующему чату!</b>\nЧат зарегистрирован, необходимые права администратора выданы. Существующая переписка и данные не затронуты.';
