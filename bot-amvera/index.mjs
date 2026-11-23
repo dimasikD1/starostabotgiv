@@ -909,11 +909,11 @@ bot.command('pollreport', async ctx => {
   if (!latest) return ctx.reply('Пока нет автоматических опросов посещаемости для «' + g.title + '».');
   const report = buildAttendancePollReport((g.students || []).length, latest);
   return ctx.reply(
-    '📊 <b>Ответы на последний опрос</b>\\n👥 ' + escapeHtml(g.title) +
-    '\\n📚 ' + escapeHtml(report.subject) + '\\n📅 ' + report.date + ' в ' + report.time +
-    '\\n\\n✅ Будут: <b>' + report.presentCount + '</b>\\n❌ Не будут: <b>' + report.absentCount +
-    '</b>\\n▫️ Не ответили: <b>' + report.unansweredCount +
-    '</b>\\n\\n' + (report.names.length ? report.names.map(escapeHtml).join('\\n') : 'Ответов пока нет.'),
+    '📊 <b>Ответы на последний опрос</b>\n👥 ' + escapeHtml(g.title) +
+    '\n📚 ' + escapeHtml(report.subject) + '\n📅 ' + report.date + ' в ' + report.time +
+    '\n\n✅ Будут: <b>' + report.presentCount + '</b>\n❌ Не будут: <b>' + report.absentCount +
+    '</b>\n▫️ Не ответили: <b>' + report.unansweredCount +
+    '</b>\n\n' + (report.names.length ? report.names.map(escapeHtml).join('\n') : 'Ответов пока нет.'),
     { parse_mode: 'HTML' }
   );
 });
