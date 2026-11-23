@@ -18,28 +18,29 @@ function subscriptionUntil(user: UnknownRecord): number {
 export function buildOwnerStatsMessage(
   usersValue: unknown,
   groupsValue: unknown,
+  ownerIds: readonly string[] = [],
   now = Date.now()
 ): string {
   const users = asRecord(usersValue);
   const groups = asRecord(groupsValue);
   const entries = Object.entries(users);
-  const nonOwners = entries.filter(([id]) => id !== '');
+  const nonOwners = entries.filter(([id]) => !ownerIds.includes(id));
   const active = nonOwners.filter(([id, value]) => {
     const user = asRecord(value);
-    return id !== '' && (Boolean(user.subscriptionForever) || subscriptionUntil(user) > now);
+    return Boolean(user.subscriptionForever) || subscriptionUntil(user) > now;
   }).length;
   const lifetime = nonOwners.filter(([id, value]) => {
     const user = asRecord(value);
-    return id !== '' && Boolean(user.subscriptionForever);
+    return Boolean(user.subscriptionForever);
   }).length;
   const expired = nonOwners.filter(([id, value]) => {
     const user = asRecord(value);
-    return id !== '' && !user.subscriptionForever &&
+    return !user.subscriptionForever &&
       subscriptionUntil(user) > 0 && subscriptionUntil(user) <= now;
   }).length;
   const noSubscription = nonOwners.filter(([id, value]) => {
     const user = asRecord(value);
-    return id !== '' && !user.subscriptionForever && subscriptionUntil(user) <= 0;
+    return !user.subscriptionForever && subscriptionUntil(user) <= 0;
   }).length;
   const starostas = entries.filter(([, value]) => asRecord(value).role === 'starosta').length;
   const students = entries.filter(([, value]) => (asRecord(value).role || 'student') === 'student').length;
