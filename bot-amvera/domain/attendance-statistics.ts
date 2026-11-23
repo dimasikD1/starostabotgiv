@@ -139,7 +139,7 @@ export function buildAttendanceStatistics(
     const attendanceHistory = historyEntries.flatMap(entry => {
       const status = asRecord(attendance[entry.key])[key];
       return status === 'present' || status === 'absent'
-        ? [{ date: entry.date, timeStart: entry.timeStart, subject: entry.subject, status }]
+        ? [{ date: entry.date, timeStart: entry.timeStart, subject: entry.subject, status: status as 'present' | 'absent' }]
         : [];
     });
 
