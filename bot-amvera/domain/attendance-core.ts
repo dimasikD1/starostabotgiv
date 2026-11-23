@@ -186,3 +186,19 @@ export function buildMiniAppAttendanceLessons<T>(
 
   return { todayLessons, scheduleLessons };
 }
+
+
+export interface ManualAttendanceMarkInput {
+  studentIndex: number;
+  status: 'present' | 'absent';
+}
+
+/** Parse the legacy /mark arguments; student bounds remain checked by the handler. */
+export function parseManualAttendanceMarkInput(commandText: unknown): ManualAttendanceMarkInput | undefined {
+  const text = String(commandText ?? '').replace(/^\\/mark(?:@\\S+)?/i, '').trim();
+  const parts = text.split(/\\s+/);
+  const studentIndex = Number(parts[0]) - 1;
+  const status = parts[1] === 'present' || parts[1] === 'absent' ? parts[1] : undefined;
+  if (!Number.isInteger(studentIndex) || studentIndex < 0 || !status) return undefined;
+  return { studentIndex, status };
+}
