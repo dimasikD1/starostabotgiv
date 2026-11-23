@@ -27,6 +27,7 @@ import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, u
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
 import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-groups-entry.mjs';
+import { registerGroup as registerGroupData, removeGroup as removeGroupData } from './domain/group-registry-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone } from './utils/time-zone-entry.mjs';
@@ -623,14 +624,11 @@ async function isGroupAdmin(ctx) {
 }
 
 function registerGroup(ctx) {
- const id=String(ctx.chat.id),old=db.groups[id]||{};
- db.groups[id]={...old,chatId:ctx.chat.id,title:ctx.chat.title||old.title||'Группа без названия',addedBy:old.addedBy||ctx.from.id,addedAt:old.addedAt||new Date().toISOString(),students:old.students||[],attendance:old.attendance||{}};
- ensureStudyGroups(db.groups[id]); saveDb();
+  registerGroupData(db, ctx.chat, ctx.from, { ensureStudyGroups, saveDb });
 }
 
 function removeGroup(ctx) {
-  delete db.groups[String(ctx.chat.id)];
-  saveDb();
+  removeGroupData(db, ctx.chat.id, saveDb);
 }
 
 
