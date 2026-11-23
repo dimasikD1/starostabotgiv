@@ -12,6 +12,7 @@ import { resolveScheduleGroupName, parseSetScheduleGroupArgument } from './sched
 import { parseGrantCommandInput, parseAdminTargetId } from './domain/admin-command-input-entry.mjs';
 import { buildOwnerStatsMessage } from './domain/owner-stats-entry.mjs';
 import { buildAttachedGroupsMessage } from './domain/attached-groups-entry.mjs';
+import { decideAttachCommand, decideDetachCommand } from './domain/group-attachment-command-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
@@ -1087,10 +1088,12 @@ bot.command('setgroup', async ctx => {
 });
 
 bot.command('attach', async ctx => {
-  if (!['group', 'supergroup'].includes(ctx.chat.type)) {
+  const chatType = ctx.chat.type;
+  if (decideAttachCommand(chatType, false) === 'not-group') {
     return ctx.reply('Эту команду нужно выполнить внутри группы, которую хочешь прикрепить.');
   }
-  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Прикреплять группу может только её администратор.');
+  const decision = decideAttachCommand(chatType, await isGroupAdmin(ctx));
+  if (decision === 'not-admin') return ctx.reply('❌ Прикреплять группу может только её администратор.');
   registerGroup(ctx);
   await ctx.reply(
     '✅ Группа прикреплена.\n\n' +
@@ -1099,8 +1102,10 @@ bot.command('attach', async ctx => {
 });
 
 bot.command('detach', async ctx => {
-  if (!['group', 'supergroup'].includes(ctx.chat.type)) return;
-  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Откреплять группу может только её администратор.');
+  const chatType = ctx.chat.type;
+  if (decideDetachCommand(chatType, false) === 'ignore') return;
+  const decision = decideDetachCommand(chatType, await isGroupAdmin(ctx));
+  if (decision === 'not-admin') return ctx.reply('❌ Откреплять группу может только её администратор.');
   removeGroup(ctx);
   await ctx.reply('✅ Группа откреплена от рассылки опросов.');
 });
