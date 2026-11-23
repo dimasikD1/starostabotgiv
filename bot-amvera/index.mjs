@@ -26,6 +26,7 @@ import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentFiel
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
+import { createInstitutionAndSave, deleteInstitutionAndSave, addInstitutionAdminAndSave, removeInstitutionAdminAndSave } from './domain/institution-workflows-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
 import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-groups-entry.mjs';
@@ -1639,7 +1640,7 @@ bot.command('addinstitution', async ctx => {
   );
   if (duplicate) return ctx.reply('⚠️ Такое учебное заведение уже зарегистрировано.\nID: <code>' + escapeHtml(duplicate.id) + '</code>', { parse_mode: 'HTML' });
   const id = 'inst_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-  const created = createInstitution(db.institutions, {
+  const created = createInstitutionAndSave(db.institutions, {
     id, name, shortName, city, status: 'active', createdAt: new Date().toISOString(),
     createdBy: String(ctx.from.id), adminIds: [], faculties: {}
   });
@@ -1674,7 +1675,7 @@ bot.command('deleteinstitution', async ctx => {
   if (!id) return ctx.reply('Формат: /deleteinstitution ID. Основное заведение удалить нельзя.');
   const institution = db.institutions?.[id];
   if (!institution) return ctx.reply('❌ Учебное заведение с таким ID не найдено.');
-  const deletion = deleteInstitution(db.institutions, id, db.groups, [DEFAULT_INSTITUTION_ID]);
+  const deletion = deleteInstitutionAndSave(db.institutions, id, db.groups, [DEFAULT_INSTITUTION_ID], saveDb);
   if (!deletion.ok) {
     if (deletion.reason === 'protected') return ctx.reply('⛔ Нельзя удалить основное учебное заведение.');
     if (deletion.reason === 'has_groups') return ctx.reply('⛔ Удаление отменено: к этому заведению привязаны учебные группы. Сначала перенеси их в другое заведение.');
@@ -1695,7 +1696,7 @@ bot.command('setinstadmin', async ctx => {
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено. Сначала проверь ID командой /institutions.');
   if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /setinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
   if (isOwner(userId)) return ctx.reply('Этот пользователь уже является владельцем платформы.');
-  const assignment = addInstitutionAdmin(institution, userId, OWNER_TELEGRAM_IDS);
+  const assignment = addInstitutionAdminAndSave(institution, userId, OWNER_TELEGRAM_IDS, saveDb);
   if (!assignment.ok) return ctx.reply('❌ Не удалось назначить администратора.');
   saveDb();
   console.log('[institutions] Admin assigned:', userId, 'institution:', institutionId, 'by owner:', String(ctx.from.id));
@@ -1715,7 +1716,7 @@ bot.command('removeinstadmin', async ctx => {
   const institution = db.institutions?.[String(institutionId || '')];
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено.');
   if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /removeinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
-  const removal = removeInstitutionAdmin(institution, userId);
+  const removal = removeInstitutionAdminAndSave(institution, userId, saveDb);
   if (!removal.ok) return ctx.reply('Формат: /removeinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
   if (removal.status === 'not_found') return ctx.reply('ℹ️ Этот пользователь не числится администратором данного заведения.');
   saveDb();
