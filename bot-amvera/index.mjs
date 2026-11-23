@@ -35,6 +35,7 @@ import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entr
 import { resolveMiniAppGroupAccess } from './api/miniapp-group-access-entry.mjs';
 import { loadMiniAppSchedule } from './api/miniapp-schedule-loader-entry.mjs';
 import { updateMiniAppProfile, clearMiniAppStudentRoster } from './api/miniapp-profile-entry.mjs';
+import { updateMiniAppAttendance } from './api/miniapp-attendance-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2641,18 +2642,18 @@ async function handleMiniAppApi(req,res,url) {
   }
   if(req.method==='POST' && url.pathname==='/api/attendance') {
     try {
-      const body=await readJsonBody(req),validation=validateMiniAppAttendanceMark(body,(g.students||[]).length);
-      if(!validation.ok)return sendJson(res,400,{error:'Некорректная отметка.'});
-      const index=validation.studentIndex,status=validation.status,key=validation.lessonKey;
-      const lessons=await getMiniAppTodayLessons(g);
-      const lesson=lessons.find(x=>attendanceLessonKey(x)===key);
-      if(!lesson) return sendJson(res,400,{error:'Эта пара отсутствует в сегодняшнем расписании. Обнови страницу.'});
-      g.lessonAttendance ||= {};
-      g.lessonAttendance[key] ||= {};
-      const studentKey=attendanceKey(g.students[index]);
-      if(status==='unmarked') delete g.lessonAttendance[key][studentKey];
-      else g.lessonAttendance[key][studentKey]=status;
-      saveDb();
+      const body=await readJsonBody(req);
+      const result = await updateMiniAppAttendance(g, body, {
+        validate: validateMiniAppAttendanceMark,
+        getTodayLessons: () => getMiniAppTodayLessons(g),
+        getLessonKey: attendanceLessonKey,
+        getStudentKey: attendanceKey,
+        save: saveDb
+      });
+      if(!result.ok && result.reason==='lesson-not-found') {
+        return sendJson(res,400,{error:'Эта пара отсутствует в сегодняшнем расписании. Обнови страницу.'});
+      }
+      if(!result.ok) return sendJson(res,400,{error:'Некорректная отметка.'});
       return sendJson(res,200,{ok:true});
     } catch(e) {
       console.error('[miniapp attendance]',e.message||e);
