@@ -339,7 +339,7 @@ export function formatStudentCardText(card: StudentCardData | undefined): string
   const username = card.username ? '@' + card.username.replace(/^@/, '') : 'не указан';
   const phone = card.phone || 'не указан';
   const telegramId = card.telegramId || 'не указан';
-  return '👤 <b>' + escape(card.name) + '</b>\\n\\n🔹 Username: ' + escape(username) +
-    '\\n📞 Телефон: <code>' + escape(phone) + '</code>\\n🆔 Telegram ID: <code>' +
+  return '👤 <b>' + escape(card.name) + '</b>\n\n🔹 Username: ' + escape(username) +
+    '\n📞 Телефон: <code>' + escape(phone) + '</code>\n🆔 Telegram ID: <code>' +
     escape(telegramId) + '</code>';
 }
