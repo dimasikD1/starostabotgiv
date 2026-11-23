@@ -53,3 +53,23 @@ export function getRecentAnnouncements<T>(history: readonly T[] | undefined, lim
   if (safeLimit === 0) return [];
   return [...(history || [])].slice(-safeLimit).reverse();
 }
+
+
+export interface AnnouncementChatGroup {
+  chatId?: unknown;
+  title?: unknown;
+  chatTitle?: unknown;
+}
+
+/** Build the unique, numeric Telegram chat targets in the same order as the legacy command. */
+export function buildAnnouncementChatOptions(
+  groups: Record<string, AnnouncementChatGroup | null | undefined> | null | undefined
+): Array<{ id: string; title: string }> {
+  const chats = Object.entries(groups || {})
+    .map(([id, group]) => ({
+      id: String(group?.chatId || id),
+      title: String(group?.title || group?.chatTitle || ('Чат ' + (group?.chatId || id)))
+    }))
+    .filter(chat => /^-?\\d+$/.test(chat.id));
+  return [...new Map(chats.map(chat => [chat.id, chat])).values()];
+}
