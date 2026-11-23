@@ -8,7 +8,7 @@ export type MiniAppAnnouncementTextResult =
   | { ok: false; reason: 'empty' | 'too_long' };
 
 export type MiniAppAnnouncementResult<TAnnouncement> =
-  | { ok: false; reason: 'empty' | 'length' | 'no-chat' }
+  | { ok: false; reason: 'empty' | 'too_long' | 'no-chat' }
   | { ok: true; announcement: TAnnouncement };
 
 export interface MiniAppAnnouncementDependencies<TAnnouncement> {
