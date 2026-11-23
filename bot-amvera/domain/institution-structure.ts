@@ -165,3 +165,26 @@ export function unlinkStudyGroupFromStructure(institution: InstitutionStructure,
   delete group.facultyId; delete group.directionId; delete group.courseId;
   return { ok: true, removed };
 }
+
+
+export type StudyGroupLinkArguments =
+  | { ok: true; groupNumber: '1' | '2'; courseId: string }
+  | { ok: false; reason: 'invalid_group' | 'missing_course' };
+
+export function parseStudyGroupLinkArguments(args: readonly unknown[]): StudyGroupLinkArguments {
+  const groupNumber = String(args[0] ?? '').trim();
+  const courseId = String(args[1] ?? '').trim();
+  if (groupNumber !== '1' && groupNumber !== '2') return { ok: false, reason: 'invalid_group' };
+  if (!courseId) return { ok: false, reason: 'missing_course' };
+  return { ok: true, groupNumber, courseId };
+}
+
+export type StudyGroupUnlinkArguments =
+  | { ok: true; groupNumber: '1' | '2' }
+  | { ok: false; reason: 'invalid_group' };
+
+export function parseStudyGroupUnlinkArguments(args: readonly unknown[]): StudyGroupUnlinkArguments {
+  const groupNumber = String(args[0] ?? '').trim();
+  if (groupNumber !== '1' && groupNumber !== '2') return { ok: false, reason: 'invalid_group' };
+  return { ok: true, groupNumber };
+}
