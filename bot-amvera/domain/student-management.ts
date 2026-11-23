@@ -221,6 +221,13 @@ export function removeGroupRolesAndSetStudent(
 }
 
 
+/** Clear only the temporary fields belonging to the student roster import flow. */
+export function clearStudentRosterImport(user: StudentUser): void {
+  delete user.pendingStudentImport;
+  delete user.pendingStudentImportChatId;
+  delete user.pendingStudentImportReview;
+}
+
 export interface StudentCardData {
   index: number;
   name: string;
