@@ -27,7 +27,7 @@ import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance
 import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument, parseStudentContactInput, parseStudentRosterAction } from './domain/student-management-entry.mjs';
-import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
+import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave, confirmStudentRosterImportAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { createInstitutionAndSave, deleteInstitutionAndSave, addInstitutionAdminAndSave, removeInstitutionAdminAndSave } from './domain/institution-workflows-entry.mjs';
@@ -1201,9 +1201,8 @@ bot.action('studentimport:confirm', async ctx => {
   const g=groupId ? db.groups[groupId] : managedGroup(ctx.from.id);
   if(groupId && g && !canManageChat(ctx.from.id,groupId)) { await ctx.answerCbQuery('Нет прав для подтверждения.'); return; }
   if(!g){await ctx.answerCbQuery('Группа не найдена.');return;}
-  const importResult=confirmStudentRosterImport(g,u,list);
+  const importResult=confirmStudentRosterImportAndSave(g,u,list,saveDb);
   if(importResult.truncated)console.warn('[student import] roster capped at 100 entries for group '+String(g.chatId||groupId||g.title||'unknown'));
-  saveDb();
   await ctx.answerCbQuery('Список сохранён!');
   const result='✅ <b>Список студентов создан!</b>\n\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\n👨‍🎓 Студентов: <b>'+g.students.length+'</b>\n\nОткрыть список: /students\nПосещаемость: /attendance';
   try { await ctx.editMessageText(result,{parse_mode:'HTML'}); }
