@@ -1451,7 +1451,7 @@ bot.command('starosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) {
     return ctx.reply('❌ Команду /starosta нужно выполнить в учебной группе.');
   }
-  if (!canRunGroupRoleCommand('starosta', ctx.chat.type, isOwner(ctx.from.id), await isGroupAdmin(ctx))) {
+  if (!canRunGroupRoleCommand('starosta', ctx.chat.type, isOwner(ctx.from.id), isOwner(ctx.from.id) || await isGroupAdmin(ctx))) {
     return ctx.reply('❌ Назначить себя старостой может владелец бота или администратор этой группы.');
   }
   const groupNumber=parseStudyGroupNumber(ctx.message?.text);
@@ -1466,7 +1466,7 @@ bot.command('starosta', async ctx => {
 
 bot.command('zam', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('❌ Команду /zam нужно выполнить в общем учебном чате.');
-  if (!canRunGroupRoleCommand('zam', ctx.chat.type, isOwner(ctx.from.id), await isGroupAdmin(ctx))) return ctx.reply('❌ Назначить заместителя может владелец бота или администратор группы.');
+  if (!canRunGroupRoleCommand('zam', ctx.chat.type, isOwner(ctx.from.id), isOwner(ctx.from.id) || await isGroupAdmin(ctx))) return ctx.reply('❌ Назначить заместителя может владелец бота или администратор группы.');
   const groupNumber=parseStudyGroupNumber(ctx.message?.text);
   if(!groupNumber) return ctx.reply('Укажи номер учебной группы и ответь на сообщение будущего заместителя:\n/zam 1 — заместитель 1 группы\n/zam 2 — заместитель 2 группы');
   const target = ctx.message.reply_to_message?.from || ctx.from;
