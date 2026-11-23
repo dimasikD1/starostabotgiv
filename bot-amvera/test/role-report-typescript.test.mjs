@@ -29,3 +29,16 @@ test('collects source chat ids and chooses the first non-empty role assignment',
   assert.equal(firstAssignedRoleId(group, 'starostaId'), '123');
   assert.equal(firstAssignedRoleId(group, 'zamId'), '456');
 });
+
+import { filterRoleReportGroups } from '../domain/.build/role-report.js';
+
+test('filters role report groups by institution and keeps all groups for platform owners', () => {
+  const groups = [
+    { institutionId: 'inst_a', studyGroup: 'A' },
+    { institutionId: 'inst_b', studyGroup: 'B' },
+    { institutionId: '', studyGroup: 'No institution' }
+  ];
+  assert.deepEqual(filterRoleReportGroups(groups, false, ['inst_b']), [groups[1]]);
+  assert.deepEqual(filterRoleReportGroups(groups, true, []), groups);
+  assert.deepEqual(filterRoleReportGroups(groups, false, []), []);
+});
