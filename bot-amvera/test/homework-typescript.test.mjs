@@ -4,6 +4,7 @@ import {
   appendHomework,
   createHomeworkRecord,
   latestHomework,
+  getHomeworkCompletionState,
   markHomeworkCompleted,
   parseHomeworkCommand
 } from '../../.test-build/domain-user/homework.js';
@@ -30,6 +31,25 @@ test('creates legacy-compatible records and retains only the newest 50', () => {
   assert.equal(group.homework.length, 50);
   assert.equal(group.homework[0].id, '1');
   assert.deepEqual(group.homework[49].completedBy, {});
+});
+
+test('reports completion state for the selected group without changing stored records', () => {
+  const target = { title: 'Группа 1', scheduleGroup: 'Подгруппа 1', homework: [
+    { id: 'task-1', subject: 'История', homework: 'Прочитать', createdAt: '2026-11-21', authorId: '1', completedBy: {} }
+  ] };
+  const other = { title: 'Группа 2', scheduleGroup: 'Подгруппа 2', homework: [
+    { id: 'task-2', subject: 'Физика', homework: 'Задачи', createdAt: '2026-11-22', authorId: '1', completedBy: { '99': 'then' } }
+  ] };
+  assert.deepEqual(getHomeworkCompletionState([target, other], 'Подгруппа 1', 'missing', '99'), {
+    status: 'not_found'
+  });
+  assert.deepEqual(getHomeworkCompletionState([target, other], 'Подгруппа 2', 'task-2', '99'), {
+    status: 'already_completed', item: other.homework[0]
+  });
+  assert.deepEqual(getHomeworkCompletionState([target, other], 'Подгруппа 1', 'task-1', '99'), {
+    status: 'ready', item: target.homework[0]
+  });
+  assert.deepEqual(target.homework[0].completedBy, {});
 });
 
 test('marks completion once and finds assignments only in the selected study group', () => {
