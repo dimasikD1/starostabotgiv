@@ -61,7 +61,7 @@ export function setGroupMemberAsStudentAndSave(
 ): RemoveGroupRolesResult {
   const result = groups
     ? removeGroupRolesAndSetStudent(groups, user, userId, chatId)
-    : (setStudentRole(user, chatId), { removed: 0 });
+    : (setStudentRole(user, chatId), { removed: 0, user });
   save();
   return result;
 }
