@@ -27,3 +27,10 @@ test('formats the student import preview with escaped HTML and the legacy text l
     '📝 <b>Проверь список студентов</b>\n👥 Группа: <b>Группа &lt;1&gt; & "А"</b>\n👨‍🎓 Найдено: <b>2</b>\n\nИванов Иван\nПетров &lt;Пётр&gt;\n\nПосле подтверждения текущий список группы будет заменён этим списком.'
   );
 });
+
+test('formats numbered student import previews with stable one-based numbering', () => {
+  assert.equal(
+    formatStudentImportPreview('Группа 2', ['Иванов Иван', 'Петров Пётр'], true),
+    '📝 <b>Проверь список студентов</b>\n👥 Группа: <b>Группа 2</b>\n👨‍🎓 Найдено: <b>2</b>\n\n1. Иванов Иван\n2. Петров Пётр\n\nПосле подтверждения текущий список группы будет заменён этим списком.'
+  );
+});
