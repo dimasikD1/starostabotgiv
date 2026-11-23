@@ -33,6 +33,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
 import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entry.mjs';
 import { resolveMiniAppGroupAccess } from './api/miniapp-group-access-entry.mjs';
+import { loadMiniAppSchedule } from './api/miniapp-schedule-loader-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2478,16 +2479,14 @@ async function handleMiniAppApi(req,res,url) {
     return sendJson(res,403,{error:'Недостаточно прав для изменения данных этой учебной группы.'});
   }
   if(req.method==='GET' && url.pathname==='/api/data') {
-    let scheduleItems=[],scheduleError='',scheduleLoading=false;
-    try {
-      if(!g.scheduleGroup) throw new Error('Для группы не указано расписание. Сначала настрой /setgroup.');
-      const scheduleResult=getMiniAppSchedule(String(g.scheduleGroup),7);
-      scheduleItems=scheduleResult.items;
-      scheduleLoading=scheduleResult.loading;
-    } catch(e) {
-      scheduleError='Расписание временно недоступно. Остальные данные кабинета загружены; попробуй обновить позже.';
-      console.error('[miniapp data] schedule unavailable for group:', g.scheduleGroup, e?.stack || e?.message || e);
-    }
+    const scheduleState = loadMiniAppSchedule(
+      g.scheduleGroup,
+      getMiniAppSchedule,
+      (scheduleGroup, error) => {
+        console.error('[miniapp data] schedule unavailable for group:', scheduleGroup, error?.stack || error?.message || error);
+      }
+    );
+    const { items: scheduleItems, error: scheduleError, loading: scheduleLoading } = scheduleState;
     const today=attendanceDate();
     const lessons=scheduleItems.filter(x=>x.date===today&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
     const students=g.students||[];
