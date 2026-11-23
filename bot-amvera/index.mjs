@@ -6,7 +6,7 @@ import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
-import { formatSchedule, nextWeekDateRange, nextMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
+import { formatSchedule, nextWeekDateRange, nextMondayDateRange, currentMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName } from './schedule/schedule-view-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
@@ -417,13 +417,14 @@ function createAttendanceHtml(g, period='all') {
  return buildAttendanceHtml({ group: g, period, timeZone: TIME_ZONE });
 }
 
-async function show(ctx, days, offset) {
+async function show(ctx, days, offset, range) {
   const u = user(ctx.from.id);
   const view = buildScheduleView(
     String(u.group || ''),
     Object.values(STUDY_GROUPS),
     [],
-    offset
+    offset,
+    range
   );
   if (!view.ok) {
     return ctx.reply(
@@ -436,8 +437,10 @@ async function show(ctx, days, offset) {
   }
   await ctx.reply('⏳ Загружаю расписание для «' + view.group + '»…');
   try {
-    const lessons = await getCachedSchedule(view.group, days);
-    const prepared = buildScheduleView(view.group, Object.values(STUDY_GROUPS), lessons, offset);
+    const lessons = range
+      ? await getSchedule(view.group, days, range.start)
+      : await getCachedSchedule(view.group, days);
+    const prepared = buildScheduleView(view.group, Object.values(STUDY_GROUPS), lessons, offset, range);
     if (!prepared.ok) throw new Error('Selected schedule group became invalid');
     await ctx.reply(formatSchedule(prepared.lessons, prepared.group), menuFor(ctx));
   } catch (e) {
@@ -2123,7 +2126,7 @@ bot.on('callback_query', async ctx => {
 
 bot.command('schedule', ctx => show(ctx, 1, 0));
 bot.command('tomorrow', ctx => show(ctx, 2, 1));
-bot.command('week', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
+bot.command('week', ctx => show(ctx, 7, 0, currentMondayDateRange(attendanceDate())));
 
 // Ручная публикация истории проекта от имени бота в официальный канал.
 // Владелец выбирает зарегистрированный Telegram-чат и отправляет туда объявление из лички.
@@ -2254,7 +2257,7 @@ bot.command('publishweek', async ctx => {
 bot.command('menu', ctx => ctx.reply('⌨️ Меню обновлено.', menuFor(ctx)));
 bot.hears('📅 Сегодня', ctx => show(ctx, 1, 0));
 bot.hears('📅 Завтра', ctx => show(ctx, 2, 1));
-bot.hears('🗓 Неделя', ctx => show(ctx, Number(process.env.SCHEDULE_DAYS || 7), 0));
+bot.hears('🗓 Неделя', ctx => show(ctx, 7, 0, currentMondayDateRange(attendanceDate())));
 bot.hears('👥 Моя группа', ctx => {
   const g = user(ctx.from.id).group;
   return ctx.reply(g ? '👥 Твоя группа: «' + g + '»' : 'Группа ещё не выбрана. Используй /group.', menuFor(ctx));
