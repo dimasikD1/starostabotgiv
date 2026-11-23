@@ -14,5 +14,6 @@ export {
   getStudentRosterPage,
   getStudentCard,
   replaceStudentRoster,
-  confirmStudentRosterImport
+  confirmStudentRosterImport,
+  parseStudentRemovalIndex
 } from './.build/student-management.js';
