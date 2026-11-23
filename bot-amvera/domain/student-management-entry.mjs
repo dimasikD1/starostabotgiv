@@ -13,5 +13,6 @@ export {
   removeGroupRolesAndSetStudent,
   getStudentRosterPage,
   getStudentCard,
-  replaceStudentRoster
+  replaceStudentRoster,
+  confirmStudentRosterImport
 } from './.build/student-management.js';
