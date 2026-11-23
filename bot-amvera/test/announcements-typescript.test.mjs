@@ -45,3 +45,19 @@ test('returns newest announcements first without mutating source history', async
   assert.deepEqual(getRecentAnnouncements(undefined), []);
   assert.deepEqual(getRecentAnnouncements(source, 0), []);
 });
+
+
+test('builds unique announcement chat targets and ignores invalid chat IDs', async () => {
+  const { buildAnnouncementChatOptions } = await import('../domain/.build/announcements.js');
+  const groups = {
+    '-1001': { title: 'Первый чат' },
+    '-1002': { chatId: '-1002', chatTitle: 'Второй чат' },
+    alias: { chatId: '-1001', title: 'Обновлённое название' },
+    invalid: { chatId: 'not-a-chat', title: 'Не подходит' }
+  };
+  assert.deepEqual(buildAnnouncementChatOptions(groups), [
+    { id: '-1001', title: 'Обновлённое название' },
+    { id: '-1002', title: 'Второй чат' }
+  ]);
+  assert.deepEqual(buildAnnouncementChatOptions(undefined), []);
+});
