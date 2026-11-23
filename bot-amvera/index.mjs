@@ -23,7 +23,7 @@ import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 import { getMissingTelegramBotPermissions } from './domain/telegram-bot-permissions-entry.mjs';
 import { buildOpenChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
-import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
+import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons, parseManualAttendanceMarkInput } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
@@ -1549,11 +1549,11 @@ bot.command('mark',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Используй команду в личке.');
  const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Только староста или заместитель.');
  const lesson=g.activeAttendanceLessons?.[String(ctx.from.id)];
- const p=ctx.message.text.replace(/^\/mark(?:@\S+)?/i,'').trim().split(/\s+/),i=Number(p[0])-1,status=p[1]==='present'?'present':p[1]==='absent'?'absent':'';
+ const parsed=parseManualAttendanceMarkInput(ctx.message.text);
  if(!lesson)return ctx.reply('Сначала выбери пару через /attendance, затем используй /mark 2 present или /mark 2 absent.');
- if(!Number.isInteger(i)||!g.students[i]||!status)return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
- const key=attendanceLessonKey(lesson);g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][attendanceKey(g.students[i])]=status;saveDb();
- return ctx.reply('✅ Отметка сохранена для пары «'+lesson.subject+'»: '+studentName(g.students[i]));
+ if(!parsed||!g.students[parsed.studentIndex])return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
+ const key=attendanceLessonKey(lesson);g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][attendanceKey(g.students[parsed.studentIndex])]=parsed.status;saveDb();
+ return ctx.reply('✅ Отметка сохранена для пары «'+lesson.subject+'»: '+studentName(g.students[parsed.studentIndex]));
 });
 // Управление учебными заведениями доступно только владельцам платформы в личке.
 bot.command('addinstitution', async ctx => {
