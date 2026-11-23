@@ -1234,8 +1234,7 @@ bot.on('text', async (ctx,next) => {
   const names=parseStudentNames(raw);
   if(!names.length)return ctx.reply('Не удалось распознать ФИО. Ответь на сообщение бота списком: по одному ФИО на строку.');
   u.pendingStudentImport=false;u.pendingStudentImportReview=names;saveDb();
-  const preview=names.map((name,i)=>(i+1)+'. '+escapeHtml(name)).join('\n');
-  return ctx.reply('📝 <b>Проверь список студентов</b>\n👥 Группа: <b>'+escapeHtml(group.title)+'</b>\n👨‍🎓 Найдено: <b>'+names.length+'</b>\n\n'+preview+'\n\nПосле подтверждения текущий список группы будет заменён.',{parse_mode:'HTML',...importPreviewKeyboard()});
+  return ctx.reply(formatStudentImportPreview(String(group.title||''),names,true),{parse_mode:'HTML',...importPreviewKeyboard()});
  }
  if(!isPrivate(ctx))return next();
  if (u.pendingAnnouncementChatId) {
