@@ -1,0 +1,1 @@
+// Runtime bridge: generated from miniapp-client-error.ts by the TypeScript build.\nexport { sanitizeMiniAppClientError } from './.build/miniapp-client-error.js';\n
