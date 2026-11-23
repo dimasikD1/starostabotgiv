@@ -106,3 +106,83 @@ export function getAttendanceLessonAt<T>(
   if (!Number.isInteger(requestedIndex) || requestedIndex < 0) return undefined;
   return lessons[requestedIndex];
 }
+
+
+export interface MiniAppAttendanceLessonInput {
+  date?: unknown;
+  timeStart?: unknown;
+  timeEnd?: unknown;
+  subject?: unknown;
+  room?: unknown;
+  teacher?: unknown;
+  [key: string]: unknown;
+}
+
+export interface MiniAppAttendanceLesson {
+  key: string;
+  date: unknown;
+  timeStart: string;
+  timeEnd: string;
+  subject: unknown;
+  room: unknown;
+  teacher: unknown;
+  present: number;
+  absent: number;
+  unmarked: number;
+}
+
+/** Build the Mini App's attendance-enriched lesson lists without changing source data. */
+export function buildMiniAppAttendanceLessons<T>(
+  scheduleInput: readonly T[],
+  studentsInput: readonly unknown[],
+  attendanceInput: unknown,
+  today: string,
+  getLessonKey: (lesson: T) => string,
+  getStudentKey: (student: unknown) => string
+): { todayLessons: MiniAppAttendanceLesson[]; scheduleLessons: MiniAppAttendanceLesson[] } {
+  const attendance = attendanceInput !== null && typeof attendanceInput === 'object' && !Array.isArray(attendanceInput)
+    ? attendanceInput as Record<string, Record<string, unknown>>
+    : {};
+
+  const mapLesson = (lesson: T): MiniAppAttendanceLesson => {
+    const value = lesson as MiniAppAttendanceLessonInput;
+    const key = getLessonKey(lesson);
+    const record = attendance[key] && typeof attendance[key] === 'object' ? attendance[key] : {};
+    let present = 0;
+    let absent = 0;
+    for (const student of studentsInput) {
+      const status = record[getStudentKey(student)];
+      if (status === 'present') present++;
+      else if (status === 'absent') absent++;
+    }
+    return {
+      key,
+      date: value.date,
+      timeStart: value.timeStart || '',
+      timeEnd: value.timeEnd || '',
+      subject: value.subject || 'Занятие',
+      room: value.room || '',
+      teacher: value.teacher || '',
+      present,
+      absent,
+      unmarked: studentsInput.length - present - absent
+    };
+  };
+
+  const eligible = scheduleInput.filter(lesson => {
+    const value = lesson as MiniAppAttendanceLessonInput;
+    return Boolean(value.date && value.subject);
+  });
+  const scheduleLessons = [...eligible].sort((a, b) => {
+    const left = a as MiniAppAttendanceLessonInput;
+    const right = b as MiniAppAttendanceLessonInput;
+    return String(left.date).localeCompare(String(right.date)) ||
+      String(left.timeStart || '').localeCompare(String(right.timeStart || ''));
+  }).map(mapLesson);
+
+  const todayLessons = scheduleLessons
+    .filter(lesson => lesson.date === today)
+    .sort((a, b) => String(a.timeStart || '').localeCompare(String(b.timeStart || '')));
+
+  return { todayLessons, scheduleLessons };
+}
