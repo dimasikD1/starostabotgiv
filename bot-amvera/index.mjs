@@ -67,6 +67,7 @@ import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStu
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { parseStudyGroupNumber } from './domain/role-command-input-entry.mjs';
+import { parseRoleRemovalTargetId } from './domain/role-removal-input-entry.mjs';
 import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
@@ -1355,8 +1356,8 @@ bot.command('roles', showRole);
 bot.command(['delrole', 'removerole'], async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Команду /delrole используй только в личке с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Снимать роли других пользователей в личке может только владелец бота.');
-  const targetId = String(ctx.message?.text || '').trim().split(/\s+/)[1] || '';
-  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
+  const targetId = parseRoleRemovalTargetId(ctx.message?.text);
+  if (!targetId) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
   const target = db.users?.[targetId];
   const targetUser = target ? normalizeUser(target) : {};
   const result = removeAndPersistStudyGroupRoles(allStudyGroups(),targetUser,targetId,undefined,saveDb);
