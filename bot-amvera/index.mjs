@@ -17,7 +17,7 @@ import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
-import { buildAttendanceStatistics, addAttendanceStudentNames } from './domain/attendance-statistics-entry.mjs';
+import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
@@ -2493,23 +2493,13 @@ async function handleMiniAppApi(req,res,url) {
     const today=attendanceDate();
     const lessons=scheduleItems.filter(x=>x.date===today&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
     const students=g.students||[];
-    const homeworkStatistics=buildHomeworkCompletionStatistics(
-      g.homework||[],students,db.users||{},studentName
-    );
-    const homeworkItems=homeworkStatistics.items;
-    const homeworkStats={week:homeworkStatistics.week,all:homeworkStatistics.all};
-    const miniAppLessons=buildMiniAppAttendanceLessons(
-      scheduleItems,students,g.lessonAttendance||{},today,attendanceLessonKey,attendanceKey
-    );
-    const data=miniAppLessons.todayLessons;
-    const scheduleData=miniAppLessons.scheduleLessons;
-    const attendanceStatistics=buildAttendanceStatistics(
-      g.lessonAttendance||{},students,data,today,attendanceKey
-    );
-    const historyEntries=attendanceStatistics.historyEntries;
-    const attendanceHistory=attendanceStatistics.attendanceHistory;
+    const miniAppData=buildMiniAppGroupData({
+      scheduleItems,students,lessonAttendance:g.lessonAttendance||{},today,
+      getLessonKey:attendanceLessonKey,getStudentKey:attendanceKey,getStudentName:studentName,
+      homework:g.homework||[],users:db.users||{},announcements:g.announcements||[]
+    });
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:addAttendanceStudentNames(attendanceStatistics.students,students,studentName),announcements:getRecentAnnouncements(g.announcements,30),homework:homeworkItems,homeworkStats,attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,...miniAppData,scheduleError,scheduleLoading});
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
     const count=(g.students||[]).length;
