@@ -290,7 +290,7 @@ test('parses student contact edits using the field-specific legacy validators', 
   assert.deepEqual(parseStudentContactInput('username', '@student_1'), { ok: true, value: 'student_1' });
   assert.deepEqual(parseStudentContactInput('username', '-'), { ok: true, value: '' });
   assert.deepEqual(parseStudentContactInput('username', 'bad name'), { ok: false, field: 'username' });
-  assert.deepEqual(parseStudentContactInput('phone', '+372 5555 5555'), { ok: true, value: '+3725555555' });
+  assert.deepEqual(parseStudentContactInput('phone', '+372 5555 5555'), { ok: true, value: '+37255555555' });
   assert.deepEqual(parseStudentContactInput('phone', '-'), { ok: true, value: '' });
   assert.deepEqual(parseStudentContactInput('phone', '37255555555'), { ok: false, field: 'phone' });
 });
