@@ -24,7 +24,7 @@ import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
-import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
+import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
@@ -907,10 +907,7 @@ bot.command('pollreport', async ctx => {
     .sort((a,b) => String(b.date + b.time).localeCompare(String(a.date + a.time)));
   const latest = records[0];
   if (!latest) return ctx.reply('Пока нет автоматических опросов посещаемости для «' + g.title + '».');
-  const answers = Object.values(latest.responses || {});
-  const yes = answers.filter(x => x.status === 'present');
-  const no = answers.filter(x => x.status === 'absent');
-  const names = answers.map(x => (x.firstName || 'Студент') + (x.username ? ' (@' + x.username + ')' : '') + (x.status === 'present' ? ' — ✅ Будет' : x.status === 'absent' ? ' — ❌ Не будет' : ''));
+  const report = buildAttendancePollReport((g.students || []).length, latest);
   return ctx.reply(
     '📊 <b>Ответы на последний опрос</b>\n👥 ' + escapeHtml(g.title) +
     '\n📚 ' + escapeHtml(latest.subject) + '\n📅 ' + latest.date + ' в ' + latest.time +
