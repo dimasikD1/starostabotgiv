@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from '../../.test-build/domain-user/attendance-core.js';
+import { parseManualAttendanceMarkInput, buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from '../../.test-build/domain-user/attendance-core.js';
 
 test('builds the lesson key from date, start/end time and subject', () => {
   assert.equal(
@@ -136,4 +136,20 @@ test('returns empty Mini App lesson lists for an empty schedule', () => {
     buildMiniAppAttendanceLessons([], [], {}, '2026-11-23', () => '', () => ''),
     {todayLessons:[],scheduleLessons:[]}
   );
+});
+
+
+test('parses /mark student index and status with optional bot mention', () => {
+  assert.deepEqual(parseManualAttendanceMarkInput('/mark 2 present'), { studentIndex: 1, status: 'present' });
+  assert.deepEqual(parseManualAttendanceMarkInput('/mark@starostagivbot 3 absent'), { studentIndex: 2, status: 'absent' });
+});
+
+test('rejects incomplete or invalid /mark arguments', () => {
+  for (const value of ['/mark', '/mark 0 present', '/mark -1 absent', '/mark 2 late', '/mark abc present']) {
+    assert.equal(parseManualAttendanceMarkInput(value), undefined);
+  }
+});
+
+test('preserves legacy behavior of ignoring extra /mark arguments', () => {
+  assert.deepEqual(parseManualAttendanceMarkInput('/mark 1 present extra'), { studentIndex: 0, status: 'present' });
 });
