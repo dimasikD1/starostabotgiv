@@ -27,7 +27,7 @@ import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance
 import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument, parseStudentContactInput, parseStudentRosterAction } from './domain/student-management-entry.mjs';
-import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave, confirmStudentRosterImportAndSave } from './domain/student-roster-workflows-entry.mjs';
+import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave, confirmStudentRosterImportAndSave, cancelStudentRosterImportAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { createInstitutionAndSave, deleteInstitutionAndSave, addInstitutionAdminAndSave, removeInstitutionAdminAndSave } from './domain/institution-workflows-entry.mjs';
@@ -1188,7 +1188,7 @@ bot.command('cancel', async ctx => {
  const u=normalizeUser(user(ctx.from.id));
  if(!u.pendingStudentImport&&!u.pendingStudentImportReview)return ctx.reply('Нет активного действия для отмены.');
  if (u.pendingStudentImportChatId && String(u.pendingStudentImportChatId)!==String(ctx.chat.id)) return ctx.reply('Отмени импорт в том же чате, где начал его.');
- delete u.pendingStudentImport;delete u.pendingStudentImportChatId;delete u.pendingStudentImportReview;saveDb();
+ cancelStudentRosterImportAndSave(u,saveDb);
  return ctx.reply('❌ Импорт списка отменён.');
 });
 bot.action('studentimport:confirm', async ctx => {
@@ -1305,10 +1305,10 @@ bot.on('text', async (ctx,next) => {
  }
  if(!u.pendingStudentImport)return next();
  if(!raw)return ctx.reply('Пришли ФИО текстом, по одному студенту на строку.');
- if(raw.toLowerCase()==='/cancel'||raw.toLowerCase().startsWith('/cancel@')){delete u.pendingStudentImport;delete u.pendingStudentImportReview;saveDb();return ctx.reply('❌ Импорт отменён.');}
+ if(raw.toLowerCase()==='/cancel'||raw.toLowerCase().startsWith('/cancel@')){cancelStudentRosterImportAndSave(u,saveDb);return ctx.reply('❌ Импорт отменён.');}
  if(raw.startsWith('/'))return ctx.reply('Сначала пришли список ФИО или отправь /cancel для отмены.');
  const g=managedGroup(ctx.from.id);
- if(!g){delete u.pendingStudentImport;saveDb();return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');}
+ if(!g){cancelStudentRosterImportAndSave(u,saveDb);return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');}
  const names=parseStudentNames(raw);
  if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\nИванов Иван Иванович\nПетров Пётр Сергеевич');
  u.pendingStudentImportReview=names;u.pendingStudentImport=false;saveDb();
