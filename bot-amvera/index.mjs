@@ -2708,6 +2708,39 @@ const healthServer = http.createServer(async (req, res) => {
       console.log('[http timing]', req.method, url.pathname, res.statusCode, Date.now() - startedAt + 'ms');
     }
   });
+  if (url.pathname === '/__client-error') {
+    if (req.method !== 'POST') {
+      return sendJson(res, 405, { error: 'Method Not Allowed' }, { Allow: 'POST' });
+    }
+    try {
+      const now = Date.now();
+      if (!globalThis.__miniAppErrorWindow || now - globalThis.__miniAppErrorWindow.startedAt >= 60000) {
+        globalThis.__miniAppErrorWindow = { startedAt: now, count: 0 };
+      }
+      if (globalThis.__miniAppErrorWindow.count >= 30) {
+        return sendJson(res, 429, { error: 'Слишком много диагностических сообщений.' });
+      }
+      globalThis.__miniAppErrorWindow.count++;
+      const body = await readJsonBody(req, 8192);
+      const input = body && typeof body === 'object' ? body : {};
+      const clean = (value, max) => String(value ?? '').replace(/[\\r\\n\\t]+/g, ' ').slice(0, max);
+      const kind = clean(input.kind || 'error', 40);
+      const message = clean(input.message || 'unknown', 500);
+      const source = clean(input.source || '', 500);
+      const line = Number.isSafeInteger(Number(input.line)) ? Number(input.line) : 0;
+      const column = Number.isSafeInteger(Number(input.column)) ? Number(input.column) : 0;
+      const stage = clean(input.stage || 'unknown', 120);
+      const stack = clean(input.stack || '', 2500);
+      console.error('[miniapp client error]', JSON.stringify({
+        kind, message, source, line, column, stage, stack,
+        receivedAt: new Date().toISOString()
+      }));
+      return sendJson(res, 202, { ok: true });
+    } catch (error) {
+      console.error('[miniapp client error endpoint]', error?.stack || error?.message || error);
+      return sendJson(res, 400, { error: 'Некорректное диагностическое сообщение.' });
+    }
+  }
   if (url.pathname.startsWith('/api/')) {
     // Без этого обработчика любое необработанное исключение оставляло запрос
     // висеть до таймаута клиента.
@@ -2974,7 +3007,16 @@ function shutdown(signal) {
 process.once('SIGINT', () => shutdown('SIGINT'));
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 
+process.on('uncaughtException', error => {
+  console.error('[fatal uncaughtException]', error?.stack || error);
+  process.exit(1);
+});
+process.on('unhandledRejection', reason => {
+  console.error('[fatal unhandledRejection]', reason?.stack || reason);
+  process.exit(1);
+});
+
 main().catch(e => {
-  console.error('[fatal]', e);
+  console.error('[fatal main]', e?.stack || e);
   process.exit(1);
 });
