@@ -24,6 +24,7 @@ import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/at
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
+import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
 import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-groups-entry.mjs';
@@ -1771,9 +1772,8 @@ bot.command('addfaculty', async ctx => {
   const institution = result.institution;
   if (sameStructureName(institution.faculties, name)) return ctx.reply('⚠️ Такой факультет уже есть в этом заведении.');
   const id = newStructureId('fac');
-  const created = createFaculty(institution, name, id, new Date().toISOString());
+  const created = createFacultyAndSave(institution, name, id, new Date().toISOString(), saveDb);
   if (!created.ok) return ctx.reply(created.reason === 'duplicate' ? '⚠️ Такой факультет уже есть в этом заведении.' : '❌ Укажи название факультета.');
-  saveDb();
   console.log('[institution-structure] Faculty created:', id, 'institution:', institution.id);
   return ctx.reply('✅ Факультет добавлен.\n\n🏫 ' + escapeHtml(institution.name) + '\n🎓 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
 });
@@ -1791,9 +1791,8 @@ bot.command('adddirection', async ctx => {
   faculty.directions ||= {};
   if (sameStructureName(faculty.directions, name)) return ctx.reply('⚠️ Такое направление уже есть на этом факультете.');
   const id = newStructureId('dir');
-  const created = createDirection(faculty, name, id, new Date().toISOString());
+  const created = createDirectionAndSave(faculty, name, id, new Date().toISOString(), saveDb);
   if (!created.ok) return ctx.reply(created.reason === 'duplicate' ? '⚠️ Такое направление уже есть на этом факультете.' : '❌ Укажи название направления.');
-  saveDb();
   console.log('[institution-structure] Direction created:', id, 'faculty:', facultyId);
   return ctx.reply('✅ Направление добавлено.\n\n🎓 ' + escapeHtml(faculty.name) + '\n📚 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
 });
@@ -1812,9 +1811,8 @@ bot.command('addcourse', async ctx => {
   direction.courses ||= {};
   if (sameStructureName(direction.courses, name)) return ctx.reply('⚠️ Такой курс уже есть у этого направления.');
   const id = newStructureId('course');
-  const created = createCourse(direction, name, id, new Date().toISOString());
+  const created = createCourseAndSave(direction, name, id, new Date().toISOString(), saveDb);
   if (!created.ok) return ctx.reply(created.reason === 'duplicate' ? '⚠️ Такой курс уже есть у этого направления.' : '❌ Укажи название курса.');
-  saveDb();
   console.log('[institution-structure] Course created:', id, 'direction:', directionId);
   return ctx.reply('✅ Курс добавлен.\n\n📚 ' + escapeHtml(direction.name) + '\n🎓 ' + escapeHtml(name) + '\n🆔 <code>' + id + '</code>', { parse_mode: 'HTML' });
 });
