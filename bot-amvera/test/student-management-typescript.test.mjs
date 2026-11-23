@@ -232,3 +232,16 @@ test('confirms reviewed import and clears only the import workflow fields', () =
   assert.equal('pendingStudentImportReview' in user, false);
   assert.equal(user.fullName, 'Preserve Me');
 });
+
+
+test('parses one-based student removal arguments and rejects invalid roster indexes', async () => {
+  const { parseStudentRemovalIndex } = await import('../../.test-build/domain-user/student-management.js');
+  assert.equal(parseStudentRemovalIndex('1', 3), 0);
+  assert.equal(parseStudentRemovalIndex('3', 3), 2);
+  assert.equal(parseStudentRemovalIndex(' 2 ', 3), 1);
+  assert.equal(parseStudentRemovalIndex('', 3), undefined);
+  assert.equal(parseStudentRemovalIndex('0', 3), undefined);
+  assert.equal(parseStudentRemovalIndex('-1', 3), undefined);
+  assert.equal(parseStudentRemovalIndex('1.5', 3), undefined);
+  assert.equal(parseStudentRemovalIndex('4', 3), undefined);
+});
