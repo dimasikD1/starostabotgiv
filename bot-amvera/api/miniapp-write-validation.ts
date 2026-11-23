@@ -50,3 +50,15 @@ export function validateMiniAppAttendanceMark(
     lessonKey
   };
 }
+
+
+export interface HomeworkRecordIdValidation {
+  ok: boolean;
+  id: string;
+}
+
+/** Normalize homework IDs while preserving the legacy empty-ID not-found behavior. */
+export function validateHomeworkRecordId(input: unknown): HomeworkRecordIdValidation {
+  const id = String(input || '');
+  return { ok: id.length > 0, id };
+}
