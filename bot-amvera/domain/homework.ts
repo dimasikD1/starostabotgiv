@@ -71,6 +71,30 @@ export function appendHomework(
   }
 }
 
+export interface HomeworkCompletionState {
+  status: 'not_found' | 'already_completed' | 'ready';
+  item?: HomeworkRecord;
+}
+
+/** Find a homework item in the selected group and report whether this user already completed it. */
+export function getHomeworkCompletionState(
+  groups: HomeworkGroup[],
+  groupName: string,
+  homeworkId: string,
+  userId: string
+): HomeworkCompletionState {
+  const matching = groups.filter(group =>
+    !groupName ||
+    String(group.scheduleGroup || '').trim() === groupName ||
+    String(group.title || '').trim() === groupName
+  );
+  const item = matching.flatMap(group => group.homework || [])
+    .find(homework => String(homework.id || '') === homeworkId);
+  if (!item) return { status: 'not_found' };
+  if (item.completedBy?.[userId]) return { status: 'already_completed', item };
+  return { status: 'ready', item };
+}
+
 /** Mark an assignment complete, retaining the first completion timestamp. */
 export function markHomeworkCompleted(
   groups: HomeworkGroup[],
