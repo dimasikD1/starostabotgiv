@@ -1,5 +1,6 @@
 export {
   groupRoleReportSources,
   roleReportSourceChatIds,
-  firstAssignedRoleId
+  firstAssignedRoleId,
+  filterRoleReportGroups
 } from './.build/role-report.js';
