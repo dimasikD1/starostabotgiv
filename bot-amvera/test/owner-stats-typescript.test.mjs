@@ -45,6 +45,17 @@ test('formats owner statistics from user, role, group and payment data', () => {
   );
 });
 
+test('excludes configured owners from subscription counters but keeps total users', () => {
+  const message = buildOwnerStatsMessage({
+    'owner-1': { subscriptionForever: true },
+    'student-1': { subscriptionUntil: 10_000 }
+  }, {}, ['owner-1'], 1_000);
+
+  assert.ok(message.includes('Всего пользователей: <b>2</b>'));
+  assert.ok(message.includes('Активных подписок: <b>1</b>'));
+  assert.ok(message.includes('Пожизненных подписок: <b>0</b>'));
+});
+
 test('handles absent or malformed persisted collections without throwing', () => {
   assert.ok(buildOwnerStatsMessage(null, null, [], 0).includes('Всего пользователей: <b>0</b>'));
   assert.ok(buildOwnerStatsMessage({ user: { paymentHistory: 'invalid' } }, {}, [], 0).includes('Всего пользователей: <b>1</b>'));
