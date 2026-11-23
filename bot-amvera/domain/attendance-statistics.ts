@@ -156,3 +156,16 @@ export function buildAttendanceStatistics(
     students: studentStatistics
   };
 }
+
+
+/** Attach display names using the matching source roster index, preserving legacy order. */
+export function addAttendanceStudentNames<T extends object>(
+  statistics: readonly T[],
+  sourceStudents: readonly unknown[],
+  getStudentName: (student: unknown) => string
+): Array<T & { name: string }> {
+  return statistics.map((student, index) => ({
+    ...student,
+    name: getStudentName(sourceStudents[index])
+  }));
+}
