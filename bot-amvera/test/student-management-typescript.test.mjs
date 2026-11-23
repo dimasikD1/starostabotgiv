@@ -16,7 +16,8 @@ import {
   getStudentCard,
   replaceStudentRoster,
   confirmStudentRosterImport,
-  formatStudentRosterSummary
+  formatStudentRosterSummary,
+  parseStudentNameArgument
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -254,4 +255,12 @@ test('formats the student roster summary and escapes Telegram HTML characters', 
     '👥 <b>Группа &lt;1&gt; &amp; &quot;А&quot;</b>\n👨‍🎓 Всего студентов: <b>12</b>\n\nНажми на студента, чтобы открыть карточку и изменить контакты.'
   );
   assert.ok(formatStudentRosterSummary('Группа', Number.NaN).includes('Всего студентов: <b>0</b>'));
+});
+
+
+test('parses /student name arguments with optional bot username and surrounding whitespace', () => {
+  assert.equal(parseStudentNameArgument('/student Иван Иванов'), 'Иван Иванов');
+  assert.equal(parseStudentNameArgument('/student@starostagivbot Анна Петрова'), 'Анна Петрова');
+  assert.equal(parseStudentNameArgument('/student'), '');
+  assert.equal(parseStudentNameArgument('/student   Пётр   '), 'Пётр');
 });
