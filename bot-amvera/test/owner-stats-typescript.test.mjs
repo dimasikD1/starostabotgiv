@@ -46,6 +46,6 @@ test('formats owner statistics from user, role, group and payment data', () => {
 });
 
 test('handles absent or malformed persisted collections without throwing', () => {
-  assert.match(buildOwnerStatsMessage(null, null, [], 0), /Всего пользователей: <b>0<\/b>/);
-  assert.match(buildOwnerStatsMessage({ user: { paymentHistory: 'invalid' } }, {}, [], 0), /Всего пользователей: <b>1<\/b>/);
+  assert.ok(buildOwnerStatsMessage(null, null, [], 0).includes('Всего пользователей: <b>0</b>'));
+  assert.ok(buildOwnerStatsMessage({ user: { paymentHistory: 'invalid' } }, {}, [], 0).includes('Всего пользователей: <b>1</b>'));
 });
