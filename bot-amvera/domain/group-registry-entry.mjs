@@ -1,0 +1,1 @@
+// Runtime bridge: generated from group-registry.ts by the TypeScript build.\nexport { registerGroup, removeGroup } from './.build/group-registry.js';\n
