@@ -266,3 +266,24 @@ test('persists student deletion only for a valid index', () => {
   assert.deepEqual(group.students, ['Пётр']);
   assert.equal(saves, 1);
 });
+
+import { updateStudentContactAndSave } from '../../.test-build/domain/student-roster-workflows.js';
+
+test('updates a student contact, clears pending input, and saves exactly once', () => {
+  const group = { students: ['Иван Иванов'] };
+  let saves = 0, clears = 0;
+  const result = updateStudentContactAndSave(group, 0, 'phone', '+37255555555', () => clears++, () => saves++);
+  assert.equal(result.phone, '+37255555555');
+  assert.equal(result.name, 'Иван Иванов');
+  assert.equal(clears, 1);
+  assert.equal(saves, 1);
+  assert.equal(group.students[0].phone, '+37255555555');
+});
+
+test('does not save or clear pending input for a missing student', () => {
+  const group = { students: [] };
+  let saves = 0, clears = 0;
+  assert.equal(updateStudentContactAndSave(group, 0, 'username', 'student', () => clears++, () => saves++), undefined);
+  assert.equal(clears, 0);
+  assert.equal(saves, 0);
+});
