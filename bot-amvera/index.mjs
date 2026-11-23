@@ -23,7 +23,7 @@ import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport } from './domain/student-management-entry.mjs';
-import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave } from './domain/student-roster-workflows-entry.mjs';
+import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
@@ -1306,8 +1306,7 @@ bot.on('text', async (ctx,next) => {
    if(!normalized.ok)return ctx.reply('❌ Неверный номер. Укажи международный формат с плюсом, например +79181651870 или +37255555555. Для отмены: /cancel.');
    value=normalized.value;
   }
-  if(!updateStudentField(g,pending.index,pending.type,value)){delete u.pendingStudentField;saveDb();return ctx.reply('❌ Студент не найден. Открой /students и попробуй снова.');}
-  delete u.pendingStudentField;saveDb();
+  if(!updateStudentContactAndSave(g,pending.index,pending.type,value,()=>{delete u.pendingStudentField;},saveDb)){delete u.pendingStudentField;saveDb();return ctx.reply('❌ Студент не найден. Открой /students и попробуй снова.');}
   return ctx.reply('✅ Данные сохранены. Открой /students, чтобы увидеть обновлённую карточку.');
  }
  if(!u.pendingStudentImport)return next();
