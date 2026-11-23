@@ -1407,9 +1407,8 @@ bot.command(['delrole', 'removerole'], async ctx => {
   if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /delrole TELEGRAM_ID\\nID можно посмотреть командой /allroles.');
   const target = db.users?.[targetId];
   const targetUser = target ? normalizeUser(target) : {};
-  const result = removeGroupRolesAndSetStudent(allStudyGroups(),targetUser,targetId);
+  const result = removeAndPersistStudyGroupRoles(allStudyGroups(),targetUser,targetId,undefined,saveDb);
   const removed = result.removed;
-  saveDb();
   return ctx.reply(removed
     ? '✅ Управленческие назначения пользователя <code>' + escapeHtml(targetId) + '</code> сняты (' + removed + '). Роль пользователя — студент.'
     : 'ℹ️ У пользователя <code>' + escapeHtml(targetId) + '</code> не найдено назначений старосты или заместителя. Если профиль существует, его роль установлена как «Студент».',
@@ -1524,9 +1523,8 @@ bot.command('setstudent', async ctx => {
   if (!target) return ctx.reply('Ответь командой /setstudent на сообщение нужного человека.');
   const chat=db.groups[String(ctx.chat.id)];
   const u = normalizeUser(user(target.id));
-  if(chat) removeGroupRolesAndSetStudent(ensureStudyGroups(chat),u,target.id,ctx.chat.id);
-  else setStudentRole(u,ctx.chat.id);
-  saveDb();
+  if(chat) removeAndPersistStudyGroupRoles(ensureStudyGroups(chat),u,target.id,ctx.chat.id,saveDb);
+  else { setStudentRole(u,ctx.chat.id); saveDb(); }
   await ctx.reply('👨‍🎓 ' + (target.first_name || 'Пользователь') + ' снят с управленческих ролей в этом учебном чате.');
 });
 
