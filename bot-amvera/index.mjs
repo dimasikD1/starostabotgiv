@@ -16,6 +16,7 @@ import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
+import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -625,13 +626,11 @@ function isPrivate(ctx) {
 }
 
 async function isGroupAdmin(ctx) {
-  if (!ctx.chat || !['group', 'supergroup'].includes(ctx.chat.type)) return false;
-  try {
-    const member = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
-    return member.status === 'creator' || member.status === 'administrator';
-  } catch {
-    return false;
-  }
+  return isTelegramGroupAdmin(
+    ctx.chat,
+    ctx.from?.id,
+    (chatId, userId) => ctx.telegram.getChatMember(chatId, userId)
+  );
 }
 
 function registerGroup(ctx) {
