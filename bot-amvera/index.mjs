@@ -36,6 +36,7 @@ import { resolveMiniAppGroupAccess } from './api/miniapp-group-access-entry.mjs'
 import { loadMiniAppSchedule } from './api/miniapp-schedule-loader-entry.mjs';
 import { updateMiniAppProfile, clearMiniAppStudentRoster } from './api/miniapp-profile-entry.mjs';
 import { updateMiniAppAttendance } from './api/miniapp-attendance-entry.mjs';
+import { publishMiniAppAnnouncement } from './api/miniapp-announcement-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2536,16 +2537,20 @@ async function handleMiniAppApi(req,res,url) {
   if(req.method==='POST' && url.pathname==='/api/announcements') {
     try {
       const body=await readJsonBody(req);
-      const validation=normalizeAnnouncementText(body.text);
-      if(!validation.ok) return sendJson(res,400,{error:validation.reason==='empty'?'Напиши текст объявления.':'Объявление слишком длинное. Максимум 3000 символов.'});
-      const message=validation.text;
-      if(!g.chatId) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
-      await bot.telegram.sendMessage(g.chatId,formatAnnouncementMessage(message,'Объявление группы',escapeHtml),{parse_mode:'HTML'});
-      g.announcements ||= [];
-      const item=createAnnouncementRecord({id:crypto.randomUUID(),text:message,authorId:tgUser.id,authorName:String(tgUser.first_name||'Староста'),createdAt:new Date().toISOString()});
-      g.announcements=appendAnnouncement(g.announcements,item);
-      saveDb();
-      return sendJson(res,200,{ok:true,announcement:item});
+      const result = await publishMiniAppAnnouncement(g, body.text, tgUser, {
+        normalizeText: normalizeAnnouncementText,
+        sendMessage: (chatId, message) => bot.telegram.sendMessage(chatId, message, {parse_mode:'HTML'}),
+        formatMessage: message => formatAnnouncementMessage(message,'Объявление группы',escapeHtml),
+        createRecord: (text, authorId, authorName) => createAnnouncementRecord({
+          id:crypto.randomUUID(),text,authorId,authorName,createdAt:new Date().toISOString()
+        }),
+        append: appendAnnouncement,
+        save: saveDb
+      });
+      if(!result.ok && result.reason==='empty') return sendJson(res,400,{error:'Напиши текст объявления.'});
+      if(!result.ok && result.reason==='too_long') return sendJson(res,400,{error:'Объявление слишком длинное. Максимум 3000 символов.'});
+      if(!result.ok) return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
+      return sendJson(res,200,{ok:true,announcement:result.announcement});
     } catch(e) {
       console.error('[miniapp announcement]',e?.message||e);
       return sendJson(res,502,{error:'Не удалось отправить объявление в группу. Проверь, что бот добавлен в чат и может отправлять сообщения.'});
