@@ -6,6 +6,7 @@ export interface MiniAppTelegramUserSummary {
 
 export interface MiniAppUserSummary {
   fullName?: string;
+  group?: string;
   role?: unknown;
 }
 
@@ -49,7 +50,7 @@ export function buildMiniAppDataResponse(input: MiniAppDataResponseInput): Recor
       institutionId: group.institutionId || '',
       institutionName: input.institution?.name || ''
     },
-    group: group.scheduleGroup || group.title || user.fullName || 'Учебная группа',
+    group: group.scheduleGroup || group.title || user.group || 'Учебная группа',
     date: input.date,
     ...data,
     scheduleError: input.scheduleError,
