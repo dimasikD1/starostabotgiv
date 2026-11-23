@@ -43,3 +43,14 @@ export function firstAssignedRoleId(
 ): string {
   return group._sourceGroups.map(source => String(source[role] || '')).find(Boolean) || '';
 }
+
+/** Restrict role report source groups to the institutions visible to the requester. */
+export function filterRoleReportGroups<T extends RoleReportSourceGroup>(
+  groups: readonly T[],
+  isPlatformOwner: boolean,
+  allowedInstitutionIds: readonly string[]
+): T[] {
+  if (isPlatformOwner) return [...groups];
+  const allowed = new Set(allowedInstitutionIds.map(String));
+  return groups.filter(group => allowed.has(String(group.institutionId || '')));
+}
