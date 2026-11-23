@@ -39,6 +39,7 @@ import { updateMiniAppAttendance } from './api/miniapp-attendance-entry.mjs';
 import { publishMiniAppAnnouncement } from './api/miniapp-announcement-entry.mjs';
 import { createMiniAppHomework, updateMiniAppHomeworkRecord, deleteMiniAppHomeworkRecord } from './api/miniapp-records-entry.mjs';
 import { listManagedMiniAppTelegramChats, performMiniAppTelegramChatAction } from './api/miniapp-telegram-chats-entry.mjs';
+import { getMiniAppAccessibleGroups, clearMiniAppRosterAndSave } from './api/miniapp-group-management-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2427,7 +2428,7 @@ async function handleMiniAppApi(req,res,url) {
   const { telegramUser: tgUser, user: u } = requestContext;
   // Подписка временно отключена: Mini App доступен без оплаты.
   if(req.method==='GET' && url.pathname==='/api/groups') {
-    const groups=accessibleGroups(tgUser.id);
+    const groups=getMiniAppAccessibleGroups(tgUser.id,accessibleGroups);
     return sendJson(res,200,{groups});
   }
   // Telegram chat controls are scoped to chats where the user manages every cohort.
@@ -2516,10 +2517,13 @@ async function handleMiniAppApi(req,res,url) {
     }));
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
-    const result = clearMiniAppStudentRoster(g);
+    const result = clearMiniAppRosterAndSave(
+      g,
+      clearMiniAppStudentRoster,
+      saveDb,
+      cleared => console.log('[miniapp students] roster cleared', {group:g.title||'',by:String(tgUser.id),count:cleared.deleted})
+    );
     if(result.empty) return sendJson(res,400,{error:'Список студентов уже пуст.'});
-    saveDb();
-    console.log('[miniapp students] roster cleared', {group:g.title||'',by:String(tgUser.id),count:result.deleted});
     return sendJson(res,200,{ok:true,deleted:result.deleted});
   }
   if(req.method==='POST' && url.pathname==='/api/profile') {
