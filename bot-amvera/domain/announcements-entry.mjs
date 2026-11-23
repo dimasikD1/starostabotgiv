@@ -3,5 +3,6 @@ export {
   createAnnouncementRecord,
   appendAnnouncement,
   formatAnnouncementMessage,
-  getRecentAnnouncements
+  getRecentAnnouncements,
+  buildAnnouncementChatOptions
 } from './.build/announcements.js';
