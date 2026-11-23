@@ -28,7 +28,7 @@ import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePol
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
-import { createFaculty, createDirection, createCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
+import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { createInstitutionAndSave, deleteInstitutionAndSave, addInstitutionAdminAndSave, removeInstitutionAdminAndSave } from './domain/institution-workflows-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
@@ -1797,11 +1797,11 @@ bot.command('addcourse', async ctx => {
 bot.command('linkgroup', async ctx => {
   if (!ctx.chat || ctx.chat.type === 'private') return ctx.reply('📌 Команду используй в общем чате, где добавлен бот.');
   const args = structureParts(ctx, 'linkgroup');
-  const groupNumber = String(args[0] || '').trim();
-  const courseId = String(args[1] || '').trim();
-  if (!['1', '2'].includes(groupNumber) || !courseId) {
+  const parsedArgs = parseStudyGroupLinkArguments(args);
+  if (!parsedArgs.ok) {
     return ctx.reply('Формат: /linkgroup 1 | ID_КУРСА\nДля второй группы укажи /linkgroup 2 | ID_КУРСА. ID курса смотри через /structure inst_001 в личке с ботом.');
   }
+  const { groupNumber, courseId } = parsedArgs;
   const groupName = STUDY_GROUPS[groupNumber];
   const chat = db.groups?.[String(ctx.chat.id)];
   if (!chat) return ctx.reply('❌ Этот чат ещё не зарегистрирован. Сначала добавь бота в учебный чат и пройди настройку.');
@@ -1829,10 +1829,11 @@ bot.command('linkgroup', async ctx => {
 bot.command('unlinkgroup', async ctx => {
   if (!ctx.chat || ctx.chat.type === 'private') return ctx.reply('📌 Команду используй в общем чате, где добавлен бот.');
   const args = structureParts(ctx, 'unlinkgroup');
-  const groupNumber = String(args[0] || '').trim();
-  if (!['1', '2'].includes(groupNumber)) {
+  const parsedArgs = parseStudyGroupUnlinkArguments(args);
+  if (!parsedArgs.ok) {
     return ctx.reply('Формат: /unlinkgroup 1\nДля второй группы укажи /unlinkgroup 2. Команда убирает только привязку к курсу, студенты и посещаемость сохраняются.');
   }
+  const { groupNumber } = parsedArgs;
   const groupName = STUDY_GROUPS[groupNumber];
   const chat = db.groups?.[String(ctx.chat.id)];
   if (!chat) return ctx.reply('❌ Этот чат ещё не зарегистрирован.');
