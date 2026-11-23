@@ -17,5 +17,6 @@ export {
   confirmStudentRosterImport,
   parseStudentRemovalIndex,
   formatStudentRosterSummary,
+  formatStudentCardText,
   parseStudentNameArgument
 } from './.build/student-management.js';
