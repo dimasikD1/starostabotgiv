@@ -1368,13 +1368,13 @@ bot.command('student',async ctx=>{
  if(String(g.starostaId||'')!==String(ctx.from.id)&&String(g.zamId||'')!==String(ctx.from.id)&&!(await isGroupAdmin(ctx))&&!isOwner(ctx.from.id))return ctx.reply('❌ Добавлять студентов может староста или администратор.');
  g.attendance||={};const result=addTelegramStudentAndSave(g,{name:name||('ID '+target.id),telegramId:String(target.id),username:target.username||''},saveDb);
  if(result==='limit')return ctx.reply('❌ Максимум 100 студентов.');
- saveDb();return ctx.reply((result==='updated'?'🔄 Обновлена запись в списке «':'✅ Добавлен в список «')+g.title+'»: '+studentName(g.students.find(x=>String(typeof x==='object'?x.telegramId:'')===String(target.id))));
+ return ctx.reply((result==='updated'?'🔄 Обновлена запись в списке «':'✅ Добавлен в список «')+g.title+'»: '+studentName(g.students.find(x=>String(typeof x==='object'?x.telegramId:'')===String(target.id))));
  }
  if(!isPrivate(ctx))return ctx.reply('Ответь в группе на сообщение студента командой /student.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Сначала назначь старосту в прикреплённой группе.');
  if(!name)return ctx.reply('Формат: /student Имя Фамилия');const result=addNamedStudentAndSave(g,name,saveDb);
  if(result==='duplicate')return ctx.reply('ℹ️ Такой студент уже есть.');
  if(result==='limit')return ctx.reply('❌ Максимум 100 студентов.');
- saveDb();return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+name);
+ return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+name);
 });
 bot.command('delstudent',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Удаление доступно в личных сообщениях.');const n=Number(ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i,'').trim())-1,g=managedGroup(ctx.from.id);
