@@ -10,6 +10,7 @@ import { formatSchedule, nextWeekDateRange, nextMondayDateRange, currentMondayDa
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName, parseSetScheduleGroupArgument } from './schedule/schedule-view-entry.mjs';
 import { parseGrantCommandInput, parseAdminTargetId } from './domain/admin-command-input-entry.mjs';
+import { buildOwnerStatsMessage } from './domain/owner-stats-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
@@ -833,39 +834,7 @@ bot.command('stats', ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Статистика доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /stats.');
 
-  const entries = Object.entries(db.users);
-  const now = Date.now();
-  const active = entries.filter(([id, u]) => !isOwner(id) && (Boolean(u.subscriptionForever) || subscriptionUntil(u) > now)).length;
-  const lifetime = entries.filter(([id, u]) => !isOwner(id) && Boolean(u.subscriptionForever)).length;
-  const expired = entries.filter(([id, u]) => !isOwner(id) && !u.subscriptionForever && subscriptionUntil(u) > 0 && subscriptionUntil(u) <= now).length;
-  const noSubscription = entries.filter(([id, u]) => !isOwner(id) && !u.subscriptionForever && subscriptionUntil(u) <= 0).length;
-  const starostas = entries.filter(([, u]) => u.role === 'starosta').length;
-  const students = entries.filter(([, u]) => (u.role || 'student') === 'student').length;
-  const newUsers30d = entries.filter(([, u]) => u.createdAt && (now - Date.parse(u.createdAt)) <= 30 * 24 * 60 * 60 * 1000).length;
-  const history = entries.flatMap(([, u]) => Array.isArray(u.paymentHistory) ? u.paymentHistory : []);
-  const starsPayments = history.filter(p => p.method === 'stars');
-  const donations = history.filter(p => p.method === 'hosting_donation_stars');
-  const manualGrants = history.filter(p => p.method === 'owner_grant').length;
-  const starsTotal = starsPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-  const donationTotal = donations.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-  return ctx.reply(
-    '📊 <b>Статистика Староста Бота</b>\n\n' +
-    '👥 Всего пользователей: <b>' + entries.length + '</b>\n' +
-    '🆕 Новых за 30 дней: <b>' + newUsers30d + '</b>\n' +
-    '📌 Активных подписок: <b>' + active + '</b>\n' +
-    '♾ Пожизненных подписок: <b>' + lifetime + '</b>\n' +
-    '⌛ Истекших подписок: <b>' + expired + '</b>\n' +
-    '🔓 Без подписки: <b>' + noSubscription + '</b>\n\n' +
-    '👑 Старост: <b>' + starostas + '</b>\n' +
-    '🎓 Студентов: <b>' + students + '</b>\n' +
-    '🏫 Прикреплённых групп: <b>' + Object.keys(db.groups).length + '</b>\n\n' +
-    '💳 Старые оплаты подписок: <b>' + starsPayments.length + '</b> (' + starsTotal + ' ⭐)\n' +
-    '💛 Пожертвований на хостинг: <b>' + donations.length + '</b> (' + donationTotal + ' ⭐)\n' +
-    '🎁 Старых ручных выдач: <b>' + manualGrants + '</b>\n\n' +
-    '<i>Подписки отключены. Пожертвования учитываются отдельно по истории Telegram Stars.</i>',
-    { parse_mode: 'HTML' }
-  );
+  return ctx.reply(buildOwnerStatsMessage(db.users, db.groups, OWNER_TELEGRAM_IDS), { parse_mode: 'HTML' });
 });
 
 bot.command('terms', ctx => ctx.reply(
