@@ -33,6 +33,7 @@ import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.m
 import { readJsonBody } from './api/json-body-entry.mjs';
 import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
 import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark } from './api/miniapp-write-validation-entry.mjs';
+import { validateHomeworkMediaUpload } from './api/homework-media-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
@@ -2574,14 +2575,10 @@ async function handleMiniAppApi(req,res,url) {
   }
   if(req.method==='POST' && url.pathname==='/api/homework-media-upload') {
     try {
-      const body=await readJsonBody(req,12*1024*1024),fileName=String(body.fileName||'attachment').slice(0,120),mimeType=String(body.mimeType||'').toLowerCase();
-      const imageTypes=['image/jpeg','image/png'],videoTypes=['video/mp4'];
-      const type=imageTypes.includes(mimeType)?'photo':videoTypes.includes(mimeType)?'video':'';
-      if(!type)return sendJson(res,400,{error:'Поддерживаются JPG, PNG и MP4.'});
-      const encoded=String(body.data||'').replace(/^data:[^;]+;base64,/,'');
-      if(!encoded||encoded.length>11*1024*1024)return sendJson(res,413,{error:'Файл слишком большой. Максимум 8 МБ.'});
-      const buffer=Buffer.from(encoded,'base64');
-      if(!buffer.length||buffer.length>8*1024*1024)return sendJson(res,413,{error:'Файл слишком большой. Максимум 8 МБ.'});
+      const body=await readJsonBody(req,12*1024*1024),validation=validateHomeworkMediaUpload(body);
+      if(!validation.ok&&validation.reason==='type')return sendJson(res,400,{error:'Поддерживаются JPG, PNG и MP4.'});
+      if(!validation.ok)return sendJson(res,413,{error:'Файл слишком большой. Максимум 8 МБ.'});
+      const {fileName,mimeType,type,buffer}=validation;
       const message=type==='photo'?await bot.telegram.sendPhoto(String(tgUser.id),{source:buffer,filename:fileName}):await bot.telegram.sendVideo(String(tgUser.id),{source:buffer,filename:fileName});
       const fileId=type==='photo'?message.photo?.[message.photo.length-1]?.file_id:message.video?.file_id;
       if(!fileId)throw new Error('Telegram не вернул file_id вложения.');
