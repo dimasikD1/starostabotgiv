@@ -70,6 +70,6 @@ export function buildAnnouncementChatOptions(
       id: String(group?.chatId || id),
       title: String(group?.title || group?.chatTitle || ('Чат ' + (group?.chatId || id)))
     }))
-    .filter(chat => /^-?\\d+$/.test(chat.id));
+    .filter(chat => /^-?\d+$/.test(chat.id));
   return [...new Map(chats.map(chat => [chat.id, chat])).values()];
 }
