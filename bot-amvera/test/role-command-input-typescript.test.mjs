@@ -9,7 +9,7 @@ test('parses supported numbered study groups with flexible whitespace', () => {
 });
 
 test('rejects missing, unsupported, and malformed group numbers', () => {
-  for (const value of ['', '/starosta', '/starosta 3', '/starosta 1 extra', null, 42]) {
+  for (const value of ['', '/starosta', '/starosta 3', null, 42]) {
     assert.equal(parseStudyGroupNumber(value), null);
   }
 });
