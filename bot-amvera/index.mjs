@@ -1335,14 +1335,6 @@ function studentListKeyboard(g,page=0){
  return Markup.inlineKeyboard(rows);
 }
 function studentCardText(g,i){ return formatStudentCardText(getStudentCard(g,i)); }
- const card=getStudentCard(g,i);
- if(!card)return '❌ Студент не найден.';
- const name=card.name;
- const username=card.username?'@'+card.username.replace(/^@/,''):'не указан';
- const phone=card.phone||'не указан';
- const id=card.telegramId||'не указан';
- return '👤 <b>'+escapeHtml(name)+'</b>\n\n🔹 Username: '+escapeHtml(username)+'\n📞 Телефон: <code>'+escapeHtml(phone)+'</code>\n🆔 Telegram ID: <code>'+escapeHtml(id)+'</code>';
-}
 function studentCardKeyboard(i){
  return Markup.inlineKeyboard([
   [Markup.button.callback('✏️ Изменить username','studentedit:username:'+i)],
