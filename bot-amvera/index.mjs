@@ -26,7 +26,7 @@ import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/at
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary, parseStudentNameArgument } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
@@ -1334,7 +1334,7 @@ function studentListKeyboard(g,page=0){
  rows.push(nav);
  return Markup.inlineKeyboard(rows);
 }
-function studentCardText(g,i){
+function studentCardText(g,i){ return formatStudentCardText(getStudentCard(g,i)); }
  const card=getStudentCard(g,i);
  if(!card)return '❌ Студент не найден.';
  const name=card.name;
