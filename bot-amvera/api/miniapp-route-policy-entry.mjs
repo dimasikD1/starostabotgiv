@@ -1,0 +1,1 @@
+// Runtime bridge: generated from miniapp-route-policy.ts by the TypeScript build.\nexport { isMiniAppManagerWriteRoute, isMiniAppGroupScopedRoute } from './.build/miniapp-route-policy.js';\n
