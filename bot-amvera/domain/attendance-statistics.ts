@@ -72,7 +72,7 @@ export function buildAttendanceStatistics(
 
   const historyEntries = Object.entries(attendance).flatMap(([key, value]): AttendanceStatisticsEntry[] => {
     const [date = '', timeStart = '', timeEnd = '', subject = 'Занятие'] = key.split('|');
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || date > today || date < historyCutoff) return [];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today || date < historyCutoff) return [];
     const record = asRecord(value);
     let present = 0;
     let absent = 0;
