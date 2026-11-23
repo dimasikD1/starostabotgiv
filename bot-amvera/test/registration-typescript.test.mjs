@@ -4,7 +4,8 @@ import {
   validateAndNormalizeFullName,
   applyStudyGroupSelection,
   shouldPromptStudyGroup,
-  completeFullNameRegistration
+  completeFullNameRegistration,
+  parseStudyGroupSelection
 } from '../domain/.build/registration.js';
 
 test('validates and normalizes full names using the existing registration rules', () => {
@@ -46,4 +47,13 @@ test('completes full-name registration only after valid input', () => {
   assert.equal(completeFullNameRegistration(invalid, 'Иван').ok, false);
   assert.equal(invalid.fullName, '');
   assert.equal(invalid.pendingFullName, true);
+});
+
+test('parses only configured study group numbers or exact names', () => {
+  const groups = { '1': 'БИ(ЭБ)1-ОЗ/Бп/КД26', '2': 'БИ(ЭБ)2-ОЗ/Бп/КД26' };
+  assert.equal(parseStudyGroupSelection('1', groups), groups['1']);
+  assert.equal(parseStudyGroupSelection(' 2 ', groups), groups['2']);
+  assert.equal(parseStudyGroupSelection(groups['1'], groups), groups['1']);
+  assert.equal(parseStudyGroupSelection('БИ(ЭБ)3', groups), undefined);
+  assert.equal(parseStudyGroupSelection('', groups), undefined);
 });
