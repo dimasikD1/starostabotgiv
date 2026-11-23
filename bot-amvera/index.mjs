@@ -55,6 +55,7 @@ import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId } from './domain/role-report-entry.mjs';
+import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles } from './domain/role-command-workflows-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -1474,9 +1475,8 @@ bot.command('starosta', async ctx => {
   registerGroup(ctx);
   const chat=db.groups[String(ctx.chat.id)];
   const u = normalizeUser(user(ctx.from.id));
-  const assignment=assignStudyGroupRoleByNumber(ensureStudyGroups(chat),u,'starosta',ctx.from.id,groupNumber,STUDY_GROUPS,{username:ctx.from.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID});
+  const assignment=assignAndPersistStudyGroupRole(ensureStudyGroups(chat),u,'starosta',ctx.from.id,groupNumber,STUDY_GROUPS,{username:ctx.from.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID},saveDb);
   if(assignment.status!=='assigned') return ctx.reply('❌ Учебная группа не найдена.');
-  saveDb();
   return ctx.reply('👑 Ты назначен старостой учебной группы «'+escapeHtml(String(assignment.group.studyGroup||''))+'».', studentMenu);
 });
 
@@ -1491,10 +1491,9 @@ bot.command('zam', async ctx => {
   const chat=db.groups[String(ctx.chat.id)];
   if(!chat) return ctx.reply('❌ Сначала подключи чат командой /attach.');
   const u=normalizeUser(user(target.id));
-  const assignment=assignStudyGroupRoleByNumber(ensureStudyGroups(chat),u,'zam',target.id,groupNumber,STUDY_GROUPS,{username:target.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID});
+  const assignment=assignAndPersistStudyGroupRole(ensureStudyGroups(chat),u,'zam',target.id,groupNumber,STUDY_GROUPS,{username:target.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID},saveDb);
   if(assignment.status==='group-not-found') return ctx.reply('❌ Учебная группа не найдена.');
   if(assignment.status==='target-is-starosta') return ctx.reply('Этот пользователь уже назначен старостой выбранной группы.');
-  saveDb();
   return ctx.reply('⭐ '+(target.first_name||'Пользователь')+' назначен заместителем старосты группы «'+escapeHtml(String(assignment.group.studyGroup||''))+'». Теперь он может добавлять студентов командой /student, удалять через /delstudent и загружать список через /importstudents в личном чате с ботом.',studentMenu);
 });
 
@@ -1507,9 +1506,8 @@ bot.command('setstarosta', async ctx => {
   if(!['1','2'].includes(groupNumber)) return ctx.reply('Укажи номер учебной группы: /setstarosta 1 или /setstarosta 2.');
   registerGroup(ctx);
   const u = normalizeUser(user(target.id));
-  const assignment=assignStudyGroupRoleByNumber(ensureStudyGroups(db.groups[String(ctx.chat.id)]),u,'starosta',target.id,groupNumber,STUDY_GROUPS,{username:target.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID});
+  const assignment=assignAndPersistStudyGroupRole(ensureStudyGroups(db.groups[String(ctx.chat.id)]),u,'starosta',target.id,groupNumber,STUDY_GROUPS,{username:target.username||'',chatId:ctx.chat.id,institutionId:DEFAULT_INSTITUTION_ID},saveDb);
   if(assignment.status!=='assigned') return ctx.reply('❌ Учебная группа не найдена.');
-  saveDb();
   await ctx.reply('👑 ' + (target.first_name || 'Пользователь') + ' назначен старостой группы «'+escapeHtml(String(assignment.group.studyGroup||''))+'».');
 });
 
