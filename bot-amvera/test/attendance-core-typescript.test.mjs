@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from '../../.test-build/domain-user/attendance-core.js';
+import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from '../../.test-build/domain-user/attendance-core.js';
 
 test('builds the lesson key from date, start/end time and subject', () => {
   assert.equal(
@@ -104,4 +104,36 @@ test('resolves only valid integer lesson indexes', () => {
   assert.equal(getAttendanceLessonAt(lessons, 1), 'second');
   assert.equal(getAttendanceLessonAt(lessons, -1), undefined);
   assert.equal(getAttendanceLessonAt(lessons, 1.5), undefined);
+});
+
+
+test('builds today and full schedule lessons with attendance counts and legacy ordering', () => {
+  const schedule = [
+    {date:'2026-11-24',timeStart:'11:00',subject:'История',room:'О-2'},
+    {date:'2026-11-23',timeStart:'10:00',subject:'Математика',teacher:'Преподаватель'},
+    {date:'2026-11-23',timeStart:'08:30',subject:'Физика'},
+    {date:'2026-11-23',timeStart:'09:00',subject:''},
+    {date:'',timeStart:'07:00',subject:'Без даты'}
+  ];
+  const students = [{id:1},{id:2},{id:3}];
+  const result = buildMiniAppAttendanceLessons(
+    schedule, students,
+    {'2026-11-23|10:00||Математика':{'1':'present','2':'absent'}},
+    '2026-11-23',
+    lesson => [lesson.date,lesson.timeStart,'',lesson.subject || 'Занятие'].join('|'),
+    student => String(student.id)
+  );
+  assert.deepEqual(result.todayLessons.map(x => x.subject), ['Физика','Математика']);
+  assert.deepEqual(result.scheduleLessons.map(x => x.subject), ['Физика','Математика','История']);
+  assert.deepEqual(result.scheduleLessons[1], {
+    key:'2026-11-23|10:00||Математика',date:'2026-11-23',timeStart:'10:00',timeEnd:'',
+    subject:'Математика',room:'',teacher:'Преподаватель',present:1,absent:1,unmarked:1
+  });
+});
+
+test('returns empty Mini App lesson lists for an empty schedule', () => {
+  assert.deepEqual(
+    buildMiniAppAttendanceLessons([], [], {}, '2026-11-23', () => '', () => ''),
+    {todayLessons:[],scheduleLessons:[]}
+  );
 });
