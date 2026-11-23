@@ -76,3 +76,20 @@ test('unlinks a group only from its own institution structure', () => {
   assert.equal(institution.faculties.fac_1.directions.dir_1.courses.course_1.groups['-100::Группа 1'], undefined);
   assert.equal(group.courseId, undefined);
 });
+
+
+test('parses study-group link arguments and rejects missing or invalid values', async () => {
+  const { parseStudyGroupLinkArguments } = await import('../domain/.build/institution-structure.js');
+  assert.deepEqual(parseStudyGroupLinkArguments([' 1 ', ' course_123 ']), { ok: true, groupNumber: '1', courseId: 'course_123' });
+  assert.deepEqual(parseStudyGroupLinkArguments(['2', 'course_2']), { ok: true, groupNumber: '2', courseId: 'course_2' });
+  assert.deepEqual(parseStudyGroupLinkArguments(['3', 'course_2']), { ok: false, reason: 'invalid_group' });
+  assert.deepEqual(parseStudyGroupLinkArguments(['1', '  ']), { ok: false, reason: 'missing_course' });
+  assert.deepEqual(parseStudyGroupLinkArguments([]), { ok: false, reason: 'invalid_group' });
+});
+
+test('parses study-group unlink arguments without requiring a course ID', async () => {
+  const { parseStudyGroupUnlinkArguments } = await import('../domain/.build/institution-structure.js');
+  assert.deepEqual(parseStudyGroupUnlinkArguments(['2']), { ok: true, groupNumber: '2' });
+  assert.deepEqual(parseStudyGroupUnlinkArguments([' 1 ']), { ok: true, groupNumber: '1' });
+  assert.deepEqual(parseStudyGroupUnlinkArguments(['course_1']), { ok: false, reason: 'invalid_group' });
+});
