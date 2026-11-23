@@ -32,6 +32,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
 import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entry.mjs';
+import { resolveMiniAppGroupAccess } from './api/miniapp-group-access-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2465,8 +2466,14 @@ async function handleMiniAppApi(req,res,url) {
     }
   }
   const selectedGroupId=String(url.searchParams.get('groupId')||'');
-  const g=managedGroup(tgUser.id,selectedGroupId);
-  if(!g || !canManageGroup(tgUser.id,g)) return sendJson(res,403,{error:'Нет доступа к выбранной группе. Обнови список групп.'});
+  const groupAccess = resolveMiniAppGroupAccess(tgUser.id, selectedGroupId, {
+    getManagedGroup: managedGroup,
+    canManageGroup
+  });
+  if (groupAccess.kind === 'forbidden') {
+    return sendJson(res,403,{error:groupAccess.message});
+  }
+  const g = groupAccess.group;
   if (isMiniAppManagerWriteRoute(req.method, url.pathname) && !canManageGroup(tgUser.id,g)) {
     return sendJson(res,403,{error:'Недостаточно прав для изменения данных этой учебной группы.'});
   }
