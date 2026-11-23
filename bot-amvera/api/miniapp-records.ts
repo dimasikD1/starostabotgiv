@@ -46,13 +46,13 @@ export interface MiniAppHomeworkDependencies {
 }
 
 /** Stores a new homework record, consumes its pending media IDs, then publishes best-effort. */
-export async function createMiniAppHomework<TRecord extends MiniAppHomeworkRecord, TAttachment extends MiniAppHomeworkAttachment>(
-  group: MiniAppHomeworkGroup<TRecord>,
+export async function createMiniAppHomework<TAttachment extends MiniAppHomeworkAttachment>(
+  group: MiniAppHomeworkGroup<MiniAppHomeworkRecord>,
   ownerId: string,
   input: MiniAppHomeworkCreateInput<TAttachment>,
   dependencies: MiniAppHomeworkDependencies
-): Promise<MiniAppHomeworkMutation<TRecord>> {
-  const record = {
+): Promise<MiniAppHomeworkMutation<MiniAppHomeworkRecord>> {
+  const record: MiniAppHomeworkRecord = {
     id: input.id,
     subject: input.subject,
     homework: input.homework,
@@ -60,7 +60,7 @@ export async function createMiniAppHomework<TRecord extends MiniAppHomeworkRecor
     createdAt: input.createdAt,
     authorId: input.authorId,
     completedBy: {}
-  } as TRecord;
+  };
   group.homework ||= [];
   group.homework.push(record);
   if (group.homework.length > 100) group.homework = group.homework.slice(-100);
@@ -76,8 +76,8 @@ export async function createMiniAppHomework<TRecord extends MiniAppHomeworkRecor
 }
 
 /** Applies a validated homework edit, saves it, then publishes only newly added media. */
-export async function updateMiniAppHomeworkRecord<TRecord extends MiniAppHomeworkRecord, TAttachment extends MiniAppHomeworkAttachment>(
-  group: MiniAppHomeworkGroup<TRecord>,
+export async function updateMiniAppHomeworkRecord<TAttachment extends MiniAppHomeworkAttachment>(
+  group: MiniAppHomeworkGroup<MiniAppHomeworkRecord>,
   id: string,
   input: MiniAppHomeworkUpdateInput<TAttachment>,
   added: TAttachment[],
