@@ -161,3 +161,9 @@ npm test
 ---
 
 Проект развивается постепенно: новые функции добавляются с сохранением существующих данных и обратной совместимости.
+
+## TypeScript migration
+
+The Telegram group-verification flow now gets its member permission policy from the typed
+`buildVerifiedMemberChatPermissions()` function in `bot-amvera/domain/chat-permissions.ts`.
+The Telegram API call and verification workflow remain in the existing bot entrypoint.
