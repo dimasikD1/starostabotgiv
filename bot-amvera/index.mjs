@@ -23,6 +23,7 @@ import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport } from './domain/student-management-entry.mjs';
+import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
@@ -1365,12 +1366,12 @@ bot.command('student',async ctx=>{
  const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):ctx.message.text.replace(/^\/student(?:@\S+)?/i,'').trim();
  if(target&&['group','supergroup'].includes(ctx.chat.type)){const g=db.groups[String(ctx.chat.id)];if(!g)return ctx.reply('Сначала администратор должен выполнить /attach.');
  if(String(g.starostaId||'')!==String(ctx.from.id)&&String(g.zamId||'')!==String(ctx.from.id)&&!(await isGroupAdmin(ctx))&&!isOwner(ctx.from.id))return ctx.reply('❌ Добавлять студентов может староста или администратор.');
- g.attendance||={};const result=addTelegramStudent(g,{name:name||('ID '+target.id),telegramId:String(target.id),username:target.username||''});
+ g.attendance||={};const result=addTelegramStudentAndSave(g,{name:name||('ID '+target.id),telegramId:String(target.id),username:target.username||''},saveDb);
  if(result==='limit')return ctx.reply('❌ Максимум 100 студентов.');
  saveDb();return ctx.reply((result==='updated'?'🔄 Обновлена запись в списке «':'✅ Добавлен в список «')+g.title+'»: '+studentName(g.students.find(x=>String(typeof x==='object'?x.telegramId:'')===String(target.id))));
  }
  if(!isPrivate(ctx))return ctx.reply('Ответь в группе на сообщение студента командой /student.');const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Сначала назначь старосту в прикреплённой группе.');
- if(!name)return ctx.reply('Формат: /student Имя Фамилия');const result=addNamedStudent(g,name);
+ if(!name)return ctx.reply('Формат: /student Имя Фамилия');const result=addNamedStudentAndSave(g,name,saveDb);
  if(result==='duplicate')return ctx.reply('ℹ️ Такой студент уже есть.');
  if(result==='limit')return ctx.reply('❌ Максимум 100 студентов.');
  saveDb();return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+name);
@@ -1378,7 +1379,7 @@ bot.command('student',async ctx=>{
 bot.command('delstudent',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Удаление доступно в личных сообщениях.');const n=Number(ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i,'').trim())-1,g=managedGroup(ctx.from.id);
  if(!g)return ctx.reply('❌ Не найдена твоя прикреплённая группа.');if(!Number.isInteger(n)||n<0||n>=g.students.length)return ctx.reply('Формат: /delstudent номер из списка /students');
- const removed=removeStudentAt(g,n);saveDb();return ctx.reply('🗑 Удалён: '+studentName(removed));
+ const removed=removeStudentAtAndSave(g,n,saveDb);if(removed===undefined)return ctx.reply('Формат: /delstudent номер из списка /students');return ctx.reply('🗑 Удалён: '+studentName(removed));
 });
 bot.hears('👨‍🎓 Список студентов', ctx => ctx.reply('Используй /students. Добавить с username: ответь в группе на сообщение студента командой /student.'));
 
