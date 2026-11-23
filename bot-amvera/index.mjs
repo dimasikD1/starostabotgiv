@@ -34,6 +34,7 @@ import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils
 import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entry.mjs';
 import { resolveMiniAppGroupAccess } from './api/miniapp-group-access-entry.mjs';
 import { loadMiniAppSchedule } from './api/miniapp-schedule-loader-entry.mjs';
+import { updateMiniAppProfile, clearMiniAppStudentRoster } from './api/miniapp-profile-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2511,22 +2512,21 @@ async function handleMiniAppApi(req,res,url) {
     }));
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
-    const count=(g.students||[]).length;
-    if(!count) return sendJson(res,400,{error:'Список студентов уже пуст.'});
-    g.students=[];
+    const result = clearMiniAppStudentRoster(g);
+    if(result.empty) return sendJson(res,400,{error:'Список студентов уже пуст.'});
     saveDb();
-    console.log('[miniapp students] roster cleared', {group:g.title||'',by:String(tgUser.id),count});
-    return sendJson(res,200,{ok:true,deleted:count});
+    console.log('[miniapp students] roster cleared', {group:g.title||'',by:String(tgUser.id),count:result.deleted});
+    return sendJson(res,200,{ok:true,deleted:result.deleted});
   }
   if(req.method==='POST' && url.pathname==='/api/profile') {
     try {
       const body=await readJsonBody(req);
-      const nameValidation=validateMiniAppProfileName(body.fullName);
-      if(!nameValidation.ok && nameValidation.reason==='length') return sendJson(res,400,{error:'Укажи ФИО длиной от 5 до 100 символов.'});
-      if(!nameValidation.ok) return sendJson(res,400,{error:'Укажи корректные фамилию и имя (при наличии — отчество).'});
-      u.fullName=nameValidation.value;
-      saveDb();
-      return sendJson(res,200,{ok:true,fullName:u.fullName});
+      const result = updateMiniAppProfile(u, body.fullName, {
+        validateName: validateMiniAppProfileName,
+        save: saveDb
+      });
+      if(!result.ok) return sendJson(res,result.status,{error:result.error});
+      return sendJson(res,200,{ok:true,fullName:result.fullName});
     } catch(e) {
       console.error('[miniapp profile update]',e?.message||e);
       return sendJson(res,400,{error:'Не удалось сохранить профиль.'});
