@@ -2,6 +2,9 @@ import {
   addTelegramStudent,
   addNamedStudent,
   removeStudentAt,
+  updateStudentField,
+  type StudentField,
+  type StudentRecord,
   type StudentRosterGroup,
   type AddStudentResult
 } from './student-management.js';
@@ -33,5 +36,21 @@ export function removeStudentAtAndSave(
 ): unknown | undefined {
   const result = removeStudentAt(group, index);
   if (result !== undefined) save();
+  return result;
+}
+
+/** Update a student contact and clear its pending workflow before one database save. */
+export function updateStudentContactAndSave(
+  group: StudentRosterGroup,
+  index: number,
+  field: StudentField,
+  value: string,
+  clearPending: () => void,
+  save: () => void
+): StudentRecord | undefined {
+  const result = updateStudentField(group, index, field, value);
+  if (!result) return undefined;
+  clearPending();
+  save();
   return result;
 }
