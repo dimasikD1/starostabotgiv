@@ -1377,7 +1377,7 @@ bot.command('student',async ctx=>{
 bot.command('delstudent',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Удаление доступно в личных сообщениях.');const g=managedGroup(ctx.from.id);
  if(!g)return ctx.reply('❌ Не найдена твоя прикреплённая группа.');
- const index=parseStudentRemovalIndex(ctx.message.text.replace(/^\\/delstudent(?:@\\S+)?/i,'').trim(),g.students.length);
+ const index=parseStudentRemovalIndex(ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i,'').trim(),g.students.length);
  if(index===undefined)return ctx.reply('Формат: /delstudent номер из списка /students');
  const removed=removeStudentAtAndSave(g,index,saveDb);if(removed===undefined)return ctx.reply('Формат: /delstudent номер из списка /students');return ctx.reply('🗑 Удалён: '+studentName(removed));
 });
