@@ -68,6 +68,7 @@ import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRo
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { parseStudyGroupNumber } from './domain/role-command-input-entry.mjs';
 import { parseRoleRemovalTargetId } from './domain/role-removal-input-entry.mjs';
+import { parseStructureInstitutionId } from './domain/structure-command-input-entry.mjs';
 import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
@@ -1803,7 +1804,7 @@ bot.command('unlinkgroup', async ctx => {
 
 bot.command('structure', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Структура доступна в личке с ботом.');
-  const institutionId = String(ctx.message?.text || '').replace(/^\/structure(?:@\S+)?/i, '').trim();
+  const institutionId = parseStructureInstitutionId(ctx.message?.text);
   if (!institutionId) return ctx.reply('Формат: /structure ID_ЗАВЕДЕНИЯ\nID можно посмотреть через /institutions.');
   const result = institutionForStructureCommand(ctx, institutionId);
   if (result.error) return ctx.reply(result.error);
