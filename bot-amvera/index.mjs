@@ -23,8 +23,8 @@ import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport } from './domain/student-management-entry.mjs';
-import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
-import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave } from './domain/institution-structure-workflows-entry.mjs';
+import { createFaculty, createDirection, createCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
+import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
 import { listInstitutions, createInstitution, deleteInstitution } from './domain/institutions-entry.mjs';
 import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-groups-entry.mjs';
@@ -1835,13 +1835,12 @@ bot.command('linkgroup', async ctx => {
   if (!institution) return ctx.reply('❌ Учебное заведение группы не найдено.');
   // Legacy groups without institutionId belong to the configured default institution.
   studyGroup.institutionId ||= institution.id;
-  const linked = linkStudyGroupToCourse(institution, studyGroup, courseId, new Date().toISOString());
+  const linked = linkStudyGroupToCourseAndSave(institution, studyGroup, courseId, new Date().toISOString(), saveDb);
   if (!linked.ok) {
     if (linked.reason === 'institution_mismatch') return ctx.reply('❌ Учебная группа и структура относятся к разным учебным заведениям.');
     return ctx.reply('❌ Курс не найден в структуре учебного заведения этой группы. Проверь /structure.');
   }
   const linkId = linked.id;
-  saveDb();
   console.log('[institution-structure] Study group linked:', linkId, 'course:', courseId);
   return ctx.reply('✅ Учебная группа привязана к структуре.\n\n🎓 ' + escapeHtml(linked.facultyName || 'Факультет') +
     '\n📚 ' + escapeHtml(linked.directionName || 'Направление') + '\n🧑‍🎓 ' + escapeHtml(linked.courseName || 'Курс') +
@@ -1866,9 +1865,8 @@ bot.command('unlinkgroup', async ctx => {
   const institution = db.institutions?.[String(studyGroup.institutionId || DEFAULT_INSTITUTION_ID)];
   if (!institution) return ctx.reply('❌ Учебное заведение группы не найдено.');
   studyGroup.institutionId ||= institution.id;
-  const result = unlinkStudyGroupFromStructure(institution, studyGroup);
+  const result = unlinkStudyGroupFromStructureAndSave(institution, studyGroup, saveDb);
   if (!result.ok) return ctx.reply('❌ Не удалось снять привязку: данные учебного заведения не совпадают.');
-  saveDb();
   console.log('[institution-structure] Study group unlinked:', String(ctx.chat.id), groupName, 'removed links:', result.removed);
   return ctx.reply('✅ Привязка учебной группы к курсу снята.\n\n👥 ' + escapeHtml(groupName) + '\nСтуденты, посещаемость, расписание и роли сохранены.');
 });
