@@ -32,6 +32,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
 import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entry.mjs';
+import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
 import { sendJsonResponse as sendJson, sendTextResponse as sendText } from './api/http-response-entry.mjs';
@@ -2489,7 +2490,19 @@ async function handleMiniAppApi(req,res,url) {
       homework:g.homework||[],users:db.users||{},announcements:g.announcements||[]
     });
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,...miniAppData,scheduleError,scheduleLoading});
+    return sendJson(res,200,buildMiniAppDataResponse({
+      telegramUser: tgUser,
+      user: u,
+      group: g,
+      isOwner: isOwner(tgUser.id),
+      canManageTelegramChats: managedChats(tgUser.id).length > 0,
+      institutionAdmin: isInstitutionAdmin(tgUser.id,g.institutionId),
+      institution: db.institutions?.[String(g.institutionId||'')],
+      date: today,
+      data: miniAppData,
+      scheduleError,
+      scheduleLoading
+    }));
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
     const count=(g.students||[]).length;
