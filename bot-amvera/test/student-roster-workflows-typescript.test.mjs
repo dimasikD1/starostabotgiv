@@ -245,7 +245,7 @@ test('persists Telegram student additions and updates, but not a full roster', (
   assert.equal(addTelegramStudentAndSave(group, { name: 'Иван Петров', telegramId: '10' }, () => saves++), 'updated');
   assert.equal(addTelegramStudentAndSave(group, { name: 'Анна', telegramId: '11' }, () => saves++), 'added');
   assert.equal(addTelegramStudentAndSave({ students: ['x'] }, { name: 'Пётр', telegramId: '12' }, () => saves++), 'added');
-  assert.equal(addTelegramStudentAndSave({ students: ['x'] }, { name: 'Елена', telegramId: '13' }, () => saves++), 'limit');
+  assert.equal(addTelegramStudentAndSave({ students: Array(100).fill('x') }, { name: 'Елена', telegramId: '13' }, () => saves++), 'limit');
   assert.equal(saves, 3);
 });
 
