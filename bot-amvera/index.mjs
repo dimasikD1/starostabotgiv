@@ -26,7 +26,7 @@ import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/at
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument, parseStudentContactInput } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument, parseStudentContactInput, parseStudentRosterAction } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
@@ -1945,13 +1945,13 @@ bot.hears('📊 Создать опрос', ctx => {
 bot.action(/^studentcard:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой список в личке.');
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
- const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
+ const action=parseStudentRosterAction(String(ctx.callbackQuery?.data||''));if(!action||action.type!=='card')return ctx.answerCbQuery('Некорректная кнопка.');const i=action.index;if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
  await ctx.answerCbQuery();return ctx.editMessageText(studentCardText(g,i),{parse_mode:'HTML',...studentCardKeyboard(i)});
 });
 bot.action(/^studentedit:(username|phone):(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Только в личных сообщениях.');
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
- const type=ctx.match[1],i=Number(ctx.match[2]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
+ const action=parseStudentRosterAction(String(ctx.callbackQuery?.data||''));if(!action||action.type!=='edit')return ctx.answerCbQuery('Некорректная кнопка.');const type=action.field,i=action.index;if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');
  const u=normalizeUser(user(ctx.from.id));u.pendingStudentField={type,index:i};saveDb();
  await ctx.answerCbQuery();
  return ctx.reply(type==='username'?'✏️ Отправь username студента (например, @username). Чтобы очистить — отправь прочерк.':'📞 Отправь номер телефона в международном формате (например, +37255555555). Чтобы очистить — отправь прочерк.\nУказывай номер только если студент сам согласился его передать.\nДля отмены: /cancel');
@@ -1964,7 +1964,7 @@ bot.action('studentback',async ctx=>{
 bot.action(/^studentpage:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery();
  const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
- await ctx.answerCbQuery();return ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g,Number(ctx.match[1]))});
+ const action=parseStudentRosterAction(String(ctx.callbackQuery?.data||''));if(!action||action.type!=='page')return ctx.answerCbQuery('Некорректная кнопка.');await ctx.answerCbQuery();return ctx.editMessageText(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g,action.page)});
 });
 bot.action(/^attstudent:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
