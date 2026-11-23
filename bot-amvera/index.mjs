@@ -1096,7 +1096,8 @@ bot.command('group', async ctx => {
       ])
     );
   }
-  user(ctx.from.id).group = selected;
+  const linkedGroup = allStudyGroups().find(g => String(g.studyGroup || '') === selected);
+  Object.assign(user(ctx.from.id), applyStudyGroupSelection(user(ctx.from.id), selected, linkedGroup, DEFAULT_INSTITUTION_ID));
   saveDb();
   await ctx.reply('✅ Группа сохранена: «' + selected + '»', menuFor(ctx));
 });
