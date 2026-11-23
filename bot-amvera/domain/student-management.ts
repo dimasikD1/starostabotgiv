@@ -23,6 +23,9 @@ export interface StudentUser {
   group?: unknown;
   groupChatId?: unknown;
   institutionId?: unknown;
+  pendingStudentImport?: unknown;
+  pendingStudentImportChatId?: unknown;
+  pendingStudentImportReview?: unknown;
 }
 
 export type StudentField = 'username' | 'phone';
@@ -287,4 +290,18 @@ export function replaceStudentRoster(
   if (!group.attendance || typeof group.attendance !== 'object') group.attendance = {};
   user.students = accepted.slice();
   return { count: accepted.length, truncated: names.length > accepted.length };
+}
+
+/** Commit a reviewed student import and clear its temporary workflow state. */
+export function confirmStudentRosterImport(
+  group: StudentRosterGroup,
+  user: StudentUser,
+  names: string[],
+  limit = 100
+): StudentRosterReplacementResult {
+  const result = replaceStudentRoster(group, user, names, limit);
+  delete user.pendingStudentImport;
+  delete user.pendingStudentImportChatId;
+  delete user.pendingStudentImportReview;
+  return result;
 }
