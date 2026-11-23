@@ -121,8 +121,8 @@ export interface MiniAppAttendanceLessonInput {
 export interface MiniAppAttendanceLesson {
   key: string;
   date: unknown;
-  timeStart: string;
-  timeEnd: string;
+  timeStart: unknown;
+  timeEnd: unknown;
   subject: unknown;
   room: unknown;
   teacher: unknown;
