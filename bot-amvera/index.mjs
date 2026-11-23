@@ -26,7 +26,7 @@ import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/at
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex, formatStudentRosterSummary, parseStudentNameArgument } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
@@ -1361,7 +1361,7 @@ bot.command('students',async ctx=>{
  return ctx.reply(formatStudentList(g),{parse_mode:'HTML',...studentListKeyboard(g)});
 });
 bot.command('student',async ctx=>{
- const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):ctx.message.text.replace(/^\/student(?:@\S+)?/i,'').trim();
+ const target=ctx.message.reply_to_message?.from,name=target?[target.first_name,target.last_name].filter(Boolean).join(' '):parseStudentNameArgument(ctx.message.text);
  if(target&&['group','supergroup'].includes(ctx.chat.type)){const g=db.groups[String(ctx.chat.id)];if(!g)return ctx.reply('Сначала администратор должен выполнить /attach.');
  if(String(g.starostaId||'')!==String(ctx.from.id)&&String(g.zamId||'')!==String(ctx.from.id)&&!(await isGroupAdmin(ctx))&&!isOwner(ctx.from.id))return ctx.reply('❌ Добавлять студентов может староста или администратор.');
  g.attendance||={};const result=addTelegramStudentAndSave(g,{name:name||('ID '+target.id),telegramId:String(target.id),username:target.username||''},saveDb);
