@@ -12,7 +12,7 @@ import { resolveScheduleGroupName } from './schedule/schedule-view-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
-import { parseStudentNames } from './domain/student-import-entry.mjs';
+import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
@@ -1314,8 +1314,7 @@ bot.on('text', async (ctx,next) => {
  const names=parseStudentNames(raw);
  if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\nИванов Иван Иванович\nПетров Пётр Сергеевич');
  u.pendingStudentImportReview=names;u.pendingStudentImport=false;saveDb();
- const preview=names.map(name=>escapeHtml(name)).join('\n');
- return ctx.reply('📝 <b>Проверь список студентов</b>\n👥 Группа: <b>'+escapeHtml(g.title)+'</b>\n👨‍🎓 Найдено: <b>'+names.length+'</b>\n\n'+preview+'\n\nПосле подтверждения текущий список группы будет заменён этим списком.',{parse_mode:'HTML',...importPreviewKeyboard()});
+ return ctx.reply(formatStudentImportPreview(String(g.title||''),names),{parse_mode:'HTML',...importPreviewKeyboard()});
 });
 
 function studentListKeyboard(g,page=0){
