@@ -2,5 +2,6 @@
 export {
   addTelegramStudentAndSave,
   addNamedStudentAndSave,
-  removeStudentAtAndSave
+  removeStudentAtAndSave,
+  updateStudentContactAndSave
 } from './.build/student-roster-workflows.js';
