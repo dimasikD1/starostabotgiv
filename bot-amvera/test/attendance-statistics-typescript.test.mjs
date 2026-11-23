@@ -65,3 +65,15 @@ test('preserves legacy fallback key behavior for students without telegram IDs',
   }, [{ name: 'Студент' }, {}], [], '2026-11-23', key, now);
   assert.deepEqual(result.historyEntries.map(x => [x.present, x.absent]), [[1, 1]]);
 });
+
+
+test('attaches display names by roster index without mutating statistics', () => {
+  const stats = [{index:0,rate:75},{index:1,rate:50}];
+  const roster = [{name:'Анна'},{name:'Борис'}];
+  const result = addAttendanceStudentNames(stats, roster, student => student.name);
+  assert.deepEqual(result, [
+    {index:0,rate:75,name:'Анна'},
+    {index:1,rate:50,name:'Борис'}
+  ]);
+  assert.deepEqual(stats, [{index:0,rate:75},{index:1,rate:50}]);
+});
