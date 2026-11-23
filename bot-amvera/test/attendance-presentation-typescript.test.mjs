@@ -10,23 +10,26 @@ const options = {
   escapeHtml
 };
 
-test('daily attendance preserves present, absent and unmarked sections and source order', () => {
+test('daily attendance preserves legacy student-key/date storage and source order', () => {
   const result = formatDailyAttendance({
     title: 'Группа <БИ>',
     students: [{ id: 1, name: 'Анна' }, { id: 2, name: 'Борис' }, { id: 3, name: 'Вера' }],
-    attendance: { '1': { '2026-11-23': 'present' }, '2': { '2026-11-23': 'absent' } }
+    attendance: {
+      '1': { '2026-11-23': 'present' },
+      '2': { '2026-11-23': 'absent' }
+    }
   }, options);
-  assert.match(result, /Посещаемость за 2026-11-23/);
-  assert.match(result, /Группа &lt;БИ&gt;/);
-  assert.match(result, /Были \(1\)[\\s\\S]*1\\. Анна/);
-  assert.match(result, /Не были \(1\)[\\s\\S]*1\\. Борис/);
-  assert.match(result, /Не отмечены \(1\)[\\s\\S]*1\\. Вера/);
+  assert.ok(result.includes('Посещаемость за 2026-11-23'));
+  assert.ok(result.includes('Группа &lt;БИ&gt;'));
+  assert.ok(result.includes('Были (1)\n1. Анна'));
+  assert.ok(result.includes('Не были (1)\n1. Борис'));
+  assert.ok(result.includes('Не отмечены (1)\n1. Вера'));
 });
 
 test('daily attendance handles an empty roster', () => {
   assert.equal(
     formatDailyAttendance({ students: [] }, options),
-    '📋 <b>Посещаемость</b>\\n\\nСписок группы пуст. Добавь студентов командой /student.'
+    '📋 <b>Посещаемость</b>\n\nСписок группы пуст. Добавь студентов командой /student.'
   );
 });
 
@@ -38,10 +41,10 @@ test('lesson attendance includes date, time, room and escaped subject', () => {
     date: '2026-11-23', timeStart: '09:00', timeEnd: '10:30',
     subject: 'Математика <1>', room: '204'
   }, 'lesson-key', options);
-  assert.match(result, /2026-11-23 · 09:00–10:30/);
-  assert.match(result, /Математика &lt;1&gt;/);
-  assert.match(result, /Аудитория: 204/);
-  assert.match(result, /Были \(1\)/);
+  assert.ok(result.includes('2026-11-23 · 09:00–10:30'));
+  assert.ok(result.includes('Математика &lt;1&gt;'));
+  assert.ok(result.includes('Аудитория: 204'));
+  assert.ok(result.includes('Были (1)'));
 });
 
 test('lesson attendance omits empty optional room and unmarked section', () => {
@@ -49,7 +52,7 @@ test('lesson attendance omits empty optional room and unmarked section', () => {
     students: [{ id: 7, name: 'Иван' }],
     lessonAttendance: { 'lesson-key': { '7': 'absent' } }
   }, { date: '2026-11-23', subject: 'Физика' }, 'lesson-key', options);
-  assert.doesNotMatch(result, /Аудитория:/);
-  assert.doesNotMatch(result, /Не отмечены/);
-  assert.match(result, /Время не указано/);
+  assert.ok(!result.includes('Аудитория:'));
+  assert.ok(!result.includes('Не отмечены'));
+  assert.ok(result.includes('Время не указано'));
 });
