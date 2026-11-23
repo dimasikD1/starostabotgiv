@@ -30,7 +30,7 @@ import { ensureStudyGroups as ensureStudyGroupsData } from './domain/study-group
 import { registerGroup as registerGroupData, removeGroup as removeGroupData } from './domain/group-registry-entry.mjs';
 import { escapeHtml } from './utils/html-entry.mjs';
 
-import { resolveTimeZone } from './utils/time-zone-entry.mjs';
+import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { readJsonBody } from './api/json-body-entry.mjs';
@@ -314,7 +314,7 @@ function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.ca
 
 // OCR временно отключён: импорт списка выполняется текстом.
 
-function attendanceDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date()); }
+function attendanceDate() { return formatDateInTimeZone(new Date(), TIME_ZONE); }
 function attendanceLessonKey(lesson) {
  return buildAttendanceLessonKey(lesson, attendanceDate());
 }
@@ -442,13 +442,7 @@ async function show(ctx, days, offset, range) {
   }
 }
 
-function timeZoneParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
-  }).formatToParts(date);
-  return Object.fromEntries(parts.map(p => [p.type, p.value]));
-}
+function timeZoneParts(date = new Date()) { return getTimeZoneParts(date, TIME_ZONE); }
 
 let attendancePollCheckRunning = false;
 async function checkAutomaticAttendancePolls() {
