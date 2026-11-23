@@ -20,13 +20,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function toSavedAttachment(value: unknown): HomeworkAttachmentRecord {
-  const media = asRecord(value) || {};
-  return {
-    fileId: String(media.fileId || ''),
-    type: media.type as 'photo' | 'video',
-    fileName: String(media.fileName || ''),
-    mimeType: String(media.mimeType || '')
-  };
+  return value as HomeworkAttachmentRecord;
 }
 
 /** Resolve newly uploaded temporary IDs for homework creation. */
