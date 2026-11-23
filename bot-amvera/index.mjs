@@ -26,7 +26,7 @@ import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/at
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
-import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport } from './domain/student-management-entry.mjs';
+import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, confirmStudentRosterImport, parseStudentRemovalIndex } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave } from './domain/student-roster-workflows-entry.mjs';
 import { createFaculty, createDirection, createCourse, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
@@ -1375,9 +1375,11 @@ bot.command('student',async ctx=>{
  return ctx.reply('✅ Добавлен в список «'+g.title+'»: '+name);
 });
 bot.command('delstudent',async ctx=>{
- if(!isPrivate(ctx))return ctx.reply('📩 Удаление доступно в личных сообщениях.');const n=Number(ctx.message.text.replace(/^\/delstudent(?:@\S+)?/i,'').trim())-1,g=managedGroup(ctx.from.id);
- if(!g)return ctx.reply('❌ Не найдена твоя прикреплённая группа.');if(!Number.isInteger(n)||n<0||n>=g.students.length)return ctx.reply('Формат: /delstudent номер из списка /students');
- const removed=removeStudentAtAndSave(g,n,saveDb);if(removed===undefined)return ctx.reply('Формат: /delstudent номер из списка /students');return ctx.reply('🗑 Удалён: '+studentName(removed));
+ if(!isPrivate(ctx))return ctx.reply('📩 Удаление доступно в личных сообщениях.');const g=managedGroup(ctx.from.id);
+ if(!g)return ctx.reply('❌ Не найдена твоя прикреплённая группа.');
+ const index=parseStudentRemovalIndex(ctx.message.text.replace(/^\\/delstudent(?:@\\S+)?/i,'').trim(),g.students.length);
+ if(index===undefined)return ctx.reply('Формат: /delstudent номер из списка /students');
+ const removed=removeStudentAtAndSave(g,index,saveDb);if(removed===undefined)return ctx.reply('Формат: /delstudent номер из списка /students');return ctx.reply('🗑 Удалён: '+studentName(removed));
 });
 bot.hears('👨‍🎓 Список студентов', ctx => ctx.reply('Используй /students. Добавить с username: ответь в группе на сообщение студента командой /student.'));
 
