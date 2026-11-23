@@ -9,6 +9,7 @@ import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, nextMondayDateRange, currentMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName, parseSetScheduleGroupArgument } from './schedule/schedule-view-entry.mjs';
+import { parseGrantCommandInput, parseAdminTargetId } from './domain/admin-command-input-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
@@ -762,13 +763,11 @@ bot.command('myid', ctx => {
 bot.command('grant', async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const args = ctx.message.text.replace(/^\/grant(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
-  const targetId = args[0];
-  const forever = ['forever', 'lifetime', 'навсегда', 'пожизненно'].includes((args[1] || '').toLowerCase());
-  const days = args[1] === undefined ? SUBSCRIPTION_DAYS : Number(args[1]);
-  if (!targetId || !/^\d+$/.test(targetId) || (!forever && (!Number.isSafeInteger(days) || days < 1 || days > 3650))) {
+  const grantInput = parseGrantCommandInput(ctx.message.text, SUBSCRIPTION_DAYS);
+  if (!grantInput) {
     return ctx.reply('Формат: /grant TELEGRAM_ID [дней|навсегда]\nПримеры: /grant 123456789 30 или /grant 123456789 навсегда\nID пользователь узнаёт командой /myid.');
   }
+  const { targetId, forever, days } = grantInput;
   if (isOwner(targetId)) return ctx.reply('У владельца уже есть бесплатный доступ.');
   const target = normalizeUser(user(targetId));
   if (forever) target.subscriptionForever = true;
@@ -799,8 +798,8 @@ bot.command('grant', async ctx => {
 bot.command('revoke', async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const targetId = ctx.message.text.replace(/^\/revoke(?:@\S+)?/i, '').trim();
-  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /revoke TELEGRAM_ID');
+  const targetId = parseAdminTargetId(ctx.message.text, 'revoke');
+  if (!targetId) return ctx.reply('Формат: /revoke TELEGRAM_ID');
   if (isOwner(targetId)) return ctx.reply('Бесплатный доступ владельца нельзя отозвать.');
   const target = normalizeUser(user(targetId));
   target.subscriptionUntil = 0;
@@ -820,8 +819,8 @@ bot.command('revoke', async ctx => {
 bot.command('subinfo', ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Эта команда доступна только владельцу бота.');
   if (!isPrivate(ctx)) return ctx.reply('Используй команду в личных сообщениях с ботом.');
-  const targetId = ctx.message.text.replace(/^\/subinfo(?:@\S+)?/i, '').trim();
-  if (!/^\d+$/.test(targetId)) return ctx.reply('Формат: /subinfo TELEGRAM_ID');
+  const targetId = parseAdminTargetId(ctx.message.text, 'subinfo');
+  if (!targetId) return ctx.reply('Формат: /subinfo TELEGRAM_ID');
   if (isOwner(targetId)) return ctx.reply('👑 Это владелец: бесплатный доступ без срока.');
   const target = normalizeUser(user(targetId));
   const active = hasActiveSubscription(target);
