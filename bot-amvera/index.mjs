@@ -64,6 +64,7 @@ import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStu
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { parseStudyGroupNumber } from './domain/role-command-input-entry.mjs';
+import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -1450,7 +1451,7 @@ bot.command('starosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) {
     return ctx.reply('❌ Команду /starosta нужно выполнить в учебной группе.');
   }
-  if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) {
+  if (!canRunGroupRoleCommand('starosta', ctx.chat.type, isOwner(ctx.from.id), await isGroupAdmin(ctx))) {
     return ctx.reply('❌ Назначить себя старостой может владелец бота или администратор этой группы.');
   }
   const groupNumber=parseStudyGroupNumber(ctx.message?.text);
@@ -1465,7 +1466,7 @@ bot.command('starosta', async ctx => {
 
 bot.command('zam', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('❌ Команду /zam нужно выполнить в общем учебном чате.');
-  if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначить заместителя может владелец бота или администратор группы.');
+  if (!canRunGroupRoleCommand('zam', ctx.chat.type, isOwner(ctx.from.id), await isGroupAdmin(ctx))) return ctx.reply('❌ Назначить заместителя может владелец бота или администратор группы.');
   const groupNumber=parseStudyGroupNumber(ctx.message?.text);
   if(!groupNumber) return ctx.reply('Укажи номер учебной группы и ответь на сообщение будущего заместителя:\n/zam 1 — заместитель 1 группы\n/zam 2 — заместитель 2 группы');
   const target = ctx.message.reply_to_message?.from || ctx.from;
@@ -1481,7 +1482,7 @@ bot.command('zam', async ctx => {
 
 bot.command('setstarosta', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
-  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Назначать старосту может только администратор группы.');
+  if (!canRunGroupRoleCommand('setstarosta', ctx.chat.type, isOwner(ctx.from.id), await isGroupAdmin(ctx))) return ctx.reply('❌ Назначать старосту может только администратор группы.');
   const target = ctx.message.reply_to_message?.from;
   if (!target) return ctx.reply('Ответь командой /setstarosta 1 или /setstarosta 2 на сообщение нужного человека.');
   const groupNumber=parseStudyGroupNumber(ctx.message?.text);
@@ -1501,7 +1502,7 @@ bot.command('appointstarosta', async ctx => {
 
 bot.command('setstudent', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
-  if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Менять роль может только администратор группы.');
+  if (!canRunGroupRoleCommand('setstudent', ctx.chat.type, isOwner(ctx.from.id), await isGroupAdmin(ctx))) return ctx.reply('❌ Менять роль может только администратор группы.');
   const target = ctx.message.reply_to_message?.from;
   if (!target) return ctx.reply('Ответь командой /setstudent на сообщение нужного человека.');
   const chat=db.groups[String(ctx.chat.id)];
