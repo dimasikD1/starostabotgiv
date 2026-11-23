@@ -30,6 +30,24 @@ test('filters the requested day offset without changing the source list', () => 
   assert.equal(lessons.length, 3);
 });
 
+test('filters the explicit Monday–Sunday range and excludes the following week', () => {
+  const withNextWeek = [
+    ...lessons,
+    { date: '2026-11-29', dayOffset: 6, timeStart: '12:00', subject: 'Последнее занятие недели', time: '', teacher: '', room: '', group: groups[0] },
+    { date: '2026-11-30', dayOffset: 7, timeStart: '08:30', subject: 'Следующая неделя', time: '', teacher: '', room: '', group: groups[0] }
+  ];
+  const result = buildScheduleView(groups[0], groups, withNextWeek, 0, {
+    start: '2026-11-23', end: '2026-11-29'
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.lessons.map(item => item.subject), [
+      'Первая', 'Вторая', 'Завтра+', 'Последнее занятие недели'
+    ]);
+    assert.ok(result.lessons.every(item => item.date >= '2026-11-23' && item.date <= '2026-11-29'));
+  }
+});
+
 test('returns an empty list when the requested day has no lessons', () => {
   const result = buildScheduleView(groups[0], groups, lessons, 6);
   assert.equal(result.ok, true);
