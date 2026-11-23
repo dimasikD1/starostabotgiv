@@ -19,6 +19,7 @@ import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 import { getMissingTelegramBotPermissions } from './domain/telegram-bot-permissions-entry.mjs';
 import { buildOpenChatPermissions } from './domain/chat-permissions-entry.mjs';
+import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -2298,7 +2299,9 @@ bot.command('registerchat', async ctx => {
   if (!ctx.chat || !['group', 'supergroup'].includes(ctx.chat.type)) {
     return ctx.reply('Эту команду нужно отправить непосредственно в учебном чате.');
   }
-  if (!isOwner(ctx.from.id) && !(await isGroupAdmin(ctx))) {
+  const owner = isOwner(ctx.from.id);
+  const groupAdmin = !owner && await isGroupAdmin(ctx);
+  if (!canRegisterTelegramChat({ chatType: ctx.chat.type, isOwner: owner, isGroupAdmin: groupAdmin })) {
     return ctx.reply('🔒 Зарегистрировать чат может владелец бота или администратор чата.');
   }
   try {
