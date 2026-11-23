@@ -82,7 +82,7 @@ export async function updateMiniAppHomeworkRecord<TAttachment extends MiniAppHom
   input: MiniAppHomeworkUpdateInput<TAttachment>,
   added: TAttachment[],
   dependencies: MiniAppHomeworkDependencies
-): Promise<MiniAppHomeworkMutation<MiniAppHomeworkRecord>> {
+): Promise<MiniAppHomeworkMutation<TRecord>> {
   const record = (group.homework || []).find(item => String(item.id || '') === id);
   if (!record) return { ok: false, reason: 'not-found' };
   if (input.attachments) record.attachments = input.attachments;
