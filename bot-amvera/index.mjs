@@ -60,7 +60,7 @@ import { validateHomeworkMediaUpload } from './api/homework-media-validation-ent
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions } from './domain/announcements-entry.mjs';
-import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
+import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration, parseStudyGroupSelection } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { parseStudyGroupNumber } from './domain/role-command-input-entry.mjs';
@@ -1084,11 +1084,7 @@ bot.command(['admin', 'adminhelp', 'commands'], ctx => {
 
 bot.command('group', async ctx => {
   const value = ctx.message.text.replace(/^\/group(?:@\S+)?/i, '').trim();
-  const selected = value === STUDY_GROUPS['1'] || value === '1'
-    ? STUDY_GROUPS['1']
-    : value === STUDY_GROUPS['2'] || value === '2'
-      ? STUDY_GROUPS['2']
-      : '';
+  const selected = parseStudyGroupSelection(value, STUDY_GROUPS) || '';
   if (!selected) {
     return ctx.reply(
       'Укажи одну из двух учебных групп кнопкой ниже или командой /group 1 либо /group 2:',
