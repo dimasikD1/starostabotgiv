@@ -2,5 +2,6 @@ export {
   normalizeAnnouncementText,
   createAnnouncementRecord,
   appendAnnouncement,
-  formatAnnouncementMessage
+  formatAnnouncementMessage,
+  getRecentAnnouncements
 } from './.build/announcements.js';
