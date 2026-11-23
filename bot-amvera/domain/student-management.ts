@@ -358,3 +358,28 @@ export function parseStudentContactInput(
     : normalizeStudentPhone(input);
   return result.ok ? result : { ok: false, field };
 }
+
+export type StudentRosterAction =
+  | { type: 'card'; index: number }
+  | { type: 'edit'; field: StudentField; index: number }
+  | { type: 'page'; page: number };
+
+/** Parse and validate callback data used by the student roster navigation. */
+export function parseStudentRosterAction(data: string): StudentRosterAction | undefined {
+  let match = /^studentcard:(\d+)$/.exec(data);
+  if (match) {
+    const index = Number(match[1]);
+    return Number.isSafeInteger(index) ? { type: 'card', index } : undefined;
+  }
+  match = /^studentedit:(username|phone):(\d+)$/.exec(data);
+  if (match) {
+    const index = Number(match[2]);
+    return Number.isSafeInteger(index) ? { type: 'edit', field: match[1] as StudentField, index } : undefined;
+  }
+  match = /^studentpage:(\d+)$/.exec(data);
+  if (match) {
+    const page = Number(match[1]);
+    return Number.isSafeInteger(page) ? { type: 'page', page } : undefined;
+  }
+  return undefined;
+}
