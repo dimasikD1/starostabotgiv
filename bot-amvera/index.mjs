@@ -11,6 +11,7 @@ import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName, parseSetScheduleGroupArgument } from './schedule/schedule-view-entry.mjs';
 import { parseGrantCommandInput, parseAdminTargetId } from './domain/admin-command-input-entry.mjs';
 import { buildOwnerStatsMessage } from './domain/owner-stats-entry.mjs';
+import { buildAttachedGroupsMessage } from './domain/attached-groups-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
@@ -1831,8 +1832,7 @@ bot.command('structure', async ctx => {
 bot.command('groups', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Список прикреплённых групп доступен в личных сообщениях.');
   const groups = Object.values(db.groups);
-  if (!groups.length) return ctx.reply('Нет прикреплённых групп. Добавь бота в группу и выполни /attach.');
-  await ctx.reply('👥 Прикреплённые группы:\n\n' + groups.map((g, i) => (i + 1) + '. ' + g.title).join('\n'));
+  return ctx.reply(buildAttachedGroupsMessage(groups));
 });
 
 bot.command('poll', startPoll);
