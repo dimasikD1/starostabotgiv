@@ -34,6 +34,7 @@ import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
 import { sendJsonResponse as sendJson, sendTextResponse as sendText } from './api/http-response-entry.mjs';
+import { sanitizeMiniAppClientError } from './api/miniapp-client-error-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { readJsonBody } from './api/json-body-entry.mjs';
 import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
@@ -2684,19 +2685,8 @@ const healthServer = http.createServer(async (req, res) => {
       }
       globalThis.__miniAppErrorWindow.count++;
       const body = await readJsonBody(req, 8192);
-      const input = body && typeof body === 'object' ? body : {};
-      const clean = (value, max) => String(value ?? '').replace(/[\\r\\n\\t]+/g, ' ').slice(0, max);
-      const kind = clean(input.kind || 'error', 40);
-      const message = clean(input.message || 'unknown', 500);
-      const source = clean(input.source || '', 500);
-      const line = Number.isSafeInteger(Number(input.line)) ? Number(input.line) : 0;
-      const column = Number.isSafeInteger(Number(input.column)) ? Number(input.column) : 0;
-      const stage = clean(input.stage || 'unknown', 120);
-      const stack = clean(input.stack || '', 2500);
-      console.error('[miniapp client error]', JSON.stringify({
-        kind, message, source, line, column, stage, stack,
-        receivedAt: new Date().toISOString()
-      }));
+      const diagnostic = sanitizeMiniAppClientError(body);
+      console.error('[miniapp client error]', JSON.stringify(diagnostic));
       return sendJson(res, 202, { ok: true });
     } catch (error) {
       console.error('[miniapp client error endpoint]', error?.stack || error?.message || error);
