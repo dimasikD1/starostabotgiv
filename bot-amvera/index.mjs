@@ -16,7 +16,7 @@ import { parseStudentNames } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
-import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from './domain/attendance-core-entry.mjs';
+import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons } from './domain/attendance-core-entry.mjs';
 import { buildAttendanceStatistics } from './domain/attendance-statistics-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
@@ -2498,14 +2498,11 @@ async function handleMiniAppApi(req,res,url) {
     );
     const homeworkItems=homeworkStatistics.items;
     const homeworkStats={week:homeworkStatistics.week,all:homeworkStatistics.all};
-    const mapLesson=lesson=>{
-      const key=attendanceLessonKey(lesson),record=g.lessonAttendance?.[key]||{};
-      let present=0,absent=0;
-      for(const student of students){const status=record[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
-      return {key,date:lesson.date,timeStart:lesson.timeStart||'',timeEnd:lesson.timeEnd||'',subject:lesson.subject||'Занятие',room:lesson.room||'',teacher:lesson.teacher||'',present,absent,unmarked:students.length-present-absent};
-    };
-    const data=lessons.map(mapLesson);
-    const scheduleData=scheduleItems.filter(x=>x.date&&x.subject).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.timeStart||'').localeCompare(String(b.timeStart||'')))).map(mapLesson);
+    const miniAppLessons=buildMiniAppAttendanceLessons(
+      scheduleItems,students,g.lessonAttendance||{},today,attendanceLessonKey,attendanceKey
+    );
+    const data=miniAppLessons.todayLessons;
+    const scheduleData=miniAppLessons.scheduleLessons;
     const attendanceStatistics=buildAttendanceStatistics(
       g.lessonAttendance||{},students,data,today,attendanceKey
     );
