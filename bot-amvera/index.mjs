@@ -32,6 +32,7 @@ import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
 import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entry.mjs';
+import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
 import { sendJsonResponse as sendJson, sendTextResponse as sendText } from './api/http-response-entry.mjs';
 import { sanitizeMiniAppClientError } from './api/miniapp-client-error-entry.mjs';
@@ -2393,6 +2394,9 @@ async function getMiniAppTodayLessons(g) {
   clearTimeout(timer);
  }
 }
+
+// Rate-limit buckets remain process-local and are shared by all Mini App routes.
+const checkApiRate = createApiRateLimiter();
 
 async function handleMiniAppApi(req,res,url) {
   const requestContext = resolveMiniAppRequestContext(
