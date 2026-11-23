@@ -32,6 +32,7 @@ import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { readJsonBody } from './api/json-body-entry.mjs';
 import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
+import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark } from './api/miniapp-write-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup } from './domain/registration-entry.mjs';
@@ -2603,9 +2604,10 @@ async function handleMiniAppApi(req,res,url) {
   }
   if(req.method==='POST' && url.pathname==='/api/homework') {
     try {
-      const body=await readJsonBody(req),subject=String(body.subject||'').trim(),homework=String(body.homework||'').trim();
-      if(!subject||subject.length>100)return sendJson(res,400,{error:'Укажи предмет (до 100 символов).'});
-      if(!homework||homework.length>3500)return sendJson(res,400,{error:'Укажи задание (до 3500 символов).'});
+      const body=await readJsonBody(req),fields=validateMiniAppHomeworkFields(body.subject,body.homework);
+      if(!fields.ok&&fields.reason==='subject')return sendJson(res,400,{error:'Укажи предмет (до 100 символов).'});
+      if(!fields.ok)return sendJson(res,400,{error:'Укажи задание (до 3500 символов).'});
+      const subject=fields.subject,homework=fields.homework;
       if(!g.chatId)return sendJson(res,400,{error:'К группе не привязан Telegram-чат. Сначала выполни /attach в группе.'});
       const pending=g.pendingHomeworkMedia?.[String(tgUser.id)]||{},requested=Array.isArray(body.attachments)?body.attachments:[];
       if(requested.length>10)return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
@@ -2625,10 +2627,12 @@ async function handleMiniAppApi(req,res,url) {
   }
   if(req.method==='PUT' && url.pathname==='/api/homework') {
     try {
-      const body=await readJsonBody(req),id=String(body.id||''),subject=String(body.subject||'').trim(),homework=String(body.homework||'').trim();
+      const body=await readJsonBody(req),id=String(body.id||'');
       const item=(g.homework||[]).find(x=>String(x.id||'')===id);
       if(!item)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
-      if(!subject||subject.length>100||!homework||homework.length>3500)return sendJson(res,400,{error:'Проверь предмет и текст задания.'});
+      const fields=validateMiniAppHomeworkFields(body.subject,body.homework);
+      if(!fields.ok)return sendJson(res,400,{error:'Проверь предмет и текст задания.'});
+      const subject=fields.subject,homework=fields.homework;
       let added=[];
       if(Array.isArray(body.attachments)){
         if(body.attachments.length>10)return sendJson(res,400,{error:'К одному ДЗ можно прикрепить не более 10 файлов.'});
@@ -2662,8 +2666,9 @@ async function handleMiniAppApi(req,res,url) {
   }
   if(req.method==='POST' && url.pathname==='/api/attendance') {
     try {
-      const body=await readJsonBody(req), index=Number(body.studentIndex), status=body.status, key=String(body.lessonKey||'');
-      if(!Number.isInteger(index)||index<0||index>=(g.students||[]).length||!['present','absent','unmarked'].includes(status)) return sendJson(res,400,{error:'Некорректная отметка.'});
+      const body=await readJsonBody(req),validation=validateMiniAppAttendanceMark(body,(g.students||[]).length);
+      if(!validation.ok)return sendJson(res,400,{error:'Некорректная отметка.'});
+      const index=validation.studentIndex,status=validation.status,key=validation.lessonKey;
       const lessons=await getMiniAppTodayLessons(g);
       const lesson=lessons.find(x=>attendanceLessonKey(x)===key);
       if(!lesson) return sendJson(res,400,{error:'Эта пара отсутствует в сегодняшнем расписании. Обнови страницу.'});
