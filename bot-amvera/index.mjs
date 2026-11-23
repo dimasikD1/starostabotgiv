@@ -1351,7 +1351,7 @@ function studentCardKeyboard(i){
  ]);
 }
 function formatStudentList(g) {
- return '👥 <b>'+escapeHtml(g.title)+'</b>\n👨‍🎓 Всего студентов: <b>'+(g.students||[]).length+'</b>\n\nНажми на студента, чтобы открыть карточку и изменить контакты.';
+ return formatStudentRosterSummary(String(g.title || ''), (g.students || []).length);
 }
 bot.command('students',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Список студентов доступен в личных сообщениях.');
