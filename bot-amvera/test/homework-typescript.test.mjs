@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   appendHomework,
+  buildHomeworkCompletionStatistics,
   createHomeworkRecord,
   latestHomework,
   getHomeworkCompletionState,
@@ -78,4 +79,60 @@ test('lists latest assignments for the requested group only', () => {
   ];
   assert.deepEqual(latestHomework(groups, 'one').map(item => item.id), ['new', 'old']);
   assert.equal(latestHomework(groups, 'one')[0].groupTitle, 'Группа 1');
+});
+
+test('builds per-assignment, weekly and all-time completion statistics', () => {
+  const now = Date.parse('2026-11-23T12:00:00.000Z');
+  const students = [
+    { telegramId: '101', fullName: 'Анна Иванова' },
+    { telegramId: '102', fullName: 'Борис Петров' },
+    { telegramId: '103', fullName: 'Вера Сидорова' }
+  ];
+  const users = {
+    '101': { fullName: 'Анна Иванова' },
+    '999': { fullName: 'Гость', username: 'guest' }
+  };
+  const homework = [
+    {
+      id: 'old', subject: 'История', homework: 'Прочитать',
+      createdAt: '2026-11-01T10:00:00.000Z',
+      completedBy: { '101': '2026-11-02T10:00:00.000Z', '999': '2026-11-02T11:00:00.000Z' },
+      attachments: [{ type: 'video', fileName: 'lesson.mp4' }]
+    },
+    {
+      id: 'new', subject: 'Математика', homework: 'Решить задачи',
+      createdAt: '2026-11-22T10:00:00.000Z',
+      completedBy: { '102': '2026-11-22T11:00:00.000Z' }
+    }
+  ];
+  const stats = buildHomeworkCompletionStatistics(
+    homework, students, users,
+    student => String(student && typeof student === 'object' ? student.fullName || '' : student || ''),
+    now
+  );
+  assert.deepEqual(stats.items.map(item => item.id), ['new', 'old']);
+  assert.deepEqual(stats.items[0], {
+    id: 'new', subject: 'Математика', homework: 'Решить задачи',
+    attachments: [], createdAt: '2026-11-22T10:00:00.000Z',
+    completedCount: 1, totalStudents: 3, completionRate: 33,
+    completedStudents: ['Борис Петров'],
+    pendingStudents: ['Анна Иванова', 'Вера Сидорова'],
+    unmatchedCompletions: []
+  });
+  assert.deepEqual(stats.items[1].completedStudents, ['Анна Иванова']);
+  assert.deepEqual(stats.items[1].unmatchedCompletions, ['Гость']);
+  assert.deepEqual(stats.items[1].attachments, [{ type: 'video', fileName: 'lesson.mp4' }]);
+  assert.deepEqual(stats.week, { assignments: 1, completed: 1, possible: 3, rate: 33 });
+  assert.deepEqual(stats.all, { assignments: 2, completed: 2, possible: 6 });
+});
+
+test('keeps empty roster and malformed homework inputs safe', () => {
+  const stats = buildHomeworkCompletionStatistics(
+    [{ id: 'x', createdAt: 'not-a-date', completedBy: null, attachments: null }],
+    null, null, () => '', Date.parse('2026-11-23T12:00:00.000Z')
+  );
+  assert.equal(stats.items[0].completionRate, 0);
+  assert.deepEqual(stats.items[0].pendingStudents, []);
+  assert.deepEqual(stats.week, { assignments: 0, completed: 0, possible: 0, rate: 0 });
+  assert.deepEqual(stats.all, { assignments: 1, completed: 0, possible: 0 });
 });
