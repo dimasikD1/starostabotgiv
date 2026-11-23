@@ -50,3 +50,18 @@ export function setSelfAsStudentAndSave(
   save();
   return removed;
 }
+
+/** Demote a selected member in one chat without changing roles in other chats. */
+export function setGroupMemberAsStudentAndSave(
+  groups: StudentRosterGroup[] | undefined,
+  user: StudentUser,
+  userId: string | number,
+  chatId: string | number,
+  save: () => void
+): RemoveGroupRolesResult {
+  const result = groups
+    ? removeGroupRolesAndSetStudent(groups, user, userId, chatId)
+    : (setStudentRole(user, chatId), { removed: 0 });
+  save();
+  return result;
+}
