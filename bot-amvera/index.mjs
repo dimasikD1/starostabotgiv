@@ -38,6 +38,7 @@ import { updateMiniAppProfile, clearMiniAppStudentRoster } from './api/miniapp-p
 import { updateMiniAppAttendance } from './api/miniapp-attendance-entry.mjs';
 import { publishMiniAppAnnouncement } from './api/miniapp-announcement-entry.mjs';
 import { createMiniAppHomework, updateMiniAppHomeworkRecord, deleteMiniAppHomeworkRecord } from './api/miniapp-records-entry.mjs';
+import { listManagedMiniAppTelegramChats, performMiniAppTelegramChatAction } from './api/miniapp-telegram-chats-entry.mjs';
 import { buildMiniAppDataResponse } from './api/miniapp-data-response-entry.mjs';
 import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
@@ -2431,7 +2432,7 @@ async function handleMiniAppApi(req,res,url) {
   }
   // Telegram chat controls are scoped to chats where the user manages every cohort.
   if (url.pathname === '/api/telegram-chats') {
-    const chats = Object.values(db.groups || {}).filter(chat => canManageChat(tgUser.id, chat.chatId));
+    const chats = listManagedMiniAppTelegramChats(db.groups, tgUser.id, canManageChat);
     if (req.method === 'GET') {
       return sendJson(res,200,{chats:chats.map(chat=>({id:String(chat.chatId),title:String(chat.title||'Учебный чат')}))});
     }
@@ -2441,29 +2442,29 @@ async function handleMiniAppApi(req,res,url) {
         const chatId=String(body.chatId||'');
         const chat=chats.find(item=>String(item.chatId)===chatId);
         if(!chat) return sendJson(res,403,{error:'Нет прав на управление этим чатом.'});
-        const action=String(body.action||'');
-        if(action==='open') {
-          await bot.telegram.setChatPermissions(chat.chatId,{
-            can_send_messages:true,can_send_audios:true,can_send_documents:true,
-            can_send_photos:true,can_send_videos:true,can_send_video_notes:true,
-            can_send_voice_notes:true,can_send_polls:true,can_send_other_messages:true,
-            can_add_web_page_previews:true
-          },{use_independent_chat_permissions:true});
-          return sendJson(res,200,{ok:true,message:'Всем участникам разрешено писать в чат.'});
-        }
-        if(action==='announce') {
-          const validation=normalizeAnnouncementText(body.text);
-          if(!validation.ok) return sendJson(res,400,{error:validation.reason==='empty'?'Напиши текст объявления.':'Максимум 3000 символов.'});
-          const message=validation.text;
-          await bot.telegram.sendMessage(chat.chatId,formatAnnouncementMessage(message,'Объявление',escapeHtml),{parse_mode:'HTML'});
-          const item=createAnnouncementRecord({id:crypto.randomUUID(),text:message,authorId:tgUser.id,authorName:String(u.fullName||tgUser.first_name||'Староста'),createdAt:new Date().toISOString()});
-          for(const group of ensureStudyGroups(chat)) {
-            group.announcements=appendAnnouncement(group.announcements,item);
+        const result = await performMiniAppTelegramChatAction(
+          chat,
+          String(body.action||''),
+          body,
+          tgUser,
+          u.fullName,
+          {
+            setChatPermissions: (chatId, permissions, options) => bot.telegram.setChatPermissions(chatId, permissions, options),
+            sendMessage: (chatId, message) => bot.telegram.sendMessage(chatId, message, {parse_mode:'HTML'}),
+            normalizeText: normalizeAnnouncementText,
+            formatMessage: message => formatAnnouncementMessage(message,'Объявление',escapeHtml),
+            createRecord: (text, authorId, authorName) => createAnnouncementRecord({
+              id:crypto.randomUUID(),text,authorId,authorName,createdAt:new Date().toISOString()
+            }),
+            ensureStudyGroups,
+            appendAnnouncement,
+            save: saveDb
           }
-          saveDb();
-          return sendJson(res,200,{ok:true,message:'Объявление опубликовано в чате.'});
-        }
-        return sendJson(res,400,{error:'Неизвестное действие.'});
+        );
+        if(!result.ok && result.reason==='empty') return sendJson(res,400,{error:'Напиши текст объявления.'});
+        if(!result.ok && result.reason==='too-long') return sendJson(res,400,{error:'Максимум 3000 символов.'});
+        if(!result.ok) return sendJson(res,400,{error:'Неизвестное действие.'});
+        return sendJson(res,200,{ok:true,message:result.message});
       } catch(error) {
         console.error('[miniapp telegram chat]',error?.message||error);
         return sendJson(res,502,{error:'Не удалось выполнить действие. Проверь права бота администратора в чате.'});
