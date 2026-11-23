@@ -50,3 +50,18 @@ export function shouldPromptStudyGroup(input: {
     !input.hasGroup &&
     !String(input.messageText || '').startsWith('/');
 }
+
+export interface FullNameRegistrationUser {
+  fullName?: string;
+  pendingFullName?: boolean;
+}
+export function completeFullNameRegistration<T extends FullNameRegistrationUser>(
+  user: T,
+  value: unknown
+): FullNameValidation {
+  const validation = validateAndNormalizeFullName(value);
+  if (!validation.ok || !validation.value) return validation;
+  user.fullName = validation.value;
+  user.pendingFullName = false;
+  return validation;
+}
