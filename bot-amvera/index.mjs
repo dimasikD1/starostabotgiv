@@ -19,7 +19,7 @@ import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from './domain/attendance-core-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
-import { parseHomeworkCommand, createHomeworkRecord, appendHomework, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
+import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster } from './domain/student-management-entry.mjs';
 import { createFaculty, createDirection, createCourse, linkStudyGroupToCourse, unlinkStudyGroupFromStructure, hasDuplicateStructureName } from './domain/institution-structure-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
@@ -32,7 +32,7 @@ import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { readJsonBody } from './api/json-body-entry.mjs';
 import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
-import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark } from './api/miniapp-write-validation-entry.mjs';
+import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark, validateHomeworkRecordId } from './api/miniapp-write-validation-entry.mjs';
 import { validateHomeworkMediaUpload } from './api/homework-media-validation-entry.mjs';
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
@@ -1968,10 +1968,9 @@ bot.action(/^hwcomplete:([a-f0-9-]{36})$/i,async ctx=>{
   const userId=String(ctx.from.id),u=normalizeUser(user(ctx.from.id)),groupName=String(u.group||'').trim();
   const groups=Object.values(db.groups);
   const homeworkId=String(ctx.match[1]);
-  const existing=groups.filter(g=>!groupName||String(g.scheduleGroup||'').trim()===groupName||String(g.title||'').trim()===groupName)
-    .flatMap(g=>g.homework||[]).find(h=>String(h.id||'')===homeworkId);
-  if(!existing){await ctx.answerCbQuery('Задание не найдено или уже удалено.');return}
-  if(existing.completedBy?.[userId]){await ctx.answerCbQuery('Уже отмечено.');return}
+  const completionState=getHomeworkCompletionState(groups,groupName,homeworkId,userId);
+  if(completionState.status==='not_found'){await ctx.answerCbQuery('Задание не найдено или уже удалено.');return}
+  if(completionState.status==='already_completed'){await ctx.answerCbQuery('Уже отмечено.');return}
   markHomeworkCompleted(groups,groupName,homeworkId,userId,new Date().toISOString());
   saveDb();
   const records=latestHomework(groups,groupName,10);
@@ -2655,7 +2654,9 @@ async function handleMiniAppApi(req,res,url) {
   }
   if(req.method==='DELETE' && url.pathname==='/api/homework') {
     try {
-      const body=await readJsonBody(req),id=String(body.id||''),before=(g.homework||[]).length;
+      const body=await readJsonBody(req),idValidation=validateHomeworkRecordId(body.id),before=(g.homework||[]).length;
+      if(!idValidation.ok)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
+      const id=idValidation.id;
       g.homework=(g.homework||[]).filter(x=>String(x.id||'')!==id);
       if(g.homework.length===before)return sendJson(res,404,{error:'Домашнее задание не найдено.'});
       saveDb();return sendJson(res,200,{ok:true});
