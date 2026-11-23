@@ -90,7 +90,8 @@ test('demotes a member even when the chat has no registered group record', () =>
   const user = { role: 'zam', groupChatId: '-300' };
   let saves = 0;
   const result = setGroupMemberAsStudentAndSave(undefined, user, '66', '-300', () => saves++);
-  assert.deepEqual(result, { removed: 0 });
+  assert.equal(result.removed, 0);
+  assert.equal(result.user, user);
   assert.equal(user.role, 'student');
   assert.equal(user.groupChatId, undefined);
   assert.equal(saves, 1);
