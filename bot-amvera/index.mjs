@@ -17,6 +17,7 @@ import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt } from './domain/attendance-core-entry.mjs';
+import { buildAttendanceStatistics } from './domain/attendance-statistics-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
 import { findAttendancePollRecord, applyAttendancePollAnswer } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
@@ -2505,24 +2506,13 @@ async function handleMiniAppApi(req,res,url) {
     };
     const data=lessons.map(mapLesson);
     const scheduleData=scheduleItems.filter(x=>x.date&&x.subject).sort((a,b)=>(String(a.date).localeCompare(String(b.date))||String(a.timeStart||'').localeCompare(String(b.timeStart||'')))).map(mapLesson);
-    const historyCutoff=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
-    const historyEntries=Object.entries(g.lessonAttendance||{}).map(([key,record])=>{
-      const [date='',timeStart='',timeEnd='',subject='Занятие']=key.split('|');
-      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||date>today||date<historyCutoff)return null;
-      let present=0,absent=0;
-      for(const student of students){const status=record?.[attendanceKey(student)];if(status==='present')present++;else if(status==='absent')absent++;}
-      const marked=present+absent;
-      return {key,date,timeStart,timeEnd,subject,present,absent,marked,total:students.length,rate:marked?Math.round(present/marked*100):0};
-    }).filter(Boolean).sort((a,b)=>(String(b.date).localeCompare(String(a.date))||String(b.timeStart).localeCompare(String(a.timeStart))));
-    const summarizeHistory=days=>{
-      const cutoff=new Date(Date.now()-days*86400000).toISOString().slice(0,10);
-      const entries=historyEntries.filter(x=>x.date>=cutoff);
-      const present=entries.reduce((n,x)=>n+x.present,0),absent=entries.reduce((n,x)=>n+x.absent,0),marked=present+absent;
-      return {lessons:entries.length,present,absent,marked,rate:marked?Math.round(present/marked*100):0};
-    };
-    const attendanceHistory={week:summarizeHistory(7),month:summarizeHistory(30),recent:historyEntries.slice(0,12)};
+    const attendanceStatistics=buildAttendanceStatistics(
+      g.lessonAttendance||{},students,data,today,attendanceKey
+    );
+    const historyEntries=attendanceStatistics.historyEntries;
+    const attendanceHistory=attendanceStatistics.attendanceHistory;
 
-    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:students.map((s,i)=>{const attendance={present:0,absent:0,marked:0,rate:0},bySubject={};for(const entry of historyEntries){const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];if(status==='present')attendance.present++;else if(status==='absent')attendance.absent++;if(status==='present'||status==='absent'){const subject=String(entry.subject||'Занятие').trim()||'Занятие';bySubject[subject]||={subject,present:0,absent:0,marked:0,rate:0};bySubject[subject][status]++;}}attendance.marked=attendance.present+attendance.absent;attendance.rate=attendance.marked?Math.round(attendance.present/attendance.marked*100):0;const attendanceBySubject=Object.values(bySubject).map(x=>{x.marked=x.present+x.absent;x.rate=x.marked?Math.round(x.present/x.marked*100):0;return x;}).sort((a,b)=>a.subject.localeCompare(b.subject,'ru'));return {index:i,name:studentName(s),attendanceBySubject,statuses:Object.fromEntries(data.map(lesson=>[lesson.key,g.lessonAttendance?.[lesson.key]?.[attendanceKey(s)]||'unmarked'])),attendance30d:attendance,attendanceHistory:historyEntries.map(entry=>{const status=g.lessonAttendance?.[entry.key]?.[attendanceKey(s)];return status==='present'||status==='absent'?{date:entry.date,timeStart:entry.timeStart,subject:entry.subject,status}:null;}).filter(Boolean)};}),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,attendanceHistory,scheduleLoading});
+    return sendJson(res,200,{user:{id:tgUser.id,firstName:tgUser.first_name||'',fullName:u.fullName||'',username:tgUser.username||'',role:u.role,isOwner:isOwner(tgUser.id),canManageTelegramChats:managedChats(tgUser.id).length>0,institutionAdmin:isInstitutionAdmin(tgUser.id,g.institutionId),institutionId:g.institutionId||'',institutionName:db.institutions?.[String(g.institutionId||'')]?.name||''},group:g.scheduleGroup||g.title||u.group||'Учебная группа',date:today,lessons:data,scheduleLessons:scheduleData,scheduleError,students:attendanceStatistics.students.map((student,i)=>({...student,name:studentName(students[i])})),announcements:(g.announcements||[]).slice(-30).reverse(),homework:homeworkItems,homeworkStats,attendanceHistory,scheduleLoading});
   }
   if(req.method==='DELETE' && url.pathname==='/api/students') {
     const count=(g.students||[]).length;
