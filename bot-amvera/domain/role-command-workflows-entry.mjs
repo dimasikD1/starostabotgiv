@@ -2,5 +2,6 @@
 export {
   assignAndPersistStudyGroupRole,
   removeAndPersistStudyGroupRoles,
-  setSelfAsStudentAndSave
+  setSelfAsStudentAndSave,
+  setGroupMemberAsStudentAndSave
 } from './.build/role-command-workflows.js';
