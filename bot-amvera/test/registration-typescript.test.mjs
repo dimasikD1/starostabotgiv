@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   validateAndNormalizeFullName,
   applyStudyGroupSelection,
-  shouldPromptStudyGroup
+  shouldPromptStudyGroup,
+  completeFullNameRegistration
 } from '../domain/.build/registration.js';
 
 test('validates and normalizes full names using the existing registration rules', () => {
@@ -31,4 +32,18 @@ test('prompts only unregistered non-owner users in group chats on non-command me
   assert.equal(shouldPromptStudyGroup({ ...base, chatType: 'private' }), false);
   assert.equal(shouldPromptStudyGroup({ ...base, hasGroup: true }), false);
   assert.equal(shouldPromptStudyGroup({ ...base, messageText: '/start' }), false);
+});
+
+test('completes full-name registration only after valid input', () => {
+  const user = { fullName: '', pendingFullName: true, role: 'student' };
+  assert.deepEqual(completeFullNameRegistration(user, '  иВАНОВ   иВАН  '), {
+    ok: true, value: 'Иванов Иван'
+  });
+  assert.equal(user.fullName, 'Иванов Иван');
+  assert.equal(user.pendingFullName, false);
+  assert.equal(user.role, 'student');
+  const invalid = { fullName: '', pendingFullName: true };
+  assert.equal(completeFullNameRegistration(invalid, 'Иван').ok, false);
+  assert.equal(invalid.fullName, '');
+  assert.equal(invalid.pendingFullName, true);
 });
