@@ -59,7 +59,7 @@ import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark, validateH
 import { validateHomeworkMediaUpload } from './api/homework-media-validation-entry.mjs';
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
-import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
+import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
@@ -2096,10 +2096,7 @@ bot.command('week', ctx => show(ctx, 7, 0, currentMondayDateRange(attendanceDate
 bot.command('announce', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Команду /announce используй в личных сообщениях с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Публиковать объявления через эту команду может только владелец бота.');
-  const chats = Object.entries(db.groups || {})
-    .map(([id, g]) => ({ id: String(g.chatId || id), title: String(g.title || g.chatTitle || ('Чат ' + (g.chatId || id))) }))
-    .filter(x => /^-?\d+$/.test(x.id));
-  const unique = [...new Map(chats.map(x => [x.id, x])).values()];
+  const unique = buildAnnouncementChatOptions(db.groups || {});
   if (!unique.length) return ctx.reply('❌ Пока нет подключённых Telegram-чатов. Сначала добавь бота в нужный чат.');
   const rows = unique.map(x => [Markup.button.callback('📢 ' + x.title.slice(0, 48), 'announcechat:' + x.id)]);
   return ctx.reply('📨 <b>Выбери чат для объявления</b>:', { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
