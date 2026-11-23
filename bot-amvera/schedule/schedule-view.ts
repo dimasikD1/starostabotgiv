@@ -44,3 +44,8 @@ export function resolveScheduleGroupName(
   const group = availableGroups.find(name => String(name || '').trim() === value);
   return group ? { ok: true, group } : { ok: false, reason: 'unknown' };
 }
+
+/** Extract the group name from a Telegram /setgroup command, including bot mentions. */
+export function parseSetScheduleGroupArgument(messageText: unknown): string {
+  return String(messageText ?? '').replace(/^\\/setgroup(?:@\\S+)?/i, '').trim();
+}
