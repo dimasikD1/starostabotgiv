@@ -326,5 +326,5 @@ export function formatStudentRosterSummary(groupTitle: string, studentCount: num
 
 /** Extract the name supplied to /student, accepting an optional bot username. */
 export function parseStudentNameArgument(messageText: string): string {
-  return messageText.replace(/^\\/student(?:@\\S+)?/i, '').trim();
+  return messageText.replace(/^\/student(?:@\S+)?/i, '').trim();
 }
