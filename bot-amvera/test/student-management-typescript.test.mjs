@@ -253,5 +253,5 @@ test('formats the student roster summary and escapes Telegram HTML characters', 
     formatStudentRosterSummary('Группа <1> & "А"', 12),
     '👥 <b>Группа &lt;1&gt; &amp; &quot;А&quot;</b>\n👨‍🎓 Всего студентов: <b>12</b>\n\nНажми на студента, чтобы открыть карточку и изменить контакты.'
   );
-  assert.match(formatStudentRosterSummary('Группа', Number.NaN), /Всего студентов: <b>0<\\/b>/);
+  assert.ok(formatStudentRosterSummary('Группа', Number.NaN).includes('Всего студентов: <b>0</b>'));
 });
