@@ -54,3 +54,53 @@ export function filterRoleReportGroups<T extends RoleReportSourceGroup>(
   const allowed = new Set(allowedInstitutionIds.map(String));
   return groups.filter(group => allowed.has(String(group.institutionId || '')));
 }
+
+
+export interface RoleReportUser {
+  fullName?: unknown;
+  fio?: unknown;
+  username?: unknown;
+  group?: unknown;
+  groupChatId?: unknown;
+}
+
+export interface RoleReportMemberRow {
+  id: string;
+  name: string;
+  role: '👑 Староста' | '⭐ Заместитель' | '👨‍🎓 Студент';
+}
+
+/** Build the ordered member and assigned-role rows for one merged study-group card. */
+export function buildRoleReportMemberRows(
+  group: RoleReportGroup,
+  users: Record<string, RoleReportUser>,
+  isPlatformOwner: (userId: string) => boolean
+): RoleReportMemberRow[] {
+  const sourceChatIds = roleReportSourceChatIds(group);
+  const starostaId = firstAssignedRoleId(group, 'starostaId');
+  const zamId = firstAssignedRoleId(group, 'zamId');
+  const members = Object.entries(users).filter(([userId, user]) =>
+    !isPlatformOwner(userId) &&
+    String(user.group || '') === String(group.studyGroup || '') &&
+    (!user.groupChatId || sourceChatIds.has(String(user.groupChatId)))
+  );
+  const roleFor = (userId: string): RoleReportMemberRow['role'] =>
+    starostaId === userId ? '👑 Староста' :
+      zamId === userId ? '⭐ Заместитель' : '👨‍🎓 Студент';
+  const rows: RoleReportMemberRow[] = members.map(([id, user]) => ({
+    id,
+    name: String(user.fullName || user.fio || (user.username && '@' + String(user.username)) || 'ID ' + id),
+    role: roleFor(String(id))
+  }));
+  for (const [id, role] of [[starostaId, '👑 Староста'], [zamId, '⭐ Заместитель']] as const) {
+    if (id && !members.some(([memberId]) => String(memberId) === id)) {
+      const user = users[id] || {};
+      rows.unshift({
+        id,
+        name: String(user.fullName || user.fio || (user.username && '@' + String(user.username)) || 'ID ' + id),
+        role
+      });
+    }
+  }
+  return rows;
+}
