@@ -58,7 +58,7 @@ import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, roleReportSourceChatIds, firstAssignedRoleId } from './domain/role-report-entry.mjs';
-import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles } from './domain/role-command-workflows-entry.mjs';
+import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -1393,9 +1393,8 @@ async function showRole(ctx) {
     return ctx.reply(lines.length?'👤 <b>Твои назначения</b>\n\n'+lines.join('\n'):'👨‍🎓 У тебя нет назначенных управленческих ролей.\n\nНазначение выполняет администратор соответствующей учебной группы.',{parse_mode:'HTML'});
   }
   if (value !== 'student') return ctx.reply('❌ Управленческую роль назначает администратор конкретной учебной группы.');
-  clearStudyGroupRoles(allStudyGroups(),id,undefined,false);
-  const u=normalizeUser(user(id));setStudentRole(u);
-  saveDb();
+  const u=normalizeUser(user(id));
+  setSelfAsStudentAndSave(allStudyGroups(),u,id,saveDb);
   await ctx.reply('✅ Ты снял(а) с себя все назначения старосты и заместителя.',menuFor(ctx));
 }
 bot.command('role', showRole);
