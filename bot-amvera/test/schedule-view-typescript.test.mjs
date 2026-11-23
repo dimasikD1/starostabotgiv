@@ -61,3 +61,12 @@ test('resolves only an exact configured schedule group name', () => {
   assert.deepEqual(resolveScheduleGroupName('', groups), { ok: false, reason: 'missing' });
   assert.deepEqual(resolveScheduleGroupName('БИ(ЭБ)2', groups), { ok: false, reason: 'unknown' });
 });
+
+import { parseSetScheduleGroupArgument } from '../../.test-build/schedule-view.js';
+
+test('parses /setgroup argument with optional bot mention and preserves multi-word group names', () => {
+  assert.equal(parseSetScheduleGroupArgument('/setgroup БИ(ЭБ)2-ОЗ/Бп/КД26'), groups[1]);
+  assert.equal(parseSetScheduleGroupArgument('/setgroup@starostagivbot   БИ(ЭБ)1-ОЗ/Бп/КД26  '), groups[0]);
+  assert.equal(parseSetScheduleGroupArgument('/setgroup'), '');
+  assert.equal(parseSetScheduleGroupArgument(null), '');
+});
