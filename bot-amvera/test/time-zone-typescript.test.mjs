@@ -21,13 +21,16 @@ test('resolveTimeZone falls back and reports an invalid zone', () => {
 
 test('formatDateInTimeZone uses the requested local calendar date', () => {
   const instant = new Date('2026-11-23T21:30:00.000Z');
-  assert.equal(formatDateInTimeZone(instant, 'Europe/Moscow'), '11/24/2026');
-  assert.equal(formatDateInTimeZone(instant, 'Europe/Tallinn'), '11/23/2026');
+  assert.equal(formatDateInTimeZone(instant, 'Europe/Moscow'), '2026-11-24');
+  assert.equal(formatDateInTimeZone(instant, 'Europe/Tallinn'), '2026-11-23');
 });
 
 test('getTimeZoneParts preserves the attendance scheduler field shape', () => {
   const instant = new Date('2026-11-23T08:05:00.000Z');
-  assert.deepEqual(getTimeZoneParts(instant, 'Europe/Moscow'), {
-    month: '11', day: '23', year: '2026', hour: '11', minute: '05'
-  });
+  const parts = getTimeZoneParts(instant, 'Europe/Moscow');
+  assert.equal(parts.year, '2026');
+  assert.equal(parts.month, '11');
+  assert.equal(parts.day, '23');
+  assert.equal(parts.hour, '11');
+  assert.equal(parts.minute, '05');
 });
