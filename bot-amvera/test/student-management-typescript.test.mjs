@@ -14,7 +14,8 @@ import {
   removeGroupRolesAndSetStudent,
   getStudentRosterPage,
   getStudentCard,
-  replaceStudentRoster
+  replaceStudentRoster,
+  confirmStudentRosterImport
 } from '../../.test-build/domain-user/student-management.js';
 
 test('adds Telegram-linked students, updates existing IDs, and enforces the cap', () => {
@@ -212,4 +213,22 @@ test('caps imported roster at 100 without mutating the supplied names', () => {
   assert.deepEqual(result, { count: 100, truncated: true });
   assert.equal(group.students.length, 100);
   assert.equal(names.length, 105);
+});
+
+test('confirms reviewed import and clears only the import workflow fields', () => {
+  const group = { students: ['old'] };
+  const user = {
+    pendingStudentImport: false,
+    pendingStudentImportChatId: '-100',
+    pendingStudentImportReview: ['New A'],
+    fullName: 'Preserve Me'
+  };
+  const result = confirmStudentRosterImport(group, user, ['New A', 'New B']);
+  assert.deepEqual(result, { count: 2, truncated: false });
+  assert.deepEqual(group.students, ['New A', 'New B']);
+  assert.deepEqual(user.students, ['New A', 'New B']);
+  assert.equal('pendingStudentImport' in user, false);
+  assert.equal('pendingStudentImportChatId' in user, false);
+  assert.equal('pendingStudentImportReview' in user, false);
+  assert.equal(user.fullName, 'Preserve Me');
 });
