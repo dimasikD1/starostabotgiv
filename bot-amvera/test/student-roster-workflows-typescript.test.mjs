@@ -287,3 +287,39 @@ test('does not save or clear pending input for a missing student', () => {
   assert.equal(clears, 0);
   assert.equal(saves, 0);
 });
+
+
+import { confirmStudentRosterImportAndSave } from '../../.test-build/domain/student-roster-workflows.js';
+
+test('confirms a reviewed student roster, clears pending state and saves exactly once', () => {
+  const group = { students: ['Old student'], attendance: { lesson1: { '10': 'present' } } };
+  const user = {
+    pendingStudentImport: false,
+    pendingStudentImportChatId: '-100',
+    pendingStudentImportReview: ['New student'],
+    fullName: 'Keep profile'
+  };
+  let saves = 0;
+  const result = confirmStudentRosterImportAndSave(group, user, ['New student', 'Another student'], () => saves++);
+  assert.deepEqual(result, { count: 2, truncated: false });
+  assert.deepEqual(group.students, ['New student', 'Another student']);
+  assert.deepEqual(user.students, ['New student', 'Another student']);
+  assert.deepEqual(group.attendance, { lesson1: { '10': 'present' } });
+  assert.equal('pendingStudentImport' in user, false);
+  assert.equal('pendingStudentImportChatId' in user, false);
+  assert.equal('pendingStudentImportReview' in user, false);
+  assert.equal(user.fullName, 'Keep profile');
+  assert.equal(saves, 1);
+});
+
+test('caps confirmed imports at 100 and persists the capped roster once', () => {
+  const group = { students: ['Old'] };
+  const user = { pendingStudentImport: true, pendingStudentImportReview: [] };
+  const names = Array.from({ length: 105 }, (_, index) => 'Student ' + index);
+  let saves = 0;
+  const result = confirmStudentRosterImportAndSave(group, user, names, () => saves++);
+  assert.deepEqual(result, { count: 100, truncated: true });
+  assert.equal(group.students.length, 100);
+  assert.equal(user.students.length, 100);
+  assert.equal(saves, 1);
+});
