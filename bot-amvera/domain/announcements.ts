@@ -45,3 +45,10 @@ export function formatAnnouncementMessage(
 ): string {
   return '📢 <b>' + heading + '</b>\n\n' + escapeHtml(text);
 }
+
+
+/** Return the newest announcements in the exact order used by the Mini App. */
+export function getRecentAnnouncements<T>(history: readonly T[] | undefined, limit = 30): T[] {
+  const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
+  return [...(history || [])].slice(-safeLimit || undefined).reverse();
+}
