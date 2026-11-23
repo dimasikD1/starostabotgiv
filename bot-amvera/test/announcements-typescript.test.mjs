@@ -35,3 +35,13 @@ test('formats both existing Telegram announcement headings and escapes content',
   assert.equal(formatAnnouncementMessage('<Новость & текст>', 'Объявление', escapeHtml), '📢 <b>Объявление</b>\n\n&lt;Новость &amp; текст&gt;');
   assert.equal(formatAnnouncementMessage('Текст', 'Объявление группы', escapeHtml), '📢 <b>Объявление группы</b>\n\nТекст');
 });
+
+
+test('returns newest announcements first without mutating source history', async () => {
+  const { getRecentAnnouncements } = await import('../domain/.build/announcements.js');
+  const source = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(getRecentAnnouncements(source, 3), ['d', 'c', 'b']);
+  assert.deepEqual(source, ['a', 'b', 'c', 'd']);
+  assert.deepEqual(getRecentAnnouncements(undefined), []);
+  assert.deepEqual(getRecentAnnouncements(source, 0), []);
+});
