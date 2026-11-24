@@ -173,3 +173,5 @@ The Telegram API call and verification workflow remain in the existing bot entry
 Дополнительно выбор самого свежего автоматического опроса для `/pollreport` вынесен в типизированную функцию `findLatestAttendancePollRecord()`: сохраняются фильтрация по ID Telegram-группы и прежняя сортировка по дате и времени; добавлены тесты выбора группы и последнего опроса.
 
 Разбор аргументов команд назначения и снятия администратора учебного заведения (`/setinstadmin` и `/removeinstadmin`) вынесен в `parseInstitutionAdminCommandInput()` модуля `admin-command-input.ts`. Сохранены обработка упоминания бота, порядок аргументов и прежние проверки существования заведения и числового Telegram ID.
+
+Разбор полей `/addinstitution`, а также извлечение ID для `/deleteinstitution` и `/instadmins` перенесены в `admin-command-input.ts`. Сохранены разделитель `|`, поддержка упоминания бота, прежние ограничения длины названия/сокращения/города и тексты проверок в Telegram-обработчиках.
