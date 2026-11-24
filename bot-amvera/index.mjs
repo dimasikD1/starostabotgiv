@@ -15,7 +15,7 @@ import { buildAttachedGroupsMessage } from './domain/attached-groups-entry.mjs';
 import { decideAttachCommand, decideDetachCommand } from './domain/group-attachment-command-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
-import { buildAttendanceScheduleTasks } from './schedule/notifications-entry.mjs';
+import { buildAttendanceScheduleTasks, buildAttendanceReminderMessage, buildAttendancePollQuestion } from './schedule/notifications-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
@@ -496,8 +496,7 @@ async function checkAutomaticAttendancePolls() {
           const key = task.key;
           if (task.sendLessonReminder) {
             await bot.telegram.sendMessage(g.chatId,
-              '⏰ <b>Напоминание о занятии</b>\n\nЧерез 30 минут начинается: <b>' + escapeHtml(lesson.subject) +
-              '</b>\n🕒 Начало: ' + lesson.timeStart + (lesson.room ? '\n🚪 Аудитория: ' + escapeHtml(lesson.room) : ''),
+              buildAttendanceReminderMessage(lesson, escapeHtml),
               { parse_mode: 'HTML' }
             );
             db.sentLessonNotices[key] = new Date().toISOString();
@@ -506,7 +505,7 @@ async function checkAutomaticAttendancePolls() {
           if (task.sendAttendancePoll) {
             const sent = await bot.telegram.sendPoll(
               g.chatId,
-              '📋 Посещаемость: ' + lesson.subject + '\nПара начинается в ' + lesson.timeStart + '. Ты будешь присутствовать?',
+              buildAttendancePollQuestion(lesson),
               ['✅ Буду', '❌ Не буду'],
               { is_anonymous: false, allows_multiple_answers: false }
             );
