@@ -75,6 +75,7 @@ import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 import { executeWithRetry } from './domain/startup-retry-entry.mjs';
 import { classifyGroupBotMembershipTransition } from './domain/group-bot-membership-entry.mjs';
+import { createAsyncJobLock } from './domain/background-job-lock-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
@@ -468,10 +469,9 @@ async function show(ctx, days, offset, range) {
 
 function timeZoneParts(date = new Date()) { return getTimeZoneParts(date, TIME_ZONE); }
 
-let attendancePollCheckRunning = false;
+const attendancePollJobLock = createAsyncJobLock();
 async function checkAutomaticAttendancePolls() {
-  if (attendancePollCheckRunning) return;
-  attendancePollCheckRunning = true;
+  if (!attendancePollJobLock.tryAcquire()) return;
   try {
     const now = timeZoneParts();
     const today = now.year + '-' + now.month + '-' + now.day;
@@ -524,21 +524,21 @@ async function checkAutomaticAttendancePolls() {
       }
     }
   } finally {
-    attendancePollCheckRunning = false;
+    attendancePollJobLock.release();
   }
 }
 
 
-let weeklyScheduleCheckRunning = false;
+const weeklyScheduleJobLock = createAsyncJobLock();
 
 
 async function checkWeeklySchedules() {
-  if (weeklyScheduleCheckRunning) return;
+  if (weeklyScheduleJobLock.locked) return;
   const now = timeZoneParts();
   // Публикуем расписание по воскресеньям начиная с 18:00 по часовому поясу TIME_ZONE.
   if (!isWeeklySchedulePublicationWindow(now)) return;
 
-  weeklyScheduleCheckRunning = true;
+  if (!weeklyScheduleJobLock.tryAcquire()) return;
   try {
     const range = nextWeekDateRange(attendanceDate());
     db.sentWeeklySchedules ||= {};
@@ -570,14 +570,13 @@ async function checkWeeklySchedules() {
       }
     }
   } finally {
-    weeklyScheduleCheckRunning = false;
+    weeklyScheduleJobLock.release();
   }
 }
 
-let scheduleChangeCheckRunning = false;
+const scheduleChangeJobLock = createAsyncJobLock();
 async function checkScheduleChanges() {
-  if (scheduleChangeCheckRunning) return;
-  scheduleChangeCheckRunning = true;
+  if (!scheduleChangeJobLock.tryAcquire()) return;
   try {
     db.scheduleSnapshots ||= {};
     const bySchedule = groupScheduleTargetsByGroup(Object.values(db.groups));
@@ -623,7 +622,7 @@ async function checkScheduleChanges() {
       }
     }
   } finally {
-    scheduleChangeCheckRunning = false;
+    scheduleChangeJobLock.release();
   }
 }
 
