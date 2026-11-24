@@ -9,7 +9,7 @@ import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, nextMondayDateRange, currentMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName, parseSetScheduleGroupArgument } from './schedule/schedule-view-entry.mjs';
-import { parseGrantCommandInput, parseAdminTargetId } from './domain/admin-command-input-entry.mjs';
+import { parseGrantCommandInput, parseAdminTargetId, parseInstitutionAdminCommandInput } from './domain/admin-command-input-entry.mjs';
 import { buildOwnerStatsMessage } from './domain/owner-stats-entry.mjs';
 import { buildAttachedGroupsMessage } from './domain/attached-groups-entry.mjs';
 import { decideAttachCommand, decideDetachCommand } from './domain/group-attachment-command-entry.mjs';
@@ -1609,8 +1609,7 @@ bot.command('deleteinstitution', async ctx => {
 bot.command('setinstadmin', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Назначать администраторов может только владелец платформы.');
-  const args = String(ctx.message?.text || '').replace(/^\/setinstadmin(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
-  const [institutionId, userId] = args;
+  const { institutionId, userId } = parseInstitutionAdminCommandInput(ctx.message?.text, 'setinstadmin');
   const institution = db.institutions?.[String(institutionId || '')];
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено. Сначала проверь ID командой /institutions.');
   if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /setinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
@@ -1629,8 +1628,7 @@ bot.command('setinstadmin', async ctx => {
 bot.command('removeinstadmin', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Снимать администраторов может только владелец платформы.');
-  const args = String(ctx.message?.text || '').replace(/^\/removeinstadmin(?:@\S+)?/i, '').trim().split(/\s+/).filter(Boolean);
-  const [institutionId, userId] = args;
+  const { institutionId, userId } = parseInstitutionAdminCommandInput(ctx.message?.text, 'removeinstadmin');
   const institution = db.institutions?.[String(institutionId || '')];
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено.');
   if (!/^\d+$/.test(String(userId || ''))) return ctx.reply('Формат: /removeinstadmin ID_ЗАВЕДЕНИЯ TELEGRAM_ID');
