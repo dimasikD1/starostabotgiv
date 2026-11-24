@@ -169,3 +169,5 @@ npm test
 The Telegram group-verification flow now gets its member permission policy from the typed
 `buildVerifiedMemberChatPermissions()` function in `bot-amvera/domain/chat-permissions.ts`.
 The Telegram API call and verification workflow remain in the existing bot entrypoint.
+
+Дополнительно выбор самого свежего автоматического опроса для `/pollreport` вынесен в типизированную функцию `findLatestAttendancePollRecord()`: сохраняются фильтрация по ID Telegram-группы и прежняя сортировка по дате и времени; добавлены тесты выбора группы и последнего опроса.
