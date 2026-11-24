@@ -28,7 +28,7 @@ import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
-import { findAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
+import { findAttendancePollRecord, findLatestAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument, parseStudentContactInput, parseStudentRosterAction } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave, confirmStudentRosterImportAndSave, cancelStudentRosterImportAndSave } from './domain/student-roster-workflows-entry.mjs';
@@ -860,10 +860,7 @@ bot.command('pollreport', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Отчёт доступен в личных сообщениях.');
   const g = managedGroup(ctx.from.id);
   if (!g) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
-  const records = Object.values(db.sentAttendancePolls || {})
-    .filter(x => String(x.groupId) === String(g.chatId))
-    .sort((a,b) => String(b.date + b.time).localeCompare(String(a.date + a.time)));
-  const latest = records[0];
+  const latest = findLatestAttendancePollRecord(db.sentAttendancePolls || {}, g.chatId);
   if (!latest) return ctx.reply('Пока нет автоматических опросов посещаемости для «' + g.title + '».');
   const report = buildAttendancePollReport((g.students || []).length, latest);
   return ctx.reply(
