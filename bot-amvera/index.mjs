@@ -17,6 +17,7 @@ import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot }
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { buildAttendanceScheduleTasks, buildAttendanceReminderMessage, buildAttendancePollQuestion } from './schedule/notifications-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
+import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
@@ -1119,10 +1120,17 @@ bot.command('detach', async ctx => {
 
 bot.on('photo', async (ctx, next) => {
   const u = normalizeUser(user(ctx.from.id));
-  const inPrivateImport = isPrivate(ctx) && u.pendingStudentImport && !u.pendingStudentImportChatId;
-  const inGroupImport = ['group', 'supergroup'].includes(ctx.chat?.type) &&
-    u.pendingStudentImport && String(u.pendingStudentImportChatId || '') === String(ctx.chat.id) &&
-    String(ctx.message.reply_to_message?.from?.id || '') === String(ctx.botInfo.id);
+  const inStudentImport = shouldHandleStudentImportPhoto({
+    isPrivate: isPrivate(ctx),
+    chatType: String(ctx.chat?.type || ''),
+    pendingImport: Boolean(u.pendingStudentImport),
+    pendingChatId: u.pendingStudentImportChatId,
+    currentChatId: ctx.chat?.id,
+    replyToBotId: ctx.message.reply_to_message?.from?.id,
+    botId: ctx.botInfo.id
+  });
+  const inPrivateImport = isPrivate(ctx) && inStudentImport;
+  const inGroupImport = !isPrivate(ctx) && inStudentImport;
   if (!inPrivateImport && !inGroupImport) return next();
   if (inGroupImport) {
     const group = db.groups[String(ctx.chat.id)];
@@ -1188,11 +1196,18 @@ bot.action('studentimport:cancel', async ctx => {
 bot.on('text', async (ctx,next) => {
  const u=normalizeUser(user(ctx.from.id));
  const raw=String(ctx.message.text||'').trim();
- if (!isPrivate(ctx) && ['group','supergroup'].includes(ctx.chat?.type)) {
+ const importRoute = classifyStudentImportMessage({
+  isPrivate: isPrivate(ctx),
+  chatType: String(ctx.chat?.type || ''),
+  pendingImport: Boolean(u.pendingStudentImport),
+  pendingChatId: u.pendingStudentImportChatId,
+  currentChatId: ctx.chat?.id,
+  replyToBotId: ctx.message.reply_to_message?.from?.id,
+  botId: ctx.botInfo.id,
+  text: raw
+ });
+ if (importRoute === 'group-import') {
   const groupId=String(ctx.chat.id),group=db.groups[groupId];
-  const waiting=u.pendingStudentImport && String(u.pendingStudentImportChatId||'')===groupId;
-  const isReply=String(ctx.message.reply_to_message?.from?.id||'')===String(ctx.botInfo.id);
-  if (!waiting || !isReply || raw.startsWith('/')) return next();
   if (!group || !canManageChat(ctx.from.id,groupId))
    return ctx.reply('❌ Нет прав импортировать список в эту группу.');
   const names=parseStudentNames(raw);
@@ -1268,16 +1283,18 @@ bot.on('text', async (ctx,next) => {
   if(!updateStudentContactAndSave(g,pending.index,pending.type,value,()=>{delete u.pendingStudentField;},saveDb)){delete u.pendingStudentField;saveDb();return ctx.reply('❌ Студент не найден. Открой /students и попробуй снова.');}
   return ctx.reply('✅ Данные сохранены. Открой /students, чтобы увидеть обновлённую карточку.');
  }
- if(!u.pendingStudentImport)return next();
- if(!raw)return ctx.reply('Пришли ФИО текстом, по одному студенту на строку.');
- if(raw.toLowerCase()==='/cancel'||raw.toLowerCase().startsWith('/cancel@')){cancelStudentRosterImportAndSave(u,saveDb);return ctx.reply('❌ Импорт отменён.');}
- if(raw.startsWith('/'))return ctx.reply('Сначала пришли список ФИО или отправь /cancel для отмены.');
- const g=managedGroup(ctx.from.id);
- if(!g){cancelStudentRosterImportAndSave(u,saveDb);return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');}
- const names=parseStudentNames(raw);
- if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\nИванов Иван Иванович\nПетров Пётр Сергеевич');
- u.pendingStudentImportReview=names;u.pendingStudentImport=false;saveDb();
- return ctx.reply(formatStudentImportPreview(String(g.title||''),names),{parse_mode:'HTML',...importPreviewKeyboard()});
+ if(importRoute==='next')return next();
+ if(importRoute==='private-empty')return ctx.reply('Пришли ФИО текстом, по одному студенту на строку.');
+ if(importRoute==='private-cancel'){cancelStudentRosterImportAndSave(u,saveDb);return ctx.reply('❌ Импорт отменён.');}
+ if(importRoute==='private-command')return ctx.reply('Сначала пришли список ФИО или отправь /cancel для отмены.');
+ if(importRoute==='private-import'){
+  const g=managedGroup(ctx.from.id);
+  if(!g){cancelStudentRosterImportAndSave(u,saveDb);return ctx.reply('❌ Не найдена группа, где ты староста или заместитель.');}
+  const names=parseStudentNames(raw);
+  if(!names.length)return ctx.reply('Не удалось распознать ФИО. Отправь по одному имени на строку, например:\nИванов Иван Иванович\nПетров Пётр Сергеевич');
+  u.pendingStudentImportReview=names;u.pendingStudentImport=false;saveDb();
+  return ctx.reply(formatStudentImportPreview(String(g.title||''),names),{parse_mode:'HTML',...importPreviewKeyboard()});
+ }
 });
 
 function studentListKeyboard(g,page=0){
