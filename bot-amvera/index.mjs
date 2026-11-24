@@ -9,7 +9,7 @@ import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, nextMondayDateRange, currentMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName, parseSetScheduleGroupArgument } from './schedule/schedule-view-entry.mjs';
-import { parseGrantCommandInput, parseAdminTargetId, parseInstitutionAdminCommandInput } from './domain/admin-command-input-entry.mjs';
+import { parseGrantCommandInput, parseAdminTargetId, parseInstitutionAdminCommandInput, parseAddInstitutionCommandInput, parseInstitutionIdCommandInput } from './domain/admin-command-input-entry.mjs';
 import { buildOwnerStatsMessage } from './domain/owner-stats-entry.mjs';
 import { buildAttachedGroupsMessage } from './domain/attached-groups-entry.mjs';
 import { decideAttachCommand, decideDetachCommand } from './domain/group-attachment-command-entry.mjs';
@@ -1547,12 +1547,9 @@ bot.command('mark',async ctx=>{
 bot.command('addinstitution', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /addinstitution.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Добавлять учебные заведения может только владелец платформы.');
-  const raw = String(ctx.message?.text || '').replace(/^\/addinstitution(?:@\S+)?/i, '').trim();
-  if (!raw) return ctx.reply('Формат: /addinstitution Название | Сокращение | Город');
-  const parts = raw.split('|').map(value => value.trim());
-  const name = String(parts[0] || '').slice(0, 120).trim();
-  const shortName = String(parts[1] || '').slice(0, 40).trim();
-  const city = String(parts[2] || '').slice(0, 80).trim();
+  const parsed = parseAddInstitutionCommandInput(ctx.message?.text);
+  if (!parsed.hasInput) return ctx.reply('Формат: /addinstitution Название | Сокращение | Город');
+  const { name, shortName, city } = parsed;
   if (!name) return ctx.reply('❌ Укажи название учебного заведения.');
   db.institutions ||= {};
   const duplicate = Object.values(db.institutions).find(item =>
@@ -1591,7 +1588,7 @@ bot.command('institutions', async ctx => {
 bot.command('deleteinstitution', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом и отправь /deleteinstitution ID.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Удалять учебные заведения может только владелец платформы.');
-  const id = String(ctx.message?.text || '').replace(/^\/deleteinstitution(?:@\S+)?/i, '').trim();
+  const id = parseInstitutionIdCommandInput(ctx.message?.text, 'deleteinstitution');
   if (!id) return ctx.reply('Формат: /deleteinstitution ID. Основное заведение удалить нельзя.');
   const institution = db.institutions?.[id];
   if (!institution) return ctx.reply('❌ Учебное заведение с таким ID не найдено.');
@@ -1642,7 +1639,7 @@ bot.command('removeinstadmin', async ctx => {
 bot.command('instadmins', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личный чат с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Список администраторов доступен только владельцу платформы.');
-  const institutionId = String(ctx.message?.text || '').replace(/^\/instadmins(?:@\S+)?/i, '').trim();
+  const institutionId = parseInstitutionIdCommandInput(ctx.message?.text, 'instadmins');
   if (!institutionId) return ctx.reply('Формат: /instadmins ID_ЗАВЕДЕНИЯ');
   const institution = db.institutions?.[institutionId];
   if (!institution) return ctx.reply('❌ Учебное заведение не найдено.');
