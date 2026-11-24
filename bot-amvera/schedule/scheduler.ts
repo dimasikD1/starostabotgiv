@@ -39,3 +39,22 @@ export function buildAttendanceScheduleTasks(input: AttendanceSchedulePlannerInp
   }
   return tasks;
 }
+
+
+export interface AttendanceReminderMessageInput {
+  subject: string;
+  timeStart: string;
+  room?: string | null;
+}
+
+/** Format the existing HTML lesson reminder; caller sends it through Telegram. */
+export function buildAttendanceReminderMessage(input: AttendanceReminderMessageInput, escapeHtml: (value: string) => string): string {
+  return '⏰ <b>Напоминание о занятии</b>\\n\\nЧерез 30 минут начинается: <b>' +
+    escapeHtml(input.subject) + '</b>\\n🕒 Начало: ' + input.timeStart +
+    (input.room ? '\\n🚪 Аудитория: ' + escapeHtml(input.room) : '');
+}
+
+/** Build the legacy non-anonymous attendance poll question. */
+export function buildAttendancePollQuestion(input: Pick<AttendanceReminderMessageInput, 'subject' | 'timeStart'>): string {
+  return '📋 Посещаемость: ' + input.subject + '\\nПара начинается в ' + input.timeStart + '. Ты будешь присутствовать?';
+}
