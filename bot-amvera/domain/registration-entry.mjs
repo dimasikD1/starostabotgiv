@@ -3,5 +3,6 @@ export {
   applyStudyGroupSelection,
   shouldPromptStudyGroup,
   completeFullNameRegistration,
-  parseStudyGroupSelection
+  parseStudyGroupSelection,
+  resolveStudyGroupRegistration
 } from './.build/registration.js';
