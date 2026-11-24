@@ -74,6 +74,7 @@ import { parseStructureInstitutionId } from './domain/structure-command-input-en
 import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 import { executeWithRetry } from './domain/startup-retry-entry.mjs';
+import { classifyGroupBotMembershipTransition } from './domain/group-bot-membership-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
@@ -179,14 +180,14 @@ bot.on('my_chat_member', async ctx => {
   const oldStatus = update?.old_chat_member?.status;
   const newMember = update?.new_chat_member;
   const newStatus = newMember?.status;
-  if (!chat?.id || !['group', 'supergroup'].includes(chat.type)) return;
-  const joined = ['left', 'kicked'].includes(oldStatus) &&
-    ['member', 'administrator'].includes(newStatus);
-  const promoted = newStatus === 'administrator' && oldStatus !== 'administrator';
-  const demoted = oldStatus === 'administrator' && newStatus === 'member';
-  if (!joined && !promoted && !demoted) return;
-
-  if (newStatus === 'left' || newStatus === 'kicked') return;
+  if (!chat?.id) return;
+  const transition = classifyGroupBotMembershipTransition({
+    chatType: chat.type,
+    oldStatus,
+    newStatus
+  });
+  if (!transition.shouldHandle || !transition.shouldRegister) return;
+  const { joined, demoted } = transition;
   try {
     registerGroup({ chat, from: ctx.from });
     console.log('[group setup] Existing chat registered:', chat.id, chat.title || '');
@@ -194,7 +195,7 @@ bot.on('my_chat_member', async ctx => {
     console.error('[group setup] Registration failed:', error?.message || error);
   }
 
-  if (newStatus === 'administrator') {
+  if (transition.shouldCheckPermissions) {
     let memberInfo = null;
     try { memberInfo = await ctx.telegram.getChatMember(chat.id, ctx.botInfo.id); } catch {}
     const rights = memberInfo || newMember;
