@@ -175,3 +175,5 @@ The Telegram API call and verification workflow remain in the existing bot entry
 Разбор аргументов команд назначения и снятия администратора учебного заведения (`/setinstadmin` и `/removeinstadmin`) вынесен в `parseInstitutionAdminCommandInput()` модуля `admin-command-input.ts`. Сохранены обработка упоминания бота, порядок аргументов и прежние проверки существования заведения и числового Telegram ID.
 
 Разбор полей `/addinstitution`, а также извлечение ID для `/deleteinstitution` и `/instadmins` перенесены в `admin-command-input.ts`. Сохранены разделитель `|`, поддержка упоминания бота, прежние ограничения длины названия/сокращения/города и тексты проверок в Telegram-обработчиках.
+
+Формирование HTML-отчёта команды `/structure` перенесено в `formatInstitutionStructureMessage()` модуля `institution-structure.ts`. Сохранены порядок факультетов, направлений, курсов и групп, подсказка для пустой структуры, HTML-экранирование и ограничение Telegram-сообщения в 3900 символов; проверка доступа и отправка ответа остались в Telegram-обработчике.
