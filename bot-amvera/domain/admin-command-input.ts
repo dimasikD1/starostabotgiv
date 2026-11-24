@@ -49,3 +49,36 @@ export function parseInstitutionAdminCommandInput(
     .filter(Boolean);
   return { institutionId: args[0] || '', userId: args[1] || '' };
 }
+
+
+export interface AddInstitutionCommandInput {
+  hasInput: boolean;
+  name: string;
+  shortName: string;
+  city: string;
+}
+
+/** Parse the pipe-separated fields of /addinstitution using the existing limits. */
+export function parseAddInstitutionCommandInput(commandText: unknown): AddInstitutionCommandInput {
+  if (typeof commandText !== 'string') {
+    return { hasInput: false, name: '', shortName: '', city: '' };
+  }
+  const raw = commandText.replace(/^\\/addinstitution(?:@\\S+)?/i, '').trim();
+  if (!raw) return { hasInput: false, name: '', shortName: '', city: '' };
+  const parts = raw.split('|').map(value => value.trim());
+  return {
+    hasInput: true,
+    name: String(parts[0] || '').slice(0, 120).trim(),
+    shortName: String(parts[1] || '').slice(0, 40).trim(),
+    city: String(parts[2] || '').slice(0, 80).trim()
+  };
+}
+
+/** Read a single institution ID from a command such as /deleteinstitution or /instadmins. */
+export function parseInstitutionIdCommandInput(
+  commandText: unknown,
+  command: 'deleteinstitution' | 'instadmins'
+): string {
+  if (typeof commandText !== 'string') return '';
+  return commandText.replace(new RegExp('^\\\\/' + command + '(?:@\\\\S+)?', 'i'), '').trim();
+}
