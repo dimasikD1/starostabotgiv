@@ -63,7 +63,7 @@ export function parseAddInstitutionCommandInput(commandText: unknown): AddInstit
   if (typeof commandText !== 'string') {
     return { hasInput: false, name: '', shortName: '', city: '' };
   }
-  const raw = commandText.replace(/^\\/addinstitution(?:@\\S+)?/i, '').trim();
+  const raw = commandText.replace(/^\/addinstitution(?:@\S+)?/i, '').trim();
   if (!raw) return { hasInput: false, name: '', shortName: '', city: '' };
   const parts = raw.split('|').map(value => value.trim());
   return {
@@ -80,5 +80,5 @@ export function parseInstitutionIdCommandInput(
   command: 'deleteinstitution' | 'instadmins'
 ): string {
   if (typeof commandText !== 'string') return '';
-  return commandText.replace(new RegExp('^\\\\/' + command + '(?:@\\\\S+)?', 'i'), '').trim();
+  return commandText.replace(new RegExp('^\\/' + command + '(?:@\\S+)?', 'i'), '').trim();
 }
