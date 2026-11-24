@@ -57,3 +57,56 @@ test('parses only configured study group numbers or exact names', () => {
   assert.equal(parseStudyGroupSelection('БИ(ЭБ)3', groups), undefined);
   assert.equal(parseStudyGroupSelection('', groups), undefined);
 });
+
+
+test('resolves configured group selection with linked institution and pending verification state', async () => {
+  const { resolveStudyGroupRegistration } = await import('../domain/.build/registration.js');
+  const sourceUser = {
+    role: 'student',
+    pendingVerificationChatId: '-100123',
+    pendingVerificationChatTitle: 'Учебная группа'
+  };
+  const result = resolveStudyGroupRegistration({
+    user: sourceUser,
+    groupKey: '2',
+    groups: { '1': 'Группа 1', '2': 'Группа 2' },
+    linkedGroups: [
+      { studyGroup: 'Группа 2', chatId: -100456, institutionId: 'inst_2' }
+    ]
+  });
+  assert.ok(result);
+  assert.equal(result.selectedGroup, 'Группа 2');
+  assert.equal(result.user.group, 'Группа 2');
+  assert.equal(result.user.groupChatId, '-100456');
+  assert.equal(result.user.institutionId, 'inst_2');
+  assert.equal(result.verificationChatId, '-100123');
+  assert.equal(result.requiresVerification, true);
+  assert.equal(sourceUser.group, undefined);
+  assert.equal(sourceUser.pendingVerificationChatTitle, 'Учебная группа');
+});
+
+test('resolves ordinary group selection without linked chat or verification', async () => {
+  const { resolveStudyGroupRegistration } = await import('../domain/.build/registration.js');
+  const result = resolveStudyGroupRegistration({
+    user: { role: '', pendingVerificationChatId: '' },
+    groupKey: '1',
+    groups: { '1': 'Группа 1' },
+    linkedGroups: []
+  });
+  assert.ok(result);
+  assert.equal(result.user.role, 'student');
+  assert.equal(result.user.group, 'Группа 1');
+  assert.equal(result.user.institutionId, undefined);
+  assert.equal(result.requiresVerification, false);
+  assert.equal(result.verificationChatId, '');
+});
+
+test('rejects unknown study group registration keys', async () => {
+  const { resolveStudyGroupRegistration } = await import('../domain/.build/registration.js');
+  assert.equal(resolveStudyGroupRegistration({
+    user: {},
+    groupKey: '9',
+    groups: { '1': 'Группа 1' },
+    linkedGroups: []
+  }), undefined);
+});
