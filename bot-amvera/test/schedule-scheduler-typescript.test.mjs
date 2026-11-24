@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttendanceScheduleTasks } from '../../.test-build/scheduler.js';
+import { buildAttendanceScheduleTasks, buildAttendanceReminderMessage, buildAttendancePollQuestion } from '../../.test-build/scheduler.js';
 
 const base = {
   chatId: -100123,
@@ -57,4 +57,20 @@ test('does not schedule outside the exact minute windows', () => {
   assert.deepEqual(buildAttendanceScheduleTasks({
     ...base, currentMinutes: 8 * 60 + 40, lessons: [lesson]
   }), []);
+});
+
+
+test('formats lesson reminders with escaped subject and optional room', () => {
+  assert.equal(buildAttendanceReminderMessage({
+    subject: '<Математика>', timeStart: '09:00', room: '<12>'
+  }, value => value.replaceAll('<', '&lt;').replaceAll('>', '&gt;')),
+  '⏰ <b>Напоминание о занятии</b>\\n\\nЧерез 30 минут начинается: <b>&lt;Математика&gt;</b>\\n🕒 Начало: 09:00\\n🚪 Аудитория: &lt;12&gt;');
+  assert.equal(buildAttendanceReminderMessage({
+    subject: 'История', timeStart: '10:00'
+  }, value => value), '⏰ <b>Напоминание о занятии</b>\\n\\nЧерез 30 минут начинается: <b>История</b>\\n🕒 Начало: 10:00');
+});
+
+test('formats attendance poll question without changing its wording', () => {
+  assert.equal(buildAttendancePollQuestion({ subject: 'Физика', timeStart: '11:20' }),
+    '📋 Посещаемость: Физика\\nПара начинается в 11:20. Ты будешь присутствовать?');
 });
