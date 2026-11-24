@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAttendancePollAnswer, findAttendancePollRecord, buildAttendancePollKey, isAttendancePollDue } from '../../.test-build/domain-user/attendance-polls.js';
+import { applyAttendancePollAnswer, findAttendancePollRecord, findLatestAttendancePollRecord, buildAttendancePollKey, isAttendancePollDue } from '../../.test-build/domain-user/attendance-polls.js';
 
 test('finds a saved attendance poll by Telegram poll ID', () => {
   const records = {
@@ -143,4 +143,20 @@ test('builds latest poll report counts and display names without mutating the re
   });
   assert.deepEqual(latest, before);
   assert.equal(buildAttendancePollReport(1, { responses: { a: { status: 'present' }, b: { status: 'absent' } } }).unansweredCount, 0);
+});
+
+test('selects the newest attendance poll for the requested group without mutating stored records', () => {
+  const older = { groupId: '-1001', date: '2026-11-22', time: '15:00', pollId: 'old' };
+  const newer = { groupId: '-1001', date: '2026-11-23', time: '09:00', pollId: 'new' };
+  const otherGroup = { groupId: '-1002', date: '2026-11-24', time: '10:00', pollId: 'other' };
+  const records = { older, newer, otherGroup };
+  assert.equal(findLatestAttendancePollRecord(records, '-1001'), newer);
+  assert.deepEqual(Object.keys(records), ['older', 'newer', 'otherGroup']);
+  assert.equal(findLatestAttendancePollRecord(records, '-9999'), undefined);
+});
+
+test('latest poll selection compares date and time using the legacy concatenated format', () => {
+  const morning = { groupId: 10, date: '2026-11-23', time: '09:00' };
+  const evening = { groupId: '10', date: '2026-11-23', time: '18:00' };
+  assert.equal(findLatestAttendancePollRecord({ morning, evening }, 10), evening);
 });
