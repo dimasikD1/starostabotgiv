@@ -27,7 +27,7 @@ export function classifyGroupBotMembershipTransition(
   const promoted = isGroup && newStatus === 'administrator' && oldStatus !== 'administrator';
   const demoted = isGroup && oldStatus === 'administrator' && newStatus === 'member';
   const shouldHandle = joined || promoted || demoted;
-  const shouldRegister = shouldHandle && newStatus !== 'left' && newStatus !== 'kicked';
+  const shouldRegister = shouldHandle;
   return {
     shouldHandle, joined, promoted, demoted, shouldRegister,
     shouldCheckPermissions: shouldRegister && newStatus === 'administrator'
