@@ -1,4 +1,3 @@
-import { createAttendanceScheduleLock } from './scheduler.js';
 import { buildAttendanceScheduleTasks, buildAttendanceReminderMessage, buildAttendancePollQuestion } from './scheduler.js';
 
 export interface AttendanceJobLesson {
@@ -46,7 +45,11 @@ export interface AttendanceJobDependencies {
 
 /** Runs one non-overlapping attendance notification cycle; all Telegram and storage effects are injected. */
 export function createAttendancePollRunner() {
-  const lock = createAttendanceScheduleLock();
+  let locked = false;
+  const lock = {
+    tryAcquire(): boolean { if (locked) return false; locked = true; return true; },
+    release(): void { locked = false; }
+  };
 
   return async function runAttendancePollCycle(deps: AttendanceJobDependencies): Promise<void> {
     if (!lock.tryAcquire()) return;
