@@ -29,3 +29,23 @@ export function parseAdminTargetId(
   const targetId = commandText.replace(new RegExp('^\\/' + command + '(?:@\\S+)?', 'i'), '').trim();
   return /^\d+$/.test(targetId) ? targetId : null;
 }
+
+
+export interface InstitutionAdminCommandInput {
+  institutionId: string;
+  userId: string;
+}
+
+/** Extract the institution and Telegram user IDs from owner admin commands. */
+export function parseInstitutionAdminCommandInput(
+  commandText: unknown,
+  command: 'setinstadmin' | 'removeinstadmin'
+): InstitutionAdminCommandInput {
+  if (typeof commandText !== 'string') return { institutionId: '', userId: '' };
+  const args = commandText
+    .replace(new RegExp('^\\\\/' + command + '(?:@\\\\S+)?', 'i'), '')
+    .trim()
+    .split(/\\s+/)
+    .filter(Boolean);
+  return { institutionId: args[0] || '', userId: args[1] || '' };
+}
