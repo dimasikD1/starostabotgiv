@@ -170,3 +170,17 @@ export function buildAttendancePollReport(
     names
   };
 }
+
+/** Select the newest saved attendance poll for one Telegram group. */
+export function findLatestAttendancePollRecord(
+  records: Record<string, AttendancePollRecord>,
+  groupId: unknown
+): AttendancePollRecord | undefined {
+  return Object.values(records)
+    .filter(record => String(record.groupId) === String(groupId))
+    .sort((a, b) => {
+      const aStamp = String(a.date ?? '') + String(a.time ?? '');
+      const bStamp = String(b.date ?? '') + String(b.time ?? '');
+      return bStamp.localeCompare(aStamp);
+    })[0];
+}
