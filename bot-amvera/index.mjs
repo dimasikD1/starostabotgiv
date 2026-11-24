@@ -64,7 +64,7 @@ import { validateHomeworkMediaUpload } from './api/homework-media-validation-ent
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions } from './domain/announcements-entry.mjs';
-import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration, parseStudyGroupSelection } from './domain/registration-entry.mjs';
+import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration, parseStudyGroupSelection, resolveStudyGroupRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { parseStudyGroupNumber } from './domain/role-command-input-entry.mjs';
@@ -266,11 +266,21 @@ Object.assign(db.institutions[DEFAULT_INSTITUTION_ID], {
 db.schemaVersion = Math.max(Number(db.schemaVersion) || 1, 2);
 
 bot.action(/^studygroup:(1|2)$/, async ctx => {
-  const selected = STUDY_GROUPS[ctx.match[1]];
   const u = normalizeUser(user(ctx.from.id));
-  const linkedGroup = allStudyGroups().find(g => String(g.studyGroup || '') === selected);
-  Object.assign(u, applyStudyGroupSelection(u, selected, linkedGroup, DEFAULT_INSTITUTION_ID));
-  const verificationChatId = String(u.pendingVerificationChatId || '');
+  const registration = resolveStudyGroupRegistration({
+    user: u,
+    groupKey: ctx.match[1],
+    groups: STUDY_GROUPS,
+    linkedGroups: allStudyGroups(),
+    defaultInstitutionId: DEFAULT_INSTITUTION_ID
+  });
+  if (!registration) {
+    await ctx.answerCbQuery('Неизвестная учебная группа', { show_alert: true });
+    return;
+  }
+  Object.assign(u, registration.user);
+  const selected = registration.selectedGroup;
+  const verificationChatId = registration.verificationChatId;
   if (verificationChatId) {
     try {
       await ctx.telegram.restrictChatMember(verificationChatId, ctx.from.id, buildVerifiedMemberChatPermissions());
