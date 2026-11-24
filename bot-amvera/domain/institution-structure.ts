@@ -188,3 +188,31 @@ export function parseStudyGroupUnlinkArguments(args: readonly unknown[]): StudyG
   if (groupNumber !== '1' && groupNumber !== '2') return { ok: false, reason: 'invalid_group' };
   return { ok: true, groupNumber };
 }
+
+
+/** Format the institution hierarchy as the existing Telegram HTML structure report. */
+export function formatInstitutionStructureMessage(
+  institution: InstitutionStructure,
+  escapeHtml: (value: unknown) => string
+): string {
+  const lines = ['🏫 <b>' + escapeHtml(institution.name || institution.id) + '</b>', ''];
+  const faculties = Object.values(institution.faculties || {});
+  if (!faculties.length) lines.push('Пока нет факультетов. Добавь первый командой /addfaculty.');
+  for (const faculty of faculties) {
+    lines.push('🎓 <b>' + escapeHtml(faculty.name) + '</b>', 'ID: <code>' + escapeHtml(faculty.id) + '</code>');
+    const directions = Object.values(faculty.directions || {});
+    if (!directions.length) lines.push('  Направления пока не добавлены.');
+    for (const direction of directions) {
+      lines.push('  📚 <b>' + escapeHtml(direction.name) + '</b>', '  ID: <code>' + escapeHtml(direction.id) + '</code>');
+      const courses = Object.values(direction.courses || {});
+      if (!courses.length) lines.push('    Курсы пока не добавлены.');
+      for (const course of courses) {
+        lines.push('    • ' + escapeHtml(course.name) + ' · ID: <code>' + escapeHtml(course.id) + '</code>');
+        const groups = Object.values(course.groups || {});
+        for (const group of groups) lines.push('      — ' + escapeHtml(group.name || group.title || 'Учебная группа'));
+      }
+    }
+    lines.push('');
+  }
+  return lines.join('\n').slice(0, 3900);
+}
