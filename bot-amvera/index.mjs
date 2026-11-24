@@ -15,7 +15,7 @@ import { buildAttachedGroupsMessage } from './domain/attached-groups-entry.mjs';
 import { decideAttachCommand, decideDetachCommand } from './domain/group-attachment-command-entry.mjs';
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
-import { buildAttendanceScheduleTasks, buildAttendanceReminderMessage, buildAttendancePollQuestion } from './schedule/notifications-entry.mjs';
+import { createAttendancePollRunner } from './schedule/attendance-jobs-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -470,62 +470,37 @@ async function show(ctx, days, offset, range) {
 
 function timeZoneParts(date = new Date()) { return getTimeZoneParts(date, TIME_ZONE); }
 
-const attendancePollJobLock = createAsyncJobLock();
+const runAttendancePollCycle = createAttendancePollRunner();
 async function checkAutomaticAttendancePolls() {
-  if (!attendancePollJobLock.tryAcquire()) return;
-  try {
-    const now = timeZoneParts();
-    const today = now.year + '-' + now.month + '-' + now.day;
-    const currentMinutes = Number(now.hour) * 60 + Number(now.minute);
-    db.sentAttendancePolls ||= {};
-    for (const g of Object.values(db.groups)) {
-      const scheduleGroup = String(g.scheduleGroup || '').trim();
-      if (!scheduleGroup) continue;
-      try {
-        const lessons = await getSchedule(scheduleGroup, 2);
-        db.sentLessonNotices ||= {};
-        const tasks = buildAttendanceScheduleTasks({
-          chatId: g.chatId,
-          lessons,
-          today,
-          currentMinutes,
-          sentLessonNotices: db.sentLessonNotices,
-          sentAttendancePolls: db.sentAttendancePolls
-        });
-        for (const task of tasks) {
-          const lesson = task.lesson;
-          const key = task.key;
-          if (task.sendLessonReminder) {
-            await bot.telegram.sendMessage(g.chatId,
-              buildAttendanceReminderMessage(lesson, escapeHtml),
-              { parse_mode: 'HTML' }
-            );
-            db.sentLessonNotices[key] = new Date().toISOString();
-            saveDb();
-          }
-          if (task.sendAttendancePoll) {
-            const sent = await bot.telegram.sendPoll(
-              g.chatId,
-              buildAttendancePollQuestion(lesson),
-              ['✅ Буду', '❌ Не буду'],
-              { is_anonymous: false, allows_multiple_answers: false }
-            );
-            db.sentAttendancePolls[key] = {
-              pollId: sent.poll.id, groupId: String(g.chatId), groupName: g.title,
-              scheduleGroup, date: lesson.date, time: lesson.timeStart,
-              subject: lesson.subject, lessonKey: attendanceLessonKey(lesson), sentAt: new Date().toISOString()
-            };
-            saveDb();
-            console.log('[attendance poll] Sent to ' + g.title + ' for ' + lesson.subject + ' at ' + lesson.timeStart);
-          }
-        }
-      } catch (e) {
-        console.error('[attendance poll] ' + g.title + ':', e.message || e);
-      }
-    }
-  } finally {
-    attendancePollJobLock.release();
-  }
+  const now = timeZoneParts();
+  db.sentAttendancePolls ||= {};
+  db.sentLessonNotices ||= {};
+  await runAttendancePollCycle({
+    groups: Object.values(db.groups),
+    today: now.year + '-' + now.month + '-' + now.day,
+    currentMinutes: Number(now.hour) * 60 + Number(now.minute),
+    loadSchedule: getSchedule,
+    sendMessage: async (chatId, message) => {
+      await bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
+    },
+    sendPoll: async (chatId, question) => {
+      const sent = await bot.telegram.sendPoll(
+        chatId,
+        question,
+        ['✅ Буду', '❌ Не буду'],
+        { is_anonymous: false, allows_multiple_answers: false }
+      );
+      return sent.poll.id;
+    },
+    escapeHtml,
+    getLessonKey: attendanceLessonKey,
+    sentLessonNotices: db.sentLessonNotices,
+    sentAttendancePolls: db.sentAttendancePolls,
+    save: saveDb,
+    nowIso: () => new Date().toISOString(),
+    log: console.log,
+    error: console.error
+  });
 }
 
 
