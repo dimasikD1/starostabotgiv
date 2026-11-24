@@ -111,7 +111,7 @@ test('formats empty and nested institution hierarchy with escaped Telegram HTML'
   assert.match(result, /Вуз &lt;&amp;/);
   assert.match(result, /Факультет &lt;А&gt;/);
   assert.match(result, /БИ &amp; группа/);
-  assert.match(result, /ID: <code>c1<\\/code>/);
+  assert.ok(result.includes('ID: <code>c1</code>'));
 });
 
 test('preserves the existing 3900-character Telegram message limit', async () => {
