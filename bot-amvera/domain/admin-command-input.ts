@@ -43,9 +43,9 @@ export function parseInstitutionAdminCommandInput(
 ): InstitutionAdminCommandInput {
   if (typeof commandText !== 'string') return { institutionId: '', userId: '' };
   const args = commandText
-    .replace(new RegExp('^\\\\/' + command + '(?:@\\\\S+)?', 'i'), '')
+    .replace(new RegExp('^\\/' + command + '(?:@\\S+)?', 'i'), '')
     .trim()
-    .split(/\\s+/)
+    .split(/\s+/)
     .filter(Boolean);
   return { institutionId: args[0] || '', userId: args[1] || '' };
 }
