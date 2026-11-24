@@ -93,3 +93,29 @@ test('parses study-group unlink arguments without requiring a course ID', async 
   assert.deepEqual(parseStudyGroupUnlinkArguments([' 1 ']), { ok: true, groupNumber: '1' });
   assert.deepEqual(parseStudyGroupUnlinkArguments(['course_1']), { ok: false, reason: 'invalid_group' });
 });
+
+
+test('formats empty and nested institution hierarchy with escaped Telegram HTML', async () => {
+  const { formatInstitutionStructureMessage } = await import('../domain/.build/institution-structure.js');
+  const escape = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  assert.equal(formatInstitutionStructureMessage({ id: 'inst_1', name: 'Институт' }, escape),
+    '🏫 <b>Институт</b>\\n\\nПока нет факультетов. Добавь первый командой /addfaculty.');
+  const institution = { id: 'inst_1', name: 'Вуз <&', faculties: {
+    f1: { id: 'f1', name: 'Факультет <А>', directions: {
+      d1: { id: 'd1', name: 'Направление', courses: {
+        c1: { id: 'c1', name: '1 курс', groups: { g1: { name: 'БИ & группа' } } }
+      } }
+    } }
+  } };
+  const result = formatInstitutionStructureMessage(institution, escape);
+  assert.match(result, /Вуз &lt;&amp;/);
+  assert.match(result, /Факультет &lt;А&gt;/);
+  assert.match(result, /БИ &amp; группа/);
+  assert.match(result, /ID: <code>c1<\\/code>/);
+});
+
+test('preserves the existing 3900-character Telegram message limit', async () => {
+  const { formatInstitutionStructureMessage } = await import('../domain/.build/institution-structure.js');
+  const institution = { id: 'inst_1', name: 'X', faculties: { f1: { id: 'f1', name: 'Ф'.repeat(5000) } } };
+  assert.equal(formatInstitutionStructureMessage(institution, value => String(value ?? '')).length, 3900);
+});
