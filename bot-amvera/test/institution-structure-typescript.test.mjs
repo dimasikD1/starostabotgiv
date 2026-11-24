@@ -99,7 +99,7 @@ test('formats empty and nested institution hierarchy with escaped Telegram HTML'
   const { formatInstitutionStructureMessage } = await import('../domain/.build/institution-structure.js');
   const escape = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   assert.equal(formatInstitutionStructureMessage({ id: 'inst_1', name: 'Институт' }, escape),
-    '🏫 <b>Институт</b>\\n\\nПока нет факультетов. Добавь первый командой /addfaculty.');
+    `🏫 <b>Институт</b>\n\nПока нет факультетов. Добавь первый командой /addfaculty.`);
   const institution = { id: 'inst_1', name: 'Вуз <&', faculties: {
     f1: { id: 'f1', name: 'Факультет <А>', directions: {
       d1: { id: 'd1', name: 'Направление', courses: {
