@@ -22,7 +22,7 @@ import { normalizeUser } from './domain/user-normalization-entry.mjs';
 import { getOrCreateUser, isManagerRole, roleLabel, studentName, attendanceKey } from './domain/user-profile-entry.mjs';
 import { createGroupAccess } from './domain/group-access-entry.mjs';
 import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
-import { getMissingTelegramBotPermissions } from './domain/telegram-bot-permissions-entry.mjs';
+
 import { buildOpenChatPermissions, buildVerifiedMemberChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons, parseManualAttendanceMarkInput } from './domain/attendance-core-entry.mjs';
@@ -75,7 +75,7 @@ import { parseStructureInstitutionId } from './domain/structure-command-input-en
 import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 import { executeWithRetry } from './domain/startup-retry-entry.mjs';
-import { classifyGroupBotMembershipTransition } from './domain/group-bot-membership-entry.mjs';
+import { handleGroupBotMembershipUpdate } from './domain/group-bot-membership-handler-entry.mjs';
 import { createAsyncJobLock } from './domain/background-job-lock-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
@@ -178,51 +178,24 @@ async function registrationMiddleware(ctx, next) {
  */
 bot.on('my_chat_member', async ctx => {
   const update = ctx.update.my_chat_member;
-  const chat = update?.chat;
-  const oldStatus = update?.old_chat_member?.status;
-  const newMember = update?.new_chat_member;
-  const newStatus = newMember?.status;
-  if (!chat?.id) return;
-  const transition = classifyGroupBotMembershipTransition({
-    chatType: chat.type,
-    oldStatus,
-    newStatus
+  await handleGroupBotMembershipUpdate({
+    chat: update?.chat,
+    from: ctx.from,
+    oldStatus: update?.old_chat_member?.status,
+    newStatus: update?.new_chat_member?.status,
+    newMember: update?.new_chat_member,
+    botId: ctx.botInfo.id
+  }, {
+    registerGroup: (chat, actor) => {
+      registerGroup({ chat, from: actor });
+      console.log('[group setup] Existing chat registered:', chat.id, chat.title || '');
+    },
+    getBotMember: (chatId, botId) => ctx.telegram.getChatMember(chatId, botId),
+    sendMessage: async (chatId, message, parseMode) => {
+      await ctx.telegram.sendMessage(chatId, message, parseMode ? { parse_mode: parseMode } : {});
+    },
+    logError: (label, error) => console.error(label, error instanceof Error ? error.message : error)
   });
-  if (!transition.shouldHandle || !transition.shouldRegister) return;
-  const { joined, demoted } = transition;
-  try {
-    registerGroup({ chat, from: ctx.from });
-    console.log('[group setup] Existing chat registered:', chat.id, chat.title || '');
-  } catch (error) {
-    console.error('[group setup] Registration failed:', error?.message || error);
-  }
-
-  if (transition.shouldCheckPermissions) {
-    let memberInfo = null;
-    try { memberInfo = await ctx.telegram.getChatMember(chat.id, ctx.botInfo.id); } catch {}
-    const rights = memberInfo || newMember;
-    const missing = getMissingTelegramBotPermissions(rights);
-    const message = missing.length
-      ? '⚠️ <b>Бот добавлен в чат, но не все права выданы.</b>\n\nВ настройках администраторов включи: ' + missing.join(', ') + '.'
-      : '✅ <b>Бот подключён к существующему чату!</b>\nЧат зарегистрирован, необходимые права администратора выданы. Существующая переписка и данные не затронуты.';
-    try { await ctx.telegram.sendMessage(chat.id, message, { parse_mode: 'HTML' }); } catch (e) {
-      console.error('[group setup] Could not send admin confirmation:', e?.message || e);
-    }
-  } else if (joined) {
-    try {
-      await ctx.telegram.sendMessage(
-        chat.id,
-        '👋 <b>Староста Бот добавлен в этот существующий чат.</b> Чат зарегистрирован, создавать новую группу не нужно.\n\nДля полной работы назначьте бота администратором и включите права: <b>удаление сообщений</b>, <b>ограничение участников</b> и <b>закрепление сообщений</b>. Не выдавайте право добавлять других администраторов. После выдачи прав бот подтвердит подключение.',
-        { parse_mode: 'HTML' }
-      );
-    } catch (e) {
-      console.error('[group setup] Could not send setup instructions:', e?.message || e);
-    }
-  } else if (demoted) {
-    try {
-      await ctx.telegram.sendMessage(chat.id, '⚠️ Права администратора у бота сняты. Для проверки участников и закрепления расписания верните права удаления сообщений, ограничения участников и закрепления.');
-    } catch {}
-  }
 });
 
 // Повторная проверка участников отключена: вступление не требует капчи.
