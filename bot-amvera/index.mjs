@@ -32,7 +32,7 @@ import { findAttendancePollRecord, findLatestAttendancePollRecord, applyAttendan
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument, parseStudentContactInput, parseStudentRosterAction } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave, confirmStudentRosterImportAndSave, cancelStudentRosterImportAndSave } from './domain/student-roster-workflows-entry.mjs';
-import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments } from './domain/institution-structure-entry.mjs';
+import { createFaculty, createDirection, createCourse, hasDuplicateStructureName, parseStudyGroupLinkArguments, parseStudyGroupUnlinkArguments, formatInstitutionStructureMessage } from './domain/institution-structure-entry.mjs';
 import { createFacultyAndSave, createDirectionAndSave, createCourseAndSave, linkStudyGroupToCourseAndSave, unlinkStudyGroupFromStructureAndSave } from './domain/institution-structure-workflows-entry.mjs';
 import { createInstitutionAndSave, deleteInstitutionAndSave, addInstitutionAdminAndSave, removeInstitutionAdminAndSave } from './domain/institution-workflows-entry.mjs';
 import { isInstitutionAdminId, addInstitutionAdmin, removeInstitutionAdmin, listInstitutionAdmins, checkInstitutionAccess } from './domain/institution-admins-entry.mjs';
@@ -1792,26 +1792,7 @@ bot.command('structure', async ctx => {
   const result = institutionForStructureCommand(ctx, institutionId);
   if (result.error) return ctx.reply(result.error);
   const institution = result.institution;
-  const lines = ['🏫 <b>' + escapeHtml(institution.name || institution.id) + '</b>', ''];
-  const faculties = Object.values(institution.faculties || {});
-  if (!faculties.length) lines.push('Пока нет факультетов. Добавь первый командой /addfaculty.');
-  for (const faculty of faculties) {
-    lines.push('🎓 <b>' + escapeHtml(faculty.name) + '</b>', 'ID: <code>' + escapeHtml(faculty.id) + '</code>');
-    const directions = Object.values(faculty.directions || {});
-    if (!directions.length) lines.push('  Направления пока не добавлены.');
-    for (const direction of directions) {
-      lines.push('  📚 <b>' + escapeHtml(direction.name) + '</b>', '  ID: <code>' + escapeHtml(direction.id) + '</code>');
-      const courses = Object.values(direction.courses || {});
-      if (!courses.length) lines.push('    Курсы пока не добавлены.');
-      for (const course of courses) {
-        lines.push('    • ' + escapeHtml(course.name) + ' · ID: <code>' + escapeHtml(course.id) + '</code>');
-        const groups = Object.values(course.groups || {});
-        for (const group of groups) lines.push('      — ' + escapeHtml(group.name || group.title || 'Учебная группа'));
-      }
-    }
-    lines.push('');
-  }
-  return ctx.reply(lines.join('\n').slice(0, 3900), { parse_mode: 'HTML' });
+  return ctx.reply(formatInstitutionStructureMessage(institution, escapeHtml), { parse_mode: 'HTML' });
 });
 
 bot.command('groups', async ctx => {
