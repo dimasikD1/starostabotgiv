@@ -21,3 +21,20 @@ test('parses revoke and subinfo target IDs with optional bot mentions', () => {
   assert.equal(parseAdminTargetId('/subinfo', 'subinfo'), null);
   assert.equal(parseAdminTargetId(null, 'revoke'), null);
 });
+
+
+test('extracts institution admin command arguments with optional bot mention', async () => {
+  const { parseInstitutionAdminCommandInput } = await import('../../.test-build/domain/admin-command-input.js');
+  assert.deepEqual(parseInstitutionAdminCommandInput('/setinstadmin inst_001 123456', 'setinstadmin'), {
+    institutionId: 'inst_001', userId: '123456'
+  });
+  assert.deepEqual(parseInstitutionAdminCommandInput('/removeinstadmin@starostagivbot inst_002 987654', 'removeinstadmin'), {
+    institutionId: 'inst_002', userId: '987654'
+  });
+  assert.deepEqual(parseInstitutionAdminCommandInput('/setinstadmin inst_001', 'setinstadmin'), {
+    institutionId: 'inst_001', userId: ''
+  });
+  assert.deepEqual(parseInstitutionAdminCommandInput(null, 'removeinstadmin'), {
+    institutionId: '', userId: ''
+  });
+});
