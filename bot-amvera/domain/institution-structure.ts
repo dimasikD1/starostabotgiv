@@ -22,6 +22,7 @@ export interface InstitutionStructure {
 export interface LinkedStudyGroup {
   id: string;
   name: string;
+  title?: string;
   studyGroup: string;
   chatId: string;
   institutionId: string;
