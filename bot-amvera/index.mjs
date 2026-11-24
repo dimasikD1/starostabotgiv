@@ -73,6 +73,7 @@ import { parseRoleRemovalTargetId } from './domain/role-removal-input-entry.mjs'
 import { parseStructureInstitutionId } from './domain/structure-command-input-entry.mjs';
 import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
+import { executeWithRetry } from './domain/startup-retry-entry.mjs';
 
 // Часовой пояс учебного заведения. Europe/Moscow — Краснодар и большая часть РФ.
 // Можно переопределить через переменную окружения TIME_ZONE.
@@ -2706,20 +2707,17 @@ const healthServer = http.createServer(async (req, res) => {
 
 
 async function telegramStartupRequest(label, operation, attempts = 5) {
- let lastError;
- for (let attempt = 1; attempt <= attempts; attempt++) {
-  try {
-   return await operation();
-  } catch (error) {
-   lastError = error;
-   console.error('[telegram startup] ' + label + ' failed (' + attempt + '/' + attempts + '):', error?.message || error);
-   if (attempt < attempts) {
-    const delay = Math.min(10000, 1500 * (2 ** (attempt - 1)));
-    await new Promise(resolve => setTimeout(resolve, delay));
-   }
-  }
- }
- throw new Error('Telegram API недоступен после ' + attempts + ' попыток (' + label + '): ' + (lastError?.message || lastError));
+  return executeWithRetry({
+    operation,
+    attempts,
+    wait: milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+    onRetry: (error, attempt, totalAttempts) => {
+      console.error('[telegram startup] ' + label + ' failed (' + attempt + '/' + totalAttempts + '):', error?.message || error);
+    },
+    createFinalError: (lastError, totalAttempts) => new Error(
+      'Telegram API недоступен после ' + totalAttempts + ' попыток (' + label + '): ' + (lastError?.message || lastError)
+    )
+  });
 }
 
 async function main() {
