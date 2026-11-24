@@ -9,3 +9,4 @@ export {
   parseStudyGroupLinkArguments,
   parseStudyGroupUnlinkArguments
 } from './.build/institution-structure.js';
+export { formatInstitutionStructureMessage } from './.build/institution-structure.js';
