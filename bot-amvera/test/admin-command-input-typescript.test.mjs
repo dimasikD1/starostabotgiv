@@ -38,3 +38,28 @@ test('extracts institution admin command arguments with optional bot mention', a
     institutionId: '', userId: ''
   });
 });
+
+
+test('parses addinstitution fields, optional bot mention and legacy length limits', async () => {
+  const { parseAddInstitutionCommandInput } = await import('../../.test-build/domain/admin-command-input.js');
+  assert.deepEqual(parseAddInstitutionCommandInput('/addinstitution Университет | УНИВ | Таллин'), {
+    hasInput: true, name: 'Университет', shortName: 'УНИВ', city: 'Таллин'
+  });
+  assert.deepEqual(parseAddInstitutionCommandInput('/addinstitution@starostagivbot Институт'), {
+    hasInput: true, name: 'Институт', shortName: '', city: ''
+  });
+  assert.equal(parseAddInstitutionCommandInput('/addinstitution ' + 'А'.repeat(130)).name.length, 120);
+  assert.equal(parseAddInstitutionCommandInput('/addinstitution X | ' + 'Б'.repeat(50)).shortName.length, 40);
+  assert.equal(parseAddInstitutionCommandInput('/addinstitution X | Y | ' + 'В'.repeat(90)).city.length, 80);
+  assert.deepEqual(parseAddInstitutionCommandInput('/addinstitution'), {
+    hasInput: false, name: '', shortName: '', city: ''
+  });
+});
+
+test('extracts deleteinstitution and instadmins IDs without changing their text', async () => {
+  const { parseInstitutionIdCommandInput } = await import('../../.test-build/domain/admin-command-input.js');
+  assert.equal(parseInstitutionIdCommandInput('/deleteinstitution inst_123', 'deleteinstitution'), 'inst_123');
+  assert.equal(parseInstitutionIdCommandInput('/instadmins@starostagivbot inst_456', 'instadmins'), 'inst_456');
+  assert.equal(parseInstitutionIdCommandInput('/instadmins   ', 'instadmins'), '');
+  assert.equal(parseInstitutionIdCommandInput(null, 'deleteinstitution'), '');
+});
