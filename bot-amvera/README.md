@@ -41,3 +41,7 @@ npm test
 - `/subinfo TELEGRAM_ID` — проверить состояние подписки.
 
 Пользователь присылает владельцу свой ID из команды `/myid`. Выдавать, отзывать и проверять подписки может только аккаунт из `OWNER_TELEGRAM_ID`.
+
+## Typed student roster keyboards
+
+The student roster and student-card callback keyboard layouts are defined in `domain/student-roster-keyboards.ts`. The Mini App/bot runtime bridge converts the typed button descriptors to Telegraf markup, while the tests cover pagination, navigation bounds, name truncation, and callback payloads.
