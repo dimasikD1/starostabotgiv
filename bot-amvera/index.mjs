@@ -6,6 +6,7 @@ import zlib from 'node:zlib';
 import { Telegraf, Markup } from 'telegraf';
 import { getSchedule } from './schedule/ruc-entry.mjs';
 import { selectLessonsForDate } from './schedule/lessons-for-date-entry.mjs';
+import { getTodayLessons as getTodayLessonsData } from './schedule/today-lessons-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
 import { formatSchedule, nextWeekDateRange, nextMondayDateRange, currentMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
@@ -351,9 +352,7 @@ function getMiniAppSchedule(group, days = 7) {
 }
 
 async function getTodayLessons(g) {
- if(!g?.scheduleGroup) throw new Error('Для группы не указано расписание. Сначала настрой /setgroup.');
- const lessons=await getCachedSchedule(String(g.scheduleGroup),7);
- return selectLessonsForDate(lessons || [], attendanceDate());
+ return getTodayLessonsData(g, attendanceDate(), getCachedSchedule);
 }
 function ensureStudyGroups(chat) {
  const result = ensureStudyGroupsData(db, chat, {
