@@ -213,3 +213,8 @@ The Telegram API call and verification workflow remain in the existing bot entry
 
 
 Формирование кнопок отметки посещаемости по отдельным парам перенесено в типизированный `buildLessonAttendanceButtons()` модуля `attendance-keyboards.ts`: сохранены подписи статусов, нумерация студентов, callback-данные и навигация страниц. Telegram-кнопки по-прежнему создаются в runtime-обработчике.
+
+
+### Миграция разбора команд структуры учебного заведения
+
+Разбор аргументов команд `/addfaculty`, `/adddirection`, `/addcourse` и связанных операций вынесен в `parseStructureCommandParts()` модуля `domain/structure-command-input.ts`. Сохранены обработка упоминания бота, разделение по `|`, обрезка пробелов и поведение пустого ввода. Telegram-контекст и сами команды остаются в `index.mjs`; добавлены тесты для аргументов с упоминанием бота и пробелами.
