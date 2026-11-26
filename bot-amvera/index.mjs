@@ -21,6 +21,7 @@ import { publishStartupPost } from './domain/startup-post-entry.mjs';
 import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { buildHelpMessage } from './domain/help-message-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
+import { isPrivateChat } from './domain/private-chat-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -579,7 +580,7 @@ async function checkScheduleChanges() {
 }
 
 function isPrivate(ctx) {
-  return ctx.chat?.type === 'private';
+  return isPrivateChat(ctx);
 }
 
 async function isGroupAdmin(ctx) {
