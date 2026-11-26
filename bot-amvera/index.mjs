@@ -59,6 +59,7 @@ import { registerGroup as registerGroupData, removeGroup as removeGroupData } fr
 import { escapeHtml } from './utils/html-entry.mjs';
 
 import { resolveTimeZone, formatDateInTimeZone, getTimeZoneParts } from './utils/time-zone-entry.mjs';
+import { getAttendanceDate } from './utils/attendance-date-entry.mjs';
 import { resolveMiniAppRequestContext } from './api/miniapp-request-context-entry.mjs';
 import { resolveMiniAppGroupAccess } from './api/miniapp-group-access-entry.mjs';
 import { loadMiniAppSchedule } from './api/miniapp-schedule-loader-entry.mjs';
@@ -336,7 +337,7 @@ function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.ca
 
 // OCR временно отключён: импорт списка выполняется текстом.
 
-function attendanceDate() { return formatDateInTimeZone(new Date(), TIME_ZONE); }
+function attendanceDate() { return getAttendanceDate(new Date(), TIME_ZONE); }
 function attendanceLessonKey(lesson) {
  return buildAttendanceLessonKey(lesson, attendanceDate());
 }
