@@ -274,3 +274,8 @@ Middleware регистрации теперь распознаёт выбран
 ### Миграция на TypeScript — политика меню
 
 Решение о показе меню старосты или студента вынесено в `bot-amvera/domain/menu-policy.ts`. Проверка владельца и доступных групп остаётся в интеграционном коде; правила выбора меню покрыты тестами. Изменение находится только в `typescript-migration`.
+
+
+### Typed workflow for today's schedule
+
+The `schedule/today-lessons.ts` module now owns the existing `/setgroup` validation, seven-day cache request, and date filtering/sorting for today's lessons. `index.mjs` delegates to this workflow while retaining the existing cache and timezone providers. TypeScript tests cover missing schedule-group configuration, the seven-day request, date filtering, chronological ordering, and an empty cache result. The Telegram and Amvera runtime behavior has not been verified by this migration step.
