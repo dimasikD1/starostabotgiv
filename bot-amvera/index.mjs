@@ -21,6 +21,7 @@ import { publishStartupPost } from './domain/startup-post-entry.mjs';
 import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { buildHelpMessage } from './domain/help-message-entry.mjs';
 import { buildHomeworkMessage } from './domain/homework-message-entry.mjs';
+import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
 import { buildStructureId } from './domain/structure-id-entry.mjs';
@@ -320,7 +321,7 @@ function canManageAttendance(u, id) {
   return isOwner(id) || accessibleGroups(id).length > 0;
 }
 function getMenu(id) {
-  return canManageAttendance(user(id), id) ? managerMenu : studentMenu;
+  return shouldShowManagerMenu(isOwner(id), accessibleGroups(id).length > 0) ? managerMenu : studentMenu;
 }
 function menuFor(ctx) {
   return isPrivate(ctx) ? getMenu(ctx.from.id) : studentMenu;
