@@ -294,3 +294,8 @@ The `/api/data` route now reuses the typed `selectLessonsForDate` helper for its
 ### Typed schedule cache access
 
 Schedule cache reads used by the bot and Mini App now go through typed helpers that normalize group identifiers and share the seven-day default horizon. The helper tests cover default and explicit horizons, plus the Mini App's immediate cache snapshot behavior.
+
+
+### Homework destination buttons
+
+The homework-send destination selector now uses a typed builder for group-specific and broadcast callback button descriptors. The Telegram adapter only converts those descriptors into Telegraf buttons. Tests cover single/multiple groups and the 45-character title limit.
