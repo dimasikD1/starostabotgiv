@@ -49,3 +49,7 @@ The student roster and student-card callback keyboard layouts are defined in `do
 ## Typed attendance keyboard composition
 
 The daily attendance, individual status, lesson picker, and per-lesson attendance keyboards are composed by `domain/attendance-keyboard-adapter.ts`. It reuses the typed domain button builders and keeps Telegraf markup conversion in the runtime entry point. Tests cover legacy callback payloads, status labels, and per-lesson navigation.
+
+## Typed student roster destinations
+
+The group-selection buttons used to open student rosters are defined in `domain/student-destination-buttons.ts`. The runtime bridge converts typed descriptors into Telegraf buttons. Tests verify one destination per managed group, the title length limit, and the empty-group case.
