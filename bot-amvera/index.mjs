@@ -25,6 +25,7 @@ import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 
 import { buildOpenChatPermissions, buildVerifiedMemberChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
+import { buildAttendanceLessonChoices } from './domain/attendance-lesson-choices-entry.mjs';
 import { buildAttendanceButtons as buildAttendanceKeyboard, buildAttendanceStatusButtons as buildAttendanceStatusKeyboard, buildLessonAttendanceButtons } from './domain/attendance-keyboards-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons, parseManualAttendanceMarkInput } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
@@ -375,10 +376,9 @@ function formatAttendance(g) {
  });
 }
 function attendanceLessonsKeyboard(lessons) {
- const rows=lessons.map((lesson,i)=>{
-  const time=lesson.timeStart?(lesson.timeStart+(lesson.timeEnd?'–'+lesson.timeEnd:'')):'Время не указано';
-  return [Markup.button.callback((i+1)+'. '+time+' — '+String(lesson.subject||'Пара').slice(0,35),'attlesson:'+i)];
- });
+ const rows=buildAttendanceLessonChoices(lessons).map(row =>
+  row.map(button => Markup.button.callback(button.text, button.callbackData))
+ );
  return Markup.inlineKeyboard(rows);
 }
 function formatLessonAttendance(g,lesson) {
