@@ -26,7 +26,7 @@ import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 import { buildOpenChatPermissions, buildVerifiedMemberChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
 import { buildAttendanceLessonChoices } from './domain/attendance-lesson-choices-entry.mjs';
-import { buildAttendanceButtons as buildAttendanceKeyboard, buildAttendanceStatusButtons as buildAttendanceStatusKeyboard, buildLessonAttendanceButtons } from './domain/attendance-keyboards-entry.mjs';
+import { buildAttendanceButtons as buildAttendanceKeyboard, buildAttendanceStatusButtons as buildAttendanceStatusKeyboard, buildLessonAttendanceButtons, buildLessonAttendancePageButtons } from './domain/attendance-keyboards-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons, parseManualAttendanceMarkInput } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -390,12 +390,9 @@ function formatLessonAttendance(g,lesson) {
  });
 }
 function attendancePairButtons(g,lesson,userId,page=0) {
- const students=g.students||[],size=10;
- const pageData=paginateAttendanceStudents(students,Number(page)||0,size);
- page=pageData.page;
- const pages=pageData.pageCount;
+ const students=g.students||[];
  const record=g.lessonAttendance?.[attendanceLessonKey(lesson)]||{};
- const rows=buildLessonAttendanceButtons(pageData,record,attendanceKey).map(row=>
+ const rows=buildLessonAttendancePageButtons(students,page,record,attendanceKey).map(row=>
   row.map(button=>Markup.button.callback(button.text,button.callbackData))
  );
  return Markup.inlineKeyboard(rows);
