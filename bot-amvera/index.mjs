@@ -20,6 +20,7 @@ import { publishWeeklySchedule } from './schedule/weekly-publication-entry.mjs';
 import { publishStartupPost } from './domain/startup-post-entry.mjs';
 import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { buildHelpMessage } from './domain/help-message-entry.mjs';
+import { buildHomeworkMessage } from './domain/homework-message-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
 import { buildStructureId } from './domain/structure-id-entry.mjs';
@@ -1775,13 +1776,11 @@ bot.command('poll', startPoll);
 bot.command('hw', startHomework);
 bot.command('homework', startHomework);
 function homeworkMessage(records,userId,ctx) {
-  const keyboard=[];
-  const text='📚 <b>Домашние задания</b>\n\n'+records.map((h,i)=>{
-    const done=Boolean(h.completedBy?.[String(userId)]);
-    if(h.id&&!done)keyboard.push([Markup.button.callback('✅ Выполнено: '+String(h.subject||'ДЗ').slice(0,35),'hwcomplete:'+h.id)]);
-    return (i+1)+'. <b>'+escapeHtml(h.subject)+'</b> — '+escapeHtml(h.groupTitle)+'\n'+escapeHtml(h.homework)+'\n'+escapeHtml(h.createdAt||'')+'\n'+(done?'✅ Выполнение отмечено':'▫️ Ещё не отмечено');
-  }).join('\n\n');
-  return {text,extra:{parse_mode:'HTML',...(keyboard.length?Markup.inlineKeyboard(keyboard):{})}};
+  const message = buildHomeworkMessage(records, userId);
+  const keyboard = message.buttons.map(row => row.map(button =>
+    Markup.button.callback(button.text, button.callbackData)
+  ));
+  return {text:message.text,extra:{parse_mode:'HTML',...(keyboard.length?Markup.inlineKeyboard(keyboard):{})}};
 }
 async function sendHomeworkAttachments(ctx, records) {
   for (const item of records) {
