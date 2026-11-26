@@ -821,7 +821,7 @@ bot.command('pollreport', async ctx => {
   const latest = findLatestAttendancePollRecord(db.sentAttendancePolls || {}, g.chatId);
   if (!latest) return ctx.reply('Пока нет автоматических опросов посещаемости для «' + g.title + '».');
   const report = buildAttendancePollReport((g.students || []).length, latest);
-  return ctx.reply(formatAttendancePollReportMessage(g.title, report), { parse_mode: 'HTML' });
+  return ctx.reply(formatAttendancePollReportMessage(g.title, report, escapeHtml), { parse_mode: 'HTML' });
 });
 
 bot.on('callback_query', async (ctx, next) => {
