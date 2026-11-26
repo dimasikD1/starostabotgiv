@@ -61,3 +61,7 @@ The text roster import review controls are described in `domain/student-import-p
 ## Typed donation keyboard
 
 Donation amount buttons are described in `domain/donation-keyboard.ts`; the runtime bridge maps those descriptors to Telegraf buttons. Tests preserve the four Stars amounts and their existing `donate:<amount>` callback identifiers. This does not add or restore subscription UI.
+
+## Typed main menu layouts
+
+Student and manager keyboard row layouts are defined in `domain/main-menus.ts`. Telegraf keyboard creation remains in `index.mjs`; tests preserve row ordering and confirm the student menu contains no management-only actions. The donation/support button remains, while no subscription entry is introduced.
