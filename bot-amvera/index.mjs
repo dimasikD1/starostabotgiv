@@ -31,6 +31,7 @@ import { buildDailyAttendanceKeyboard, buildAttendanceStatusKeyboard as buildAtt
 import { buildStudentRosterKeyboard, buildStudentCardKeyboard } from './domain/student-roster-keyboards-entry.mjs';
 import { buildStudentDestinationButtons } from './domain/student-destination-buttons-entry.mjs';
 import { buildStudentImportPreviewKeyboard } from './domain/student-import-preview-keyboard-entry.mjs';
+import { buildDonationKeyboard } from './domain/donation-keyboard-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -162,10 +163,8 @@ function hasActiveSubscription(u) {
 }
 
 function donationKeyboard() {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback('⭐ 50 Stars', 'donate:50'), Markup.button.callback('⭐ 100 Stars', 'donate:100')],
-    [Markup.button.callback('⭐ 250 Stars', 'donate:250'), Markup.button.callback('⭐ 500 Stars', 'donate:500')]
-  ]);
+  return Markup.inlineKeyboard(buildDonationKeyboard()
+    .map(row => row.map(button => Markup.button.callback(button.text, button.callbackData))));
 }
 
 async function registrationMiddleware(ctx, next) {
