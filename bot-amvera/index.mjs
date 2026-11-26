@@ -22,6 +22,7 @@ import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { buildHelpMessage } from './domain/help-message-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
+import { buildStructureId } from './domain/structure-id-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -1637,7 +1638,7 @@ function structureParts(ctx, command) {
   return parseStructureCommandParts(ctx.message?.text, command);
 }
 function newStructureId(prefix) {
-  return prefix + '_' + crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+  return buildStructureId(prefix, () => crypto.randomUUID());
 }
 function sameStructureName(items, name) {
   return hasDuplicateStructureName(items, name);
