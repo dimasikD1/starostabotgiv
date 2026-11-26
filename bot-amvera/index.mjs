@@ -25,6 +25,7 @@ import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 
 import { buildOpenChatPermissions, buildVerifiedMemberChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
+import { buildAttendanceButtons as buildAttendanceKeyboard, buildAttendanceStatusButtons as buildAttendanceStatusKeyboard } from './domain/attendance-keyboards-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons, parseManualAttendanceMarkInput } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -596,16 +597,14 @@ function removeGroup(ctx) {
 
 
 function attendanceButtons(g,page=0){
- const students=g.students||[],size=10,pages=Math.max(1,Math.ceil(students.length/size));page=Math.max(0,Math.min(Number(page)||0,pages-1));const today=attendanceDate();
- const rows=students.slice(page*size,(page+1)*size).map((student,offset)=>{const i=page*size+offset,status=g.attendance?.[attendanceKey(student)]?.[today];return [Markup.button.callback((status==='present'?'✅ Был':'▫️ Был')+' '+(i+1),'attmark:'+i+':present'),Markup.button.callback((status==='absent'?'❌ Нет':'▫️ Нет')+' '+(i+1),'attmark:'+i+':absent')];});
- const nav=[];if(page>0)nav.push(Markup.button.callback('⬅️','attpage:'+(page-1)));nav.push(Markup.button.callback((page+1)+'/'+pages,'attsummary'));if(page<pages-1)nav.push(Markup.button.callback('➡️','attpage:'+(page+1)));rows.push(nav);return Markup.inlineKeyboard(rows);
+ const rows=buildAttendanceKeyboard(g,page,attendanceDate(),attendanceKey)
+  .map(row=>row.map(button=>Markup.button.callback(button.text,button.callbackData)));
+ return Markup.inlineKeyboard(rows);
 }
 function attendanceStatusButtons(index) {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback('✅ Был', 'attmark:' + index + ':present'), Markup.button.callback('❌ Не был', 'attmark:' + index + ':absent')],
-    [Markup.button.callback('↩️ Снять отметку', 'attmark:' + index + ':clear')],
-    [Markup.button.callback('⬅️ К списку', 'attback')]
-  ]);
+  const rows=buildAttendanceStatusKeyboard(index)
+    .map(row=>row.map(button=>Markup.button.callback(button.text,button.callbackData)));
+  return Markup.inlineKeyboard(rows);
 }
 
 function studentButtons(userId) {
