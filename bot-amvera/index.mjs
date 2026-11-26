@@ -25,7 +25,7 @@ import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 
 import { buildOpenChatPermissions, buildVerifiedMemberChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
-import { buildAttendanceButtons as buildAttendanceKeyboard, buildAttendanceStatusButtons as buildAttendanceStatusKeyboard } from './domain/attendance-keyboards-entry.mjs';
+import { buildAttendanceButtons as buildAttendanceKeyboard, buildAttendanceStatusButtons as buildAttendanceStatusKeyboard, buildLessonAttendanceButtons } from './domain/attendance-keyboards-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, paginateAttendanceStudents, getAttendanceLessonAt, buildMiniAppAttendanceLessons, parseManualAttendanceMarkInput } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -395,14 +395,9 @@ function attendancePairButtons(g,lesson,userId,page=0) {
  page=pageData.page;
  const pages=pageData.pageCount;
  const record=g.lessonAttendance?.[attendanceLessonKey(lesson)]||{};
- const rows=pageData.items.map((student,offset)=>{
-  const i=pageData.startIndex+offset,status=record[attendanceKey(student)];
-  return [Markup.button.callback((status==='present'?'✅ Был':'▫️ Был')+' '+(i+1),'attpairmark:'+i+':present'),Markup.button.callback((status==='absent'?'❌ Нет':'▫️ Нет')+' '+(i+1),'attpairmark:'+i+':absent')];
- });
- const nav=[];if(page>0)nav.push(Markup.button.callback('⬅️','attpairpage:'+(page-1)));
- nav.push(Markup.button.callback((page+1)+'/'+pages,'attpairpage:'+page));
- if(page<pages-1)nav.push(Markup.button.callback('➡️','attpairpage:'+(page+1)));
- rows.push(nav,[Markup.button.callback('↩️ К списку пар','attpairback')]);
+ const rows=buildLessonAttendanceButtons(pageData,record,attendanceKey).map(row=>
+  row.map(button=>Markup.button.callback(button.text,button.callbackData))
+ );
  return Markup.inlineKeyboard(rows);
 }
 
