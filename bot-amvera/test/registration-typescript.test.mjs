@@ -42,6 +42,8 @@ test('recognizes saved study-group choices in legacy profile fields', () => {
   assert.equal(getSavedStudyGroup({ studyGroup: groups['1'] }, groups), groups['1']);
   assert.equal(getSavedStudyGroup({ study_group: groups['2'] }, groups), groups['2']);
   assert.equal(getSavedStudyGroup({ groupName: groups['1'] }, groups), groups['1']);
+  assert.equal(getSavedStudyGroup({ group: '1' }, groups), groups['1']);
+  assert.equal(getSavedStudyGroup({ studyGroupName: '2' }, groups), groups['2']);
   assert.equal(getSavedStudyGroup({ group: 'unknown' }, groups), undefined);
   assert.equal(getSavedStudyGroup({}, groups), undefined);
 });
