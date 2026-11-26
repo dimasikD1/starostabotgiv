@@ -73,7 +73,7 @@ import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSel
 import { parseStudyGroupNumber } from './domain/role-command-input-entry.mjs';
 import { parseRoleViewAction } from './domain/role-view-command-input-entry.mjs';
 import { parseRoleRemovalTargetId } from './domain/role-removal-input-entry.mjs';
-import { parseStructureInstitutionId } from './domain/structure-command-input-entry.mjs';
+import { parseStructureInstitutionId, parseStructureCommandParts } from './domain/structure-command-input-entry.mjs';
 import { canRunGroupRoleCommand } from './domain/role-command-access-entry.mjs';
 import { shouldNotifyRelease, buildReleaseMessage, buildRestartMessage } from './domain/startup-notifications-entry.mjs';
 import { executeWithRetry } from './domain/startup-retry-entry.mjs';
