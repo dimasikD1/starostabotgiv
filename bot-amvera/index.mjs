@@ -32,6 +32,7 @@ import { buildStudentRosterKeyboard, buildStudentCardKeyboard } from './domain/s
 import { buildStudentDestinationButtons } from './domain/student-destination-buttons-entry.mjs';
 import { buildStudentImportPreviewKeyboard } from './domain/student-import-preview-keyboard-entry.mjs';
 import { buildDonationKeyboard } from './domain/donation-keyboard-entry.mjs';
+import { buildStudentMenuRows, buildManagerMenuRows } from './domain/main-menus-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -305,23 +306,8 @@ bot.action(/^studygroup:(1|2)$/, async ctx => {
   await ctx.editMessageText('✅ Твоя учебная группа сохранена: ' + selected + '\nТеперь расписание и ДЗ будут подбираться именно для твоей группы.');
 });
 
-const managerMenu = Markup.keyboard([
-  ['📅 Сегодня', '📅 Завтра'],
-  ['🗓 Неделя', '👥 Моя группа'],
-  ['📊 Создать опрос', '📚 Создать ДЗ'],
-  ['👨‍🎓 Список студентов', '📋 Посещаемость'],
-  ['👥 Группы'],
-  ['➕ Подключить бота к чату'],
-  ['💛 Поддержать хостинг'],
-  ['🔄 Обновить', '❔ Что умеет бот']
-]).resize();
-const studentMenu = Markup.keyboard([
-  ['👥 Моя группа'],
-  ['📚 ДЗ'],
-  ['❔ Что умеет бот'],
-  ['➕ Подключить бота к чату'],
-  ['💛 Поддержать хостинг']
-]).resize();
+const managerMenu = Markup.keyboard(buildManagerMenuRows()).resize();
+const studentMenu = Markup.keyboard(buildStudentMenuRows()).resize();
 
 function user(id) {
   return getOrCreateUser(db.users, id);
