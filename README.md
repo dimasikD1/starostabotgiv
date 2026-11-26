@@ -309,3 +309,8 @@ The poll-send destination selector now uses a typed builder for group-specific a
 ### Typed attendance date helper
 
 The attendance date adapter now delegates to `utils/attendance-date.ts`, which formats the current instant in the configured institutional time zone. A boundary test covers the same UTC instant falling on different local calendar dates in Moscow and Los Angeles. The helper is integrated in `index.mjs`; CI/local execution and Telegram/Amvera runtime behavior have not been verified in this step.
+
+
+### Typed poll command parsing
+
+The `/poll` command's payload parsing and validation now live in `domain/poll-command-input.ts`. The Telegram handler delegates to the parser and retains the existing Russian error messages, 300-character question limit, 100-character option limit, and ten-option cap. Added tests cover trimming, empty separators, minimum input, length boundaries, and option truncation. Tests and live Telegram/Amvera behavior were not executed as part of this change.
