@@ -30,6 +30,7 @@ import { parsePollCommandInput } from './domain/poll-command-input-entry.mjs';
 import { buildDailyAttendanceKeyboard, buildAttendanceStatusKeyboard as buildAttendanceStatusRows, buildAttendanceLessonPicker, buildPerLessonAttendanceKeyboard } from './domain/attendance-keyboard-adapter-entry.mjs';
 import { buildStudentRosterKeyboard, buildStudentCardKeyboard } from './domain/student-roster-keyboards-entry.mjs';
 import { buildStudentDestinationButtons } from './domain/student-destination-buttons-entry.mjs';
+import { buildStudentImportPreviewKeyboard } from './domain/student-import-preview-keyboard-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -335,7 +336,10 @@ function getMenu(id) {
 function menuFor(ctx) {
   return isPrivate(ctx) ? getMenu(ctx.from.id) : studentMenu;
 }
-function importPreviewKeyboard(){return Markup.inlineKeyboard([[Markup.button.callback('✅ Подтвердить','studentimport:confirm')],[Markup.button.callback('❌ Отменить','studentimport:cancel')]]);}
+function importPreviewKeyboard(){
+ return Markup.inlineKeyboard(buildStudentImportPreviewKeyboard()
+  .map(row=>row.map(button=>Markup.button.callback(button.text,button.callbackData))));
+}
 
 // OCR временно отключён: импорт списка выполняется текстом.
 
