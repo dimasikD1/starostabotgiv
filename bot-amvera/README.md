@@ -73,3 +73,7 @@ The group-selection prompt keyboard is described in `domain/study-group-prompt-k
 ## Typed schedule group picker
 
 The schedule flow's invalid-or-missing-group keyboard is defined in `domain/schedule-group-keyboard.ts`. It keeps the configured group labels and the existing `studygroup:2` / `studygroup:1` callback values; Telegram markup construction remains in the JavaScript adapter.
+
+## Shared typed study-group choices
+
+The initial private-chat onboarding group picker now uses `domain/study-group-choice-keyboard.ts`. It keeps the configured group names and the existing callback identifiers, while Telegram-specific button construction stays in the JavaScript adapter.
