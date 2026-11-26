@@ -2,6 +2,7 @@ export {
   validateAndNormalizeFullName,
   applyStudyGroupSelection,
   shouldPromptStudyGroup,
+  getSavedStudyGroup,
   completeFullNameRegistration,
   parseStudyGroupSelection,
   resolveStudyGroupRegistration
