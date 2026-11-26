@@ -1,3 +1,5 @@
+import { paginateAttendanceStudents } from './attendance-core.js';
+
 export interface AttendanceKeyboardStudent { [key: string]: unknown; }
 export interface AttendanceKeyboardGroup {
   students?: readonly AttendanceKeyboardStudent[];
@@ -74,4 +76,15 @@ export function buildLessonAttendanceButtons(
   if (page < pageCount - 1) navigation.push({ text: '➡️', callbackData: 'attpairpage:' + (page + 1) });
   rows.push(navigation, [{ text: '↩️ К списку пар', callbackData: 'attpairback' }]);
   return rows;
+}
+
+/** Compose pagination and legacy per-lesson controls for one group/lesson. */
+export function buildLessonAttendancePageButtons(
+  students: readonly AttendanceKeyboardStudent[],
+  requestedPage: unknown,
+  attendance: Record<string, unknown>,
+  getStudentKey: (student: AttendanceKeyboardStudent) => unknown
+): AttendanceKeyboardRows {
+  const pageData = paginateAttendanceStudents(students, Number(requestedPage) || 0, 10);
+  return buildLessonAttendanceButtons(pageData, attendance, getStudentKey);
 }
