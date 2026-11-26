@@ -8,6 +8,7 @@ import { getSchedule } from './schedule/ruc-entry.mjs';
 import { selectLessonsForDate } from './schedule/lessons-for-date-entry.mjs';
 import { getTodayLessons as getTodayLessonsData } from './schedule/today-lessons-entry.mjs';
 import { ScheduleCache } from './schedule/cache-entry.mjs';
+import { getCachedSchedule as getCachedScheduleData, getImmediateSchedule } from './schedule/cache-access-entry.mjs';
 import { formatSchedule, nextWeekDateRange, nextMondayDateRange, currentMondayDateRange, buildWeeklyScheduleText } from './schedule/presentation-entry.mjs';
 import { buildScheduleView } from './schedule/schedule-view-entry.mjs';
 import { resolveScheduleGroupName, parseSetScheduleGroupArgument } from './schedule/schedule-view-entry.mjs';
@@ -343,13 +344,13 @@ const scheduleCache = new ScheduleCache({
  logger: console
 });
 
-async function getCachedSchedule(group, days = 7) {
- return scheduleCache.get(String(group), days);
+function getCachedSchedule(group, days = 7) {
+ return getCachedScheduleData(scheduleCache, group, days);
 }
 
 // Mini App получает кэш сразу; при холодном старте обновление идёт в фоне.
 function getMiniAppSchedule(group, days = 7) {
- return scheduleCache.getImmediate(String(group), days);
+ return getImmediateSchedule(scheduleCache, group, days);
 }
 
 async function getTodayLessons(g) {
