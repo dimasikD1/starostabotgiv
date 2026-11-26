@@ -18,6 +18,7 @@ import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, gro
 import { createAttendancePollRunner } from './schedule/attendance-jobs-entry.mjs';
 import { publishWeeklySchedule } from './schedule/weekly-publication-entry.mjs';
 import { publishStartupPost } from './domain/startup-post-entry.mjs';
+import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -2109,7 +2110,7 @@ bot.hears('📋 Посещаемость', async ctx => {
 });
 bot.command('donate', ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Пожертвование можно отправить в личных сообщениях с ботом.');
-  return ctx.reply('💛 <b>Поддержать Староста Бот</b>\n\nСейчас я собираю средства на новый хостинг, чтобы бот и мини-приложение продолжали стабильно работать.\n\nПожертвование полностью добровольное и не открывает платные функции — сейчас бот доступен бесплатно. Выбери сумму:', { parse_mode: 'HTML', ...donationKeyboard() });
+  return ctx.reply(buildDonationMessage(), { parse_mode: 'HTML', ...donationKeyboard() });
 });
 bot.hears('➕ Подключить бота к чату', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личные сообщения с ботом.');
