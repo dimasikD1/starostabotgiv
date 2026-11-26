@@ -35,6 +35,7 @@ import { buildDonationKeyboard } from './domain/donation-keyboard-entry.mjs';
 import { buildStudentMenuRows, buildManagerMenuRows } from './domain/main-menus-entry.mjs';
 import { buildStudyGroupPromptKeyboard } from './domain/study-group-prompt-keyboard-entry.mjs';
 import { buildScheduleGroupKeyboard } from './domain/schedule-group-keyboard-entry.mjs';
+import { buildStudyGroupChoiceKeyboard } from './domain/study-group-choice-keyboard-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -904,10 +905,8 @@ bot.start(async ctx => {
   if (isPrivate(ctx) && !u.group) {
     return ctx.reply(
       '👋 Привет! Твоя роль — 👨‍🎓 Студент. Теперь выбери свою учебную группу:',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
-        [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')]
-      ])
+      Markup.inlineKeyboard(buildStudyGroupChoiceKeyboard(STUDY_GROUPS['2'], STUDY_GROUPS['1'])
+        .map(row => row.map(button => Markup.button.callback(button.text, button.callbackData)))
     );
   }
   await ctx.reply(
