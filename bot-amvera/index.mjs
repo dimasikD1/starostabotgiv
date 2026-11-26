@@ -30,7 +30,7 @@ import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
 import { createAttendanceHtml as buildAttendanceHtml } from './domain/attendance-report-entry.mjs';
-import { findAttendancePollRecord, findLatestAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport } from './domain/attendance-polls-entry.mjs';
+import { findAttendancePollRecord, findLatestAttendancePollRecord, applyAttendancePollAnswer, buildAttendancePollReport, formatAttendancePollReportMessage } from './domain/attendance-polls-entry.mjs';
 import { parseHomeworkCommand, createHomeworkRecord, appendHomework, getHomeworkCompletionState, buildHomeworkCompletionStatistics, markHomeworkCompleted, latestHomework } from './domain/homework-entry.mjs';
 import { addTelegramStudent, addNamedStudent, removeStudentAt, updateStudentField, assignStudyGroupRole, clearStudyGroupRoles, setStudentRole, normalizeStudentUsername, normalizeStudentPhone, assignStudyGroupRoleByNumber, removeGroupRolesAndSetStudent, getStudentRosterPage, getStudentCard, replaceStudentRoster, parseStudentRemovalIndex, formatStudentRosterSummary, formatStudentCardText, parseStudentNameArgument, parseStudentContactInput, parseStudentRosterAction } from './domain/student-management-entry.mjs';
 import { addTelegramStudentAndSave, addNamedStudentAndSave, removeStudentAtAndSave, updateStudentContactAndSave, confirmStudentRosterImportAndSave, cancelStudentRosterImportAndSave } from './domain/student-roster-workflows-entry.mjs';
@@ -821,14 +821,7 @@ bot.command('pollreport', async ctx => {
   const latest = findLatestAttendancePollRecord(db.sentAttendancePolls || {}, g.chatId);
   if (!latest) return ctx.reply('Пока нет автоматических опросов посещаемости для «' + g.title + '».');
   const report = buildAttendancePollReport((g.students || []).length, latest);
-  return ctx.reply(
-    '📊 <b>Ответы на последний опрос</b>\n👥 ' + escapeHtml(g.title) +
-    '\n📚 ' + escapeHtml(report.subject) + '\n📅 ' + report.date + ' в ' + report.time +
-    '\n\n✅ Будут: <b>' + report.presentCount + '</b>\n❌ Не будут: <b>' + report.absentCount +
-    '</b>\n▫️ Не ответили: <b>' + report.unansweredCount +
-    '</b>\n\n' + (report.names.length ? report.names.map(escapeHtml).join('\n') : 'Ответов пока нет.'),
-    { parse_mode: 'HTML' }
-  );
+  return ctx.reply(formatAttendancePollReportMessage(g.title, report), { parse_mode: 'HTML' });
 });
 
 bot.on('callback_query', async (ctx, next) => {
