@@ -1622,9 +1622,7 @@ function institutionForStructureCommand(ctx, institutionId) {
   return { institution };
 }
 function structureParts(ctx, command) {
-  return String(ctx.message?.text || '')
-    .replace(new RegExp('^\\/' + command + '(?:@\\S+)?', 'i'), '')
-    .trim().split('|').map(value => value.trim());
+  return parseStructureCommandParts(ctx.message?.text, command);
 }
 function newStructureId(prefix) {
   return prefix + '_' + crypto.randomUUID().replace(/-/g, '').slice(0, 10);
