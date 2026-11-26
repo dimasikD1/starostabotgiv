@@ -33,6 +33,7 @@ import { buildStudentDestinationButtons } from './domain/student-destination-but
 import { buildStudentImportPreviewKeyboard } from './domain/student-import-preview-keyboard-entry.mjs';
 import { buildDonationKeyboard } from './domain/donation-keyboard-entry.mjs';
 import { buildStudentMenuRows, buildManagerMenuRows } from './domain/main-menus-entry.mjs';
+import { buildStudyGroupPromptKeyboard } from './domain/study-group-prompt-keyboard-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -188,11 +189,10 @@ async function registrationMiddleware(ctx, next) {
   })) {
     await ctx.reply(
       '👋 Выбери свою учебную группу, чтобы получать правильное расписание и домашние задания:',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
-        [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')],
-        [Markup.button.url('❓ Не знаю свою группу — написать', 'https://t.me/givenchytg')]
-      ])
+      Markup.inlineKeyboard(buildStudyGroupPromptKeyboard(STUDY_GROUPS['2'], STUDY_GROUPS['1'])
+        .map(row => row.map(button => button.url
+          ? Markup.button.url(button.text, button.url)
+          : Markup.button.callback(button.text, button.callbackData)))
     );
     return;
   }
