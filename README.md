@@ -299,3 +299,8 @@ Schedule cache reads used by the bot and Mini App now go through typed helpers t
 ### Homework destination buttons
 
 The homework-send destination selector now uses a typed builder for group-specific and broadcast callback button descriptors. The Telegram adapter only converts those descriptors into Telegraf buttons. Tests cover single/multiple groups and the 45-character title limit.
+
+
+### Poll destination buttons
+
+The poll-send destination selector now uses a typed builder for group-specific and broadcast callback button descriptors. The Telegram adapter converts descriptors into Telegraf buttons. Tests cover single/multiple groups and the 45-character title limit.
