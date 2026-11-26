@@ -304,3 +304,8 @@ The homework-send destination selector now uses a typed builder for group-specif
 ### Poll destination buttons
 
 The poll-send destination selector now uses a typed builder for group-specific and broadcast callback button descriptors. The Telegram adapter converts descriptors into Telegraf buttons. Tests cover single/multiple groups and the 45-character title limit.
+
+
+### Typed attendance date helper
+
+The attendance date adapter now delegates to `utils/attendance-date.ts`, which formats the current instant in the configured institutional time zone. A boundary test covers the same UTC instant falling on different local calendar dates in Moscow and Los Angeles. The helper is integrated in `index.mjs`; CI/local execution and Telegram/Amvera runtime behavior have not been verified in this step.
