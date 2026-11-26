@@ -27,6 +27,7 @@ import { buildHomeworkMessage } from './domain/homework-message-entry.mjs';
 import { buildHomeworkDestinationButtons } from './domain/homework-destination-buttons-entry.mjs';
 import { buildPollDestinationButtons } from './domain/poll-destination-buttons-entry.mjs';
 import { parsePollCommandInput } from './domain/poll-command-input-entry.mjs';
+import { buildStudentRosterKeyboard, buildStudentCardKeyboard } from './domain/student-roster-keyboards-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -1245,25 +1246,15 @@ bot.on('text', async (ctx,next) => {
 });
 
 function studentListKeyboard(g,page=0){
- const rosterPage=getStudentRosterPage(g,page,10);
- const pages=rosterPage.pages;
- const rows=rosterPage.items.map(({index,name})=>{
-  return [Markup.button.callback('👤 '+(index+1)+'. '+name.slice(0,42),'studentcard:'+index)];
- });
- const nav=[];
- if(page>0)nav.push(Markup.button.callback('⬅️','studentpage:'+(page-1)));
- nav.push(Markup.button.callback((page+1)+'/'+pages,'studentpage:'+page));
- if(page<pages-1)nav.push(Markup.button.callback('➡️','studentpage:'+(page+1)));
- rows.push(nav);
+ const rows=buildStudentRosterKeyboard(g,page,getStudentRosterPage)
+  .map(row=>row.map(button=>Markup.button.callback(button.text,button.callbackData)));
  return Markup.inlineKeyboard(rows);
 }
 function studentCardText(g,i){ return formatStudentCardText(getStudentCard(g,i)); }
 function studentCardKeyboard(i){
- return Markup.inlineKeyboard([
-  [Markup.button.callback('✏️ Изменить username','studentedit:username:'+i)],
-  [Markup.button.callback('📞 Изменить телефон','studentedit:phone:'+i)],
-  [Markup.button.callback('⬅️ К списку','studentback')]
- ]);
+ const rows=buildStudentCardKeyboard(i)
+  .map(row=>row.map(button=>Markup.button.callback(button.text,button.callbackData)));
+ return Markup.inlineKeyboard(rows);
 }
 function formatStudentList(g) {
  return formatStudentRosterSummary(String(g.title || ''), (g.students || []).length);
