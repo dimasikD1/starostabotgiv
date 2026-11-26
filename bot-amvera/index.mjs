@@ -24,6 +24,7 @@ import { publishStartupPost } from './domain/startup-post-entry.mjs';
 import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { buildHelpMessage } from './domain/help-message-entry.mjs';
 import { buildHomeworkMessage } from './domain/homework-message-entry.mjs';
+import { buildHomeworkDestinationButtons } from './domain/homework-destination-buttons-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -631,12 +632,9 @@ function groupButtons(userId) {
 }
 
 function homeworkButtons(userId) {
-  const groups = managedChats(userId);
-  const buttons = groups.map(g => [
-    Markup.button.callback('📚 ' + String(g.title).slice(0, 45), 'hwsend:' + String(g.chatId))
-  ]);
-  if (groups.length > 1) buttons.push([Markup.button.callback('📚 Во все группы', 'hwsend:all')]);
-  return buttons;
+  return buildHomeworkDestinationButtons(managedChats(userId)).map(row =>
+    row.map(button => Markup.button.callback(button.text, button.callbackData))
+  );
 }
 
 async function startHomework(ctx) {
