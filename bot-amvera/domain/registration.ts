@@ -48,6 +48,9 @@ export function getSavedStudyGroup(
     if (!saved) continue;
     const match = Object.values(groups).find(name => name === saved);
     if (match) return match;
+    // Older records may store the configured group key (for example, "1") instead of its name.
+    const keyedMatch = groups[saved];
+    if (keyedMatch) return keyedMatch;
   }
   return undefined;
 }
