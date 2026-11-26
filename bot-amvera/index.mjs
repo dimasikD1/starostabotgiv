@@ -162,7 +162,10 @@ async function registrationMiddleware(ctx, next) {
   const savedGroup = [
     u.group, u.studyGroup, u.study_group, u.groupName, u.studyGroupName
   ].map(value => String(value ?? '').trim()).find(Boolean);
-  if (!u.group && savedGroup) u.group = savedGroup;
+  if (!u.group && savedGroup) {
+    u.group = savedGroup;
+    saveDb();
+  }
   const hasSavedGroup = Boolean(savedGroup || String(u.groupChatId || '').trim());
   // Капча отключена. Пользователь определяется по Telegram ID, username не требуется.
   if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !hasSavedGroup && !String(ctx.message?.text || '').startsWith('/')) {
