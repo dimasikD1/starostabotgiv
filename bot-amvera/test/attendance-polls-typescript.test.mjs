@@ -162,6 +162,8 @@ test('latest poll selection compares date and time using the legacy concatenated
 });
 
 
+const escapeHtml = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 test('formats poll report with legacy labels and escapes Telegram HTML text', () => {
   const report = {
     subject: 'Алгебра <1>',
@@ -173,11 +175,11 @@ test('formats poll report with legacy labels and escapes Telegram HTML text', ()
     names: ['Анна & Олег — ✅ Будет', 'Студент']
   };
   assert.equal(
-    formatAttendancePollReportMessage('Группа <А>', report),
+    formatAttendancePollReportMessage('Группа <А>', report, escapeHtml),
     '📊 <b>Ответы на последний опрос</b>\\n👥 Группа &lt;А&gt;\\n📚 Алгебра &lt;1&gt;\\n📅 2026-11-23 в 09:00\\n\\n✅ Будут: <b>1</b>\\n❌ Не будут: <b>0</b>\\n▫️ Не ответили: <b>2</b>\\n\\nАнна &amp; Олег — ✅ Будет\\nСтудент'
   );
   assert.equal(
-    formatAttendancePollReportMessage('Группа', { ...report, names: [] }).endsWith('Ответов пока нет.'),
+    formatAttendancePollReportMessage('Группа', { ...report, names: [] }, escapeHtml).endsWith('Ответов пока нет.'),
     true
   );
 });
