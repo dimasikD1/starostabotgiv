@@ -289,3 +289,8 @@ The Mini App's 25-second schedule-source timeout now uses `api/with-timeout.ts`.
 ### Shared lesson selection in Mini App data
 
 The `/api/data` route now reuses the typed `selectLessonsForDate` helper for its today-lessons list instead of duplicating date filtering and time sorting inline. This keeps the Mini App and attendance flow on the same selection rules; existing schedule-selector tests cover the shared behavior.
+
+
+### Typed schedule cache access
+
+Schedule cache reads used by the bot and Mini App now go through typed helpers that normalize group identifiers and share the seven-day default horizon. The helper tests cover default and explicit horizons, plus the Mini App's immediate cache snapshot behavior.
