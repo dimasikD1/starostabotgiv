@@ -1,4 +1,5 @@
 import { attendanceKey } from './user-profile.js';
+import { escapeHtml } from '../utils/html.js';
 
 export interface TelegramPollAnswer {
   poll_id?: string;
@@ -183,4 +184,17 @@ export function findLatestAttendancePollRecord(
       const bStamp = String(b.date ?? '') + String(b.time ?? '');
       return bStamp.localeCompare(aStamp);
     })[0];
+}
+
+
+/** Render the legacy Telegram /pollreport message, escaping all user-controlled text. */
+export function formatAttendancePollReportMessage(
+  groupTitle: unknown,
+  report: AttendancePollReport
+): string {
+  return '📊 <b>Ответы на последний опрос</b>\\n👥 ' + escapeHtml(groupTitle) +
+    '\\n📚 ' + escapeHtml(report.subject) + '\\n📅 ' + report.date + ' в ' + report.time +
+    '\\n\\n✅ Будут: <b>' + report.presentCount + '</b>\\n❌ Не будут: <b>' + report.absentCount +
+    '</b>\\n▫️ Не ответили: <b>' + report.unansweredCount +
+    '</b>\\n\\n' + (report.names.length ? report.names.map(escapeHtml).join('\\n') : 'Ответов пока нет.');
 }
