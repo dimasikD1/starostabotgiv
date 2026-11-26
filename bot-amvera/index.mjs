@@ -157,8 +157,15 @@ async function registrationMiddleware(ctx, next) {
   if (!ctx.from) return next();
   if (isOwner(ctx.from.id)) return next();
   const u = normalizeUser(user(ctx.from.id));
+  // Старые профили могли хранить выбор в альтернативном поле или только в привязке к чату.
+  // Не спрашиваем группу повторно, если выбор уже сохранён в любом из этих полей.
+  const savedGroup = [
+    u.group, u.studyGroup, u.study_group, u.groupName, u.studyGroupName
+  ].map(value => String(value ?? '').trim()).find(Boolean);
+  if (!u.group && savedGroup) u.group = savedGroup;
+  const hasSavedGroup = Boolean(savedGroup || String(u.groupChatId || '').trim());
   // Капча отключена. Пользователь определяется по Telegram ID, username не требуется.
-  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !u.group && !String(ctx.message?.text || '').startsWith('/')) {
+  if (ctx.updateType === 'message' && ctx.chat && ['group', 'supergroup'].includes(ctx.chat.type) && !hasSavedGroup && !String(ctx.message?.text || '').startsWith('/')) {
     await ctx.reply(
       '👋 Выбери свою учебную группу, чтобы получать правильное расписание и домашние задания:',
       Markup.inlineKeyboard([
