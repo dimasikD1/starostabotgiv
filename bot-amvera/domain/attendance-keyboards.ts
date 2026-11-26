@@ -44,3 +44,34 @@ export function buildAttendanceStatusButtons(index: number): AttendanceKeyboardR
     [{ text: '⬅️ К списку', callbackData: 'attback' }]
   ];
 }
+
+
+export interface LessonAttendancePageData {
+  items: readonly AttendanceKeyboardStudent[];
+  page: number;
+  pageCount: number;
+  startIndex: number;
+}
+
+/** Builds the legacy per-lesson attendance controls, preserving callback payloads. */
+export function buildLessonAttendanceButtons(
+  pageData: LessonAttendancePageData,
+  attendance: Record<string, unknown>,
+  getStudentKey: (student: AttendanceKeyboardStudent) => unknown
+): AttendanceKeyboardRows {
+  const { items, page, pageCount, startIndex } = pageData;
+  const rows = items.map((student, offset) => {
+    const index = startIndex + offset;
+    const status = attendance[String(getStudentKey(student))];
+    return [
+      { text: (status === 'present' ? '✅ Был' : '▫️ Был') + ' ' + (index + 1), callbackData: 'attpairmark:' + index + ':present' },
+      { text: (status === 'absent' ? '❌ Нет' : '▫️ Нет') + ' ' + (index + 1), callbackData: 'attpairmark:' + index + ':absent' }
+    ];
+  });
+  const navigation: AttendanceKeyboardButton[] = [];
+  if (page > 0) navigation.push({ text: '⬅️', callbackData: 'attpairpage:' + (page - 1) });
+  navigation.push({ text: (page + 1) + '/' + pageCount, callbackData: 'attpairpage:' + page });
+  if (page < pageCount - 1) navigation.push({ text: '➡️', callbackData: 'attpairpage:' + (page + 1) });
+  rows.push(navigation, [{ text: '↩️ К списку пар', callbackData: 'attpairback' }]);
+  return rows;
+}
