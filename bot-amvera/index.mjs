@@ -20,6 +20,7 @@ import { publishWeeklySchedule } from './schedule/weekly-publication-entry.mjs';
 import { publishStartupPost } from './domain/startup-post-entry.mjs';
 import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { buildHelpMessage } from './domain/help-message-entry.mjs';
+import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -129,7 +130,7 @@ const BOT_RELEASE_NOTES = [
 const WEBAPP_URL = (process.env.WEBAPP_URL || '').trim();
 
 function isOwner(userId) {
-  return OWNER_TELEGRAM_IDS.includes(String(userId));
+  return isOwnerId(userId, OWNER_TELEGRAM_IDS);
 }
 
 function isInstitutionAdmin(userId, institutionId) {
