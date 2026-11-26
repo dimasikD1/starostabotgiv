@@ -47,7 +47,7 @@ test('per-lesson attendance keyboard preserves callbacks, statuses, and page nav
 test('composed lesson attendance pagination preserves clamping and status controls', () => {
   const students = Array.from({ length: 12 }, (_, id) => ({ id }));
   const rows = buildLessonAttendancePageButtons(students, 99, { 10: 'present', 11: 'absent' }, student => student.id);
-  assert.equal(rows.length, 3);
+  assert.equal(rows.length, 4);
   assert.deepEqual(rows[0], [
     { text: '✅ Был 11', callbackData: 'attpairmark:10:present' },
     { text: '▫️ Нет 11', callbackData: 'attpairmark:10:absent' }
@@ -58,7 +58,7 @@ test('composed lesson attendance pagination preserves clamping and status contro
   ]);
   assert.deepEqual(rows[2], [
     { text: '⬅️', callbackData: 'attpairpage:0' },
-    { text: '2/2', callbackData: 'attpairpage:1' },
-    { text: '↩️ К списку пар', callbackData: 'attpairback' }
+    { text: '2/2', callbackData: 'attpairpage:1' }
   ]);
+  assert.deepEqual(rows[3], [{ text: '↩️ К списку пар', callbackData: 'attpairback' }]);
 });
