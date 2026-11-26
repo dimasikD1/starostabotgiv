@@ -19,6 +19,7 @@ import { createAttendancePollRunner } from './schedule/attendance-jobs-entry.mjs
 import { publishWeeklySchedule } from './schedule/weekly-publication-entry.mjs';
 import { publishStartupPost } from './domain/startup-post-entry.mjs';
 import { buildDonationMessage } from './domain/donation-message-entry.mjs';
+import { buildHelpMessage } from './domain/help-message-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -2184,18 +2185,7 @@ bot.hears('💛 Поддержать хостинг', ctx => {
 
 function helpMessage(ctx) {
   return ctx.reply(
-    '🤖 <b>Что умеет Староста Бот</b>\n\n' +
-    '📅 <b>Расписание</b> — пары на сегодня, завтра и всю неделю.\n' +
-    '👥 <b>Моя группа</b> — посмотреть выбранную учебную группу.\n' +
-    '📚 <b>Домашние задания</b> — смотреть задания и отмечать выполнение.\n\n' +
-    (canManageAttendance(user(ctx.from.id), ctx.from.id)
-      ? '⭐ <b>Возможности старосты</b>\n' +
-        '• список студентов и управление им;\n' +
-        '• посещаемость по отдельным парам и отчёты;\n' +
-        '• создание опросов и домашних заданий;\n' +
-        '• объявления и важная информация в Mini App.\n\n'
-      : '📱 <b>Mini App</b> — удобный кабинет с расписанием и объявлениями.\n\n') +
-    'Выбирай нужный раздел кнопками внизу. Если бот только что добавили в группу, сначала подтверди ФИО и выбери свою учебную группу.',
+    buildHelpMessage(canManageAttendance(user(ctx.from.id), ctx.from.id)),
     { parse_mode: 'HTML', ...menuFor(ctx) }
   );
 }
