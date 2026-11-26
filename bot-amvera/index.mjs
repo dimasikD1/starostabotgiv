@@ -29,6 +29,7 @@ import { buildPollDestinationButtons } from './domain/poll-destination-buttons-e
 import { parsePollCommandInput } from './domain/poll-command-input-entry.mjs';
 import { buildDailyAttendanceKeyboard, buildAttendanceStatusKeyboard as buildAttendanceStatusRows, buildAttendanceLessonPicker, buildPerLessonAttendanceKeyboard } from './domain/attendance-keyboard-adapter-entry.mjs';
 import { buildStudentRosterKeyboard, buildStudentCardKeyboard } from './domain/student-roster-keyboards-entry.mjs';
+import { buildStudentDestinationButtons } from './domain/student-destination-buttons-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -622,7 +623,9 @@ function attendanceStatusButtons(index) {
 
 function studentButtons(userId) {
   const groups = managedChats(userId);
-  return groups.map(g => [Markup.button.callback('👨‍🎓 ' + String(g.title).slice(0, 45), 'students:' + String(g.chatId))]);
+  return buildStudentDestinationButtons(groups).map(row =>
+    row.map(button => Markup.button.callback(button.text, button.callbackData))
+  );
 }
 
 function groupButtons(userId) {
