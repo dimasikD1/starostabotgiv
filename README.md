@@ -284,3 +284,8 @@ The `schedule/today-lessons.ts` module now owns the existing `/setgroup` validat
 ### Typed timeout for Mini App schedule requests
 
 The Mini App's 25-second schedule-source timeout now uses `api/with-timeout.ts`. The helper preserves the existing timeout message and clears its timer when either the source resolves or rejects; tests cover success, timeout, and source errors. This is a refactor of the existing timeout behavior, not a change to the request limit or fallback data handling.
+
+
+### Shared lesson selection in Mini App data
+
+The `/api/data` route now reuses the typed `selectLessonsForDate` helper for its today-lessons list instead of duplicating date filtering and time sorting inline. This keeps the Mini App and attendance flow on the same selection rules; existing schedule-selector tests cover the shared behavior.
