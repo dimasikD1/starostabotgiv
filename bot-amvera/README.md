@@ -57,3 +57,7 @@ The group-selection buttons used to open student rosters are defined in `domain/
 ## Typed student import review keyboard
 
 The text roster import review controls are described in `domain/student-import-preview-keyboard.ts`; the Telegraf-specific conversion remains in the JavaScript runtime bridge. The test locks the existing confirm/cancel callback values.
+
+## Typed donation keyboard
+
+Donation amount buttons are described in `domain/donation-keyboard.ts`; the runtime bridge maps those descriptors to Telegraf buttons. Tests preserve the four Stars amounts and their existing `donate:<amount>` callback identifiers. This does not add or restore subscription UI.
