@@ -34,6 +34,7 @@ import { buildStudentImportPreviewKeyboard } from './domain/student-import-previ
 import { buildDonationKeyboard } from './domain/donation-keyboard-entry.mjs';
 import { buildStudentMenuRows, buildManagerMenuRows } from './domain/main-menus-entry.mjs';
 import { buildStudyGroupPromptKeyboard } from './domain/study-group-prompt-keyboard-entry.mjs';
+import { buildScheduleGroupKeyboard } from './domain/schedule-group-keyboard-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -425,10 +426,8 @@ async function show(ctx, days, offset, range) {
   if (!view.ok) {
     return ctx.reply(
       'Выбери корректную учебную группу, чтобы загрузить расписание:',
-      Markup.inlineKeyboard([
-        [Markup.button.callback(STUDY_GROUPS['2'], 'studygroup:2')],
-        [Markup.button.callback(STUDY_GROUPS['1'], 'studygroup:1')]
-      ])
+      Markup.inlineKeyboard(buildScheduleGroupKeyboard(STUDY_GROUPS['2'], STUDY_GROUPS['1'])
+        .map(row => row.map(button => Markup.button.callback(button.text, button.callbackData)))
     );
   }
   await ctx.reply('⏳ Загружаю расписание для «' + view.group + '»…');
