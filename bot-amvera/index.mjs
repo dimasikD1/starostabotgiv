@@ -16,6 +16,7 @@ import { decideAttachCommand, decideDetachCommand } from './domain/group-attachm
 import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot } from './schedule/changes-entry.mjs';
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { createAttendancePollRunner } from './schedule/attendance-jobs-entry.mjs';
+import { publishWeeklySchedule } from './schedule/weekly-publication-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -2050,41 +2051,31 @@ bot.command('publishweek', async ctx => {
   }
 
   await ctx.reply('⏳ Загружаю расписание обеих учебных групп на ' + range.start + ' — ' + range.end + '…');
-  let sent = 0;
-  let pinned = 0;
-  const details = [];
-  let built;
-  try {
-    built = await buildWeeklyScheduleText({
+  const result = await publishWeeklySchedule({
+    groups: targetGroups,
+    range,
+    buildText: () => buildWeeklyScheduleText({
       groups: Object.values(STUDY_GROUPS),
       range,
       loadSchedule: getSchedule,
       logger: console
-    });
-  } catch (error) {
-    console.error('[publishweek] schedule build failed:', error?.message || error);
+    }),
+    sendMessage: async (chatId, text) => {
+      const message = await ctx.telegram.sendMessage(chatId, text);
+      return { messageId: message.message_id };
+    },
+    pinMessage: async (chatId, messageId) => {
+      await ctx.telegram.pinChatMessage(chatId, messageId, { disable_notification: true });
+    },
+    logError: (label, error) => console.error(label, error instanceof Error ? error.message : error)
+  });
+  if (result.error === 'build-failed') {
     return ctx.reply('❌ Не удалось получить расписание учебных групп. Подробности есть в логах Amvera.');
   }
-  const safeMessage = built.text.length > 3900 ? built.text.slice(0, 3850) + '\n\n… расписание сокращено.' : built.text;
-
-  for (const g of targetGroups) {
-    try {
-      const sentMessage = await ctx.telegram.sendMessage(g.chatId, safeMessage);
-      sent++;
-      try {
-        await ctx.telegram.pinChatMessage(g.chatId, sentMessage.message_id, { disable_notification: true });
-        pinned++;
-        details.push('✅ ' + (g.title || g.chatId) + ' — отправлено и закреплено');
-      } catch (pinError) {
-        console.error('[publishweek] pin failed for ' + (g.title || g.chatId) + ':', pinError?.message || pinError);
-        details.push('⚠️ ' + (g.title || g.chatId) + ' — отправлено, но не удалось закрепить (проверь права бота)');
-      }
-    } catch (error) {
-      console.error('[publishweek] failed for ' + (g.title || g.chatId) + ':', error?.message || error);
-      details.push('❌ ' + (g.title || g.chatId) + ' — ошибка отправки');
-    }
+  if (result.error === 'no-targets') {
+    return ctx.reply('❌ Не нашёл ни одного прикреплённого Telegram-чата. Добавь бота в нужную группу и настрой её через /setgroup.');
   }
-  return ctx.reply('📊 Публикация расписания обеих учебных групп завершена.\nОтправлено: ' + sent + '\nЗакреплено: ' + pinned + '\n\n' + details.join('\n'));
+  return ctx.reply('📊 Публикация расписания обеих учебных групп завершена.\nОтправлено: ' + result.sent + '\nЗакреплено: ' + result.pinned + '\n\n' + result.details.join('\n'));
 });
 // /menu принудительно обновляет устаревшую клавиатуру Telegram в чате.
 bot.command('menu', ctx => ctx.reply('⌨️ Меню обновлено.', menuFor(ctx)));
