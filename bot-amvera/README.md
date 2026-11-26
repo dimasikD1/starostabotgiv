@@ -45,3 +45,7 @@ npm test
 ## Typed student roster keyboards
 
 The student roster and student-card callback keyboard layouts are defined in `domain/student-roster-keyboards.ts`. The Mini App/bot runtime bridge converts the typed button descriptors to Telegraf markup, while the tests cover pagination, navigation bounds, name truncation, and callback payloads.
+
+## Typed attendance keyboard composition
+
+The daily attendance, individual status, lesson picker, and per-lesson attendance keyboards are composed by `domain/attendance-keyboard-adapter.ts`. It reuses the typed domain button builders and keeps Telegraf markup conversion in the runtime entry point. Tests cover legacy callback payloads, status labels, and per-lesson navigation.
