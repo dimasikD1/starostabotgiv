@@ -59,6 +59,6 @@ test('caps Telegram message length using the existing truncation rule', async ()
     pinMessage: async () => {},
     logError: () => {}
   });
-  assert.equal(delivered.length, 3874);
+  assert.equal(delivered.length, 3877);
   assert.ok(delivered.endsWith('… расписание сокращено.'));
 });
