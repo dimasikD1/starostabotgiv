@@ -4,6 +4,7 @@ import {
   validateAndNormalizeFullName,
   applyStudyGroupSelection,
   shouldPromptStudyGroup,
+  getSavedStudyGroup,
   completeFullNameRegistration,
   parseStudyGroupSelection
 } from '../domain/.build/registration.js';
@@ -33,6 +34,16 @@ test('prompts only unregistered non-owner users in group chats on non-command me
   assert.equal(shouldPromptStudyGroup({ ...base, chatType: 'private' }), false);
   assert.equal(shouldPromptStudyGroup({ ...base, hasGroup: true }), false);
   assert.equal(shouldPromptStudyGroup({ ...base, messageText: '/start' }), false);
+});
+
+test('recognizes saved study-group choices in legacy profile fields', () => {
+  const groups = { '1': 'БИ(ЭБ)1-ОЗ/Бп/КД26', '2': 'БИ(ЭБ)2-ОЗ/Бп/КД26' };
+  assert.equal(getSavedStudyGroup({ group: groups['2'] }, groups), groups['2']);
+  assert.equal(getSavedStudyGroup({ studyGroup: groups['1'] }, groups), groups['1']);
+  assert.equal(getSavedStudyGroup({ study_group: groups['2'] }, groups), groups['2']);
+  assert.equal(getSavedStudyGroup({ groupName: groups['1'] }, groups), groups['1']);
+  assert.equal(getSavedStudyGroup({ group: 'unknown' }, groups), undefined);
+  assert.equal(getSavedStudyGroup({}, groups), undefined);
 });
 
 test('completes full-name registration only after valid input', () => {
