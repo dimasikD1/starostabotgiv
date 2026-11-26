@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAttendancePollAnswer, findAttendancePollRecord, findLatestAttendancePollRecord, buildAttendancePollKey, isAttendancePollDue } from '../../.test-build/domain-user/attendance-polls.js';
+import { applyAttendancePollAnswer, findAttendancePollRecord, findLatestAttendancePollRecord, buildAttendancePollKey, isAttendancePollDue, formatAttendancePollReportMessage } from '../../.test-build/domain-user/attendance-polls.js';
 
 test('finds a saved attendance poll by Telegram poll ID', () => {
   const records = {
@@ -159,4 +159,25 @@ test('latest poll selection compares date and time using the legacy concatenated
   const morning = { groupId: 10, date: '2026-11-23', time: '09:00' };
   const evening = { groupId: '10', date: '2026-11-23', time: '18:00' };
   assert.equal(findLatestAttendancePollRecord({ morning, evening }, 10), evening);
+});
+
+
+test('formats poll report with legacy labels and escapes Telegram HTML text', () => {
+  const report = {
+    subject: 'Алгебра <1>',
+    date: '2026-11-23',
+    time: '09:00',
+    presentCount: 1,
+    absentCount: 0,
+    unansweredCount: 2,
+    names: ['Анна & Олег — ✅ Будет', 'Студент']
+  };
+  assert.equal(
+    formatAttendancePollReportMessage('Группа <А>', report),
+    '📊 <b>Ответы на последний опрос</b>\\n👥 Группа &lt;А&gt;\\n📚 Алгебра &lt;1&gt;\\n📅 2026-11-23 в 09:00\\n\\n✅ Будут: <b>1</b>\\n❌ Не будут: <b>0</b>\\n▫️ Не ответили: <b>2</b>\\n\\nАнна &amp; Олег — ✅ Будет\\nСтудент'
+  );
+  assert.equal(
+    formatAttendancePollReportMessage('Группа', { ...report, names: [] }).endsWith('Ответов пока нет.'),
+    true
+  );
 });
