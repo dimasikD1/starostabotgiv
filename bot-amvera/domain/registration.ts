@@ -37,6 +37,21 @@ export function applyStudyGroupSelection<T extends Record<string, unknown>>(
   return next;
 }
 
+/** Read a saved study-group choice from current and legacy profile fields. */
+export function getSavedStudyGroup(
+  user: Record<string, unknown>,
+  groups: Record<string, string>
+): string | undefined {
+  const values = [user.group, user.studyGroup, user.study_group, user.groupName, user.studyGroupName];
+  for (const value of values) {
+    const saved = String(value ?? '').trim();
+    if (!saved) continue;
+    const match = Object.values(groups).find(name => name === saved);
+    if (match) return match;
+  }
+  return undefined;
+}
+
 export function shouldPromptStudyGroup(input: {
   isOwner: boolean;
   updateType: string;
