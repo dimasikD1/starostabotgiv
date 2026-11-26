@@ -53,3 +53,7 @@ The daily attendance, individual status, lesson picker, and per-lesson attendanc
 ## Typed student roster destinations
 
 The group-selection buttons used to open student rosters are defined in `domain/student-destination-buttons.ts`. The runtime bridge converts typed descriptors into Telegraf buttons. Tests verify one destination per managed group, the title length limit, and the empty-group case.
+
+## Typed student import review keyboard
+
+The text roster import review controls are described in `domain/student-import-preview-keyboard.ts`; the Telegraf-specific conversion remains in the JavaScript runtime bridge. The test locks the existing confirm/cancel callback values.
