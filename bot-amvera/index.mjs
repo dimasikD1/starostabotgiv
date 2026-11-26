@@ -2306,7 +2306,7 @@ async function handleMiniAppApi(req,res,url) {
     );
     const { items: scheduleItems, error: scheduleError, loading: scheduleLoading } = scheduleState;
     const today=attendanceDate();
-    const lessons=scheduleItems.filter(x=>x.date===today&&x.subject).sort((a,b)=>String(a.timeStart||'').localeCompare(String(b.timeStart||'')));
+    const lessons=selectLessonsForDate(scheduleItems, today);
     const students=g.students||[];
     const miniAppData=buildMiniAppGroupData({
       scheduleItems,students,lessonAttendance:g.lessonAttendance||{},today,
