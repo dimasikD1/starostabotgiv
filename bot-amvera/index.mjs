@@ -25,6 +25,7 @@ import { buildDonationMessage } from './domain/donation-message-entry.mjs';
 import { buildHelpMessage } from './domain/help-message-entry.mjs';
 import { buildHomeworkMessage } from './domain/homework-message-entry.mjs';
 import { buildHomeworkDestinationButtons } from './domain/homework-destination-buttons-entry.mjs';
+import { buildPollDestinationButtons } from './domain/poll-destination-buttons-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -623,12 +624,9 @@ function studentButtons(userId) {
 }
 
 function groupButtons(userId) {
-  const groups = managedChats(userId);
-  const buttons = groups.map(g => [
-    Markup.button.callback('📢 ' + String(g.title).slice(0, 45), 'pollsend:' + String(g.chatId))
-  ]);
-  if (groups.length > 1) buttons.push([Markup.button.callback('📢 Во все группы', 'pollsend:all')]);
-  return buttons;
+  return buildPollDestinationButtons(managedChats(userId)).map(row =>
+    row.map(button => Markup.button.callback(button.text, button.callbackData))
+  );
 }
 
 function homeworkButtons(userId) {
