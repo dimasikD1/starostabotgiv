@@ -27,6 +27,7 @@ import { buildHomeworkMessage } from './domain/homework-message-entry.mjs';
 import { buildHomeworkDestinationButtons } from './domain/homework-destination-buttons-entry.mjs';
 import { buildPollDestinationButtons } from './domain/poll-destination-buttons-entry.mjs';
 import { parsePollCommandInput } from './domain/poll-command-input-entry.mjs';
+import { buildDailyAttendanceKeyboard, buildAttendanceStatusKeyboard as buildAttendanceStatusRows, buildAttendanceLessonPicker, buildPerLessonAttendanceKeyboard } from './domain/attendance-keyboard-adapter-entry.mjs';
 import { buildStudentRosterKeyboard, buildStudentCardKeyboard } from './domain/student-roster-keyboards-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
@@ -41,8 +42,6 @@ import { isTelegramGroupAdmin } from './domain/telegram-admin-access-entry.mjs';
 
 import { buildOpenChatPermissions, buildVerifiedMemberChatPermissions } from './domain/chat-permissions-entry.mjs';
 import { canRegisterTelegramChat } from './domain/chat-registration-access-entry.mjs';
-import { buildAttendanceLessonChoices } from './domain/attendance-lesson-choices-entry.mjs';
-import { buildAttendanceButtons as buildAttendanceKeyboard, buildAttendanceStatusButtons as buildAttendanceStatusKeyboard, buildLessonAttendancePageButtons } from './domain/attendance-keyboards-entry.mjs';
 import { buildAttendanceLessonKey, classifyAttendance, setLessonAttendanceStatus, getAttendanceLessonAt, buildMiniAppAttendanceLessons, parseManualAttendanceMarkInput } from './domain/attendance-core-entry.mjs';
 import { buildMiniAppGroupData } from './domain/miniapp-data-entry.mjs';
 import { formatDailyAttendance, formatSingleLessonAttendance } from './domain/attendance-presentation-entry.mjs';
@@ -398,7 +397,7 @@ function formatAttendance(g) {
  });
 }
 function attendanceLessonsKeyboard(lessons) {
- const rows=buildAttendanceLessonChoices(lessons).map(row =>
+ const rows=buildAttendanceLessonPicker(lessons).map(row =>
   row.map(button => Markup.button.callback(button.text, button.callbackData))
  );
  return Markup.inlineKeyboard(rows);
@@ -414,8 +413,8 @@ function formatLessonAttendance(g,lesson) {
 function attendancePairButtons(g,lesson,userId,page=0) {
  const students=g.students||[];
  const record=g.lessonAttendance?.[attendanceLessonKey(lesson)]||{};
- const rows=buildLessonAttendancePageButtons(students,page,record,attendanceKey).map(row=>
-  row.map(button=>Markup.button.callback(button.text,button.callbackData))
+ const rows=buildPerLessonAttendanceKeyboard(students,page,record,attendanceKey).map(row=>
+  row.map(button => Markup.button.callback(button.text,button.callbackData))
  );
  return Markup.inlineKeyboard(rows);
 }
@@ -611,12 +610,12 @@ function removeGroup(ctx) {
 
 
 function attendanceButtons(g,page=0){
- const rows=buildAttendanceKeyboard(g,page,attendanceDate(),attendanceKey)
+ const rows=buildDailyAttendanceKeyboard(g,page,attendanceDate(),attendanceKey)
   .map(row=>row.map(button=>Markup.button.callback(button.text,button.callbackData)));
  return Markup.inlineKeyboard(rows);
 }
 function attendanceStatusButtons(index) {
-  const rows=buildAttendanceStatusKeyboard(index)
+  const rows=buildAttendanceStatusRows(index)
     .map(row=>row.map(button=>Markup.button.callback(button.text,button.callbackData)));
   return Markup.inlineKeyboard(rows);
 }
