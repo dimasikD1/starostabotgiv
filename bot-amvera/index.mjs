@@ -71,7 +71,7 @@ import { validateHomeworkMediaUpload } from './api/homework-media-validation-ent
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
 import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions } from './domain/announcements-entry.mjs';
-import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, completeFullNameRegistration, parseStudyGroupSelection, resolveStudyGroupRegistration } from './domain/registration-entry.mjs';
+import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, getSavedStudyGroup, completeFullNameRegistration, parseStudyGroupSelection, resolveStudyGroupRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
 import { parseStudyGroupNumber } from './domain/role-command-input-entry.mjs';
@@ -157,12 +157,18 @@ async function registrationMiddleware(ctx, next) {
   if (!ctx.from) return next();
   if (isOwner(ctx.from.id)) return next();
   const u = normalizeUser(user(ctx.from.id));
+  // Поддерживаем старые профили, где выбор группы мог сохраниться в альтернативном поле.
+  const savedStudyGroup = getSavedStudyGroup(u, STUDY_GROUPS);
+  if (savedStudyGroup && u.group !== savedStudyGroup) {
+    u.group = savedStudyGroup;
+    saveDb();
+  }
   // Капча отключена. Пользователь определяется по Telegram ID, username не требуется.
   if (shouldPromptStudyGroup({
     isOwner: false,
     updateType: ctx.updateType,
     chatType: ctx.chat?.type,
-    hasGroup: Boolean(u.group),
+    hasGroup: Boolean(savedStudyGroup || String(u.group || '').trim()),
     messageText: ctx.message?.text
   })) {
     await ctx.reply(
