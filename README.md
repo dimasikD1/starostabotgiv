@@ -279,3 +279,8 @@ Middleware регистрации теперь распознаёт выбран
 ### Typed workflow for today's schedule
 
 The `schedule/today-lessons.ts` module now owns the existing `/setgroup` validation, seven-day cache request, and date filtering/sorting for today's lessons. `index.mjs` delegates to this workflow while retaining the existing cache and timezone providers. TypeScript tests cover missing schedule-group configuration, the seven-day request, date filtering, chronological ordering, and an empty cache result. The Telegram and Amvera runtime behavior has not been verified by this migration step.
+
+
+### Typed timeout for Mini App schedule requests
+
+The Mini App's 25-second schedule-source timeout now uses `api/with-timeout.ts`. The helper preserves the existing timeout message and clears its timer when either the source resolves or rejects; tests cover success, timeout, and source errors. This is a refactor of the existing timeout behavior, not a change to the request limit or fallback data handling.
