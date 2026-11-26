@@ -70,6 +70,7 @@ import { createApiRateLimiter } from './api/rate-limit-entry.mjs';
 import { isMiniAppManagerWriteRoute } from './api/miniapp-route-policy-entry.mjs';
 import { sendJsonResponse as sendJson, sendTextResponse as sendText } from './api/http-response-entry.mjs';
 import { sanitizeMiniAppClientError } from './api/miniapp-client-error-entry.mjs';
+import { withTimeout } from './api/with-timeout-entry.mjs';
 import { verifyTelegramWebAppInitData } from './api/telegram-webapp-auth-entry.mjs';
 import { readJsonBody } from './api/json-body-entry.mjs';
 import { validateMiniAppProfileName } from './api/input-validation-entry.mjs';
@@ -2208,17 +2209,11 @@ bot.catch(e => console.error('[bot]', e));
 
 
 async function getMiniAppTodayLessons(g) {
- let timer;
- try {
-  return await Promise.race([
-   getTodayLessons(g),
-   new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Источник расписания не ответил за 25 секунд. Предыдущие отметки сохранены — попробуй обновить кабинет позже.')), 25000);
-   })
-  ]);
- } finally {
-  clearTimeout(timer);
- }
+ return withTimeout(
+  getTodayLessons(g),
+  25000,
+  'Источник расписания не ответил за 25 секунд. Предыдущие отметки сохранены — попробуй обновить кабинет позже.'
+ );
 }
 
 // Rate-limit buckets remain process-local and are shared by all Mini App routes.
