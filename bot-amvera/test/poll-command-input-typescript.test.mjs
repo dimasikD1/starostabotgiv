@@ -9,7 +9,7 @@ test('parses trimmed question and options and keeps at most ten options', () => 
 
 test('rejects missing question or fewer than two non-empty options', () => {
   assert.deepEqual(parsePollCommandInput('Question? | A'), { ok: false, error: 'too_few_parts' });
-  assert.deepEqual(parsePollCommandInput(' | A | B'), { ok: true, question: 'A', options: ['B'] });
+  assert.deepEqual(parsePollCommandInput('Question? | | A | B'), { ok: true, question: 'Question?', options: ['A', 'B'] });
 });
 
 test('preserves legacy length limits for question and options', () => {
@@ -18,6 +18,6 @@ test('preserves legacy length limits for question and options', () => {
 });
 
 test('accepts exact limits and ignores empty separators', () => {
-  const result = parsePollCommandInput('Q'.repeat(300) + ' | A'.repeat(0) + 'A'.repeat(100) + ' | B');
+  const result = parsePollCommandInput('Q'.repeat(300) + ' | ' + 'A'.repeat(100) + ' | B');
   assert.equal(result.ok, true);
 });
