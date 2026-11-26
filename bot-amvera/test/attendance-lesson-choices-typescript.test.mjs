@@ -9,7 +9,7 @@ test('lesson picker keeps numbering, time, fallback labels, truncation, and call
     {}
   ]), [
     [{ text: '1. 09:00–10:30 — Математика', callbackData: 'attlesson:0' }],
-    [{ text: '2. Время не указано — Очень длинное название дисциплины, к', callbackData: 'attlesson:1' }],
+    [{ text: '2. Время не указано — Очень длинное название дисциплины, ', callbackData: 'attlesson:1' }],
     [{ text: '3. Время не указано — Пара', callbackData: 'attlesson:2' }]
   ]);
 });
