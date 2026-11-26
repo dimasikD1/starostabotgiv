@@ -17,6 +17,7 @@ import { buildScheduleSnapshot, diffScheduleSnapshots, analyzeScheduleSnapshot }
 import { buildWeeklySchedulePublicationKey, getPendingWeeklyScheduleTargets, groupScheduleTargetsByGroup, getScheduleChangeMonitorEnd, buildScheduleChangeMessage, isWeeklySchedulePublicationWindow, WEEKLY_SCHEDULE_CHECK_INTERVAL_MS, SCHEDULE_CHANGE_CHECK_INTERVAL_MS } from './schedule/notifications-entry.mjs';
 import { createAttendancePollRunner } from './schedule/attendance-jobs-entry.mjs';
 import { publishWeeklySchedule } from './schedule/weekly-publication-entry.mjs';
+import { publishStartupPost } from './domain/startup-post-entry.mjs';
 import { parseStudentNames, formatStudentImportPreview } from './domain/student-import-entry.mjs';
 import { classifyStudentImportMessage, shouldHandleStudentImportPhoto } from './domain/student-import-workflow-entry.mjs';
 import { normalizeUser } from './domain/user-normalization-entry.mjs';
@@ -2020,22 +2021,20 @@ bot.command('publishstartup', async ctx => {
     '🎯 <b>Наша цель</b> — сделать организацию учебной жизни проще, а взаимодействие студентов, старост и администрации удобнее.\n\n' +
     '<b>«Староста Бот» — создан студентом, развивается для студентов.</b> Это только начало! ❤️';
 
-  try {
-    await ctx.telegram.sendMessage(RELEASE_CHANNEL, message, {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [[
-          { text: '💻 Репозиторий на GitHub', url: 'https://github.com/dimasikD1/starostabotgiv' },
-          { text: '🤖 Открыть бота', url: 'https://t.me/starostagivbot' }
-        ]]
-      }
-    });
-    console.log('[publishstartup] История проекта опубликована в ' + RELEASE_CHANNEL + ' владельцем ' + ctx.from.id);
+  const result = await publishStartupPost({
+    channelId: RELEASE_CHANNEL,
+    ownerId: ctx.from.id,
+    message,
+    send: async (channelId, text, options) => {
+      await ctx.telegram.sendMessage(channelId, text, options);
+    },
+    logInfo: message => console.log(message),
+    logError: (message, error) => console.error(message, error instanceof Error ? error.message : error)
+  });
+  if (result.ok) {
     return ctx.reply('✅ Пост о стартапе опубликован в канале ' + RELEASE_CHANNEL + '.');
-  } catch (error) {
-    console.error('[publishstartup] Не удалось опубликовать пост:', error?.message || error);
-    return ctx.reply('❌ Не удалось опубликовать пост. Проверь, что бот добавлен в канал администратором с правом публикации сообщений.');
   }
+  return ctx.reply('❌ Не удалось опубликовать пост. Проверь, что бот добавлен в канал администратором с правом публикации сообщений.');
 });
 
 // Владелец может вручную опубликовать расписание следующей недели в обе учебные группы.
