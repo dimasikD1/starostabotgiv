@@ -69,3 +69,7 @@ Student and manager keyboard row layouts are defined in `domain/main-menus.ts`. 
 ## Typed study-group onboarding prompt
 
 The group-selection prompt keyboard is described in `domain/study-group-prompt-keyboard.ts`. Group labels come from the configured study-group names; the existing callback values and help contact link are preserved. No CAPTCHA or additional onboarding step is added.
+
+## Typed schedule group picker
+
+The schedule flow's invalid-or-missing-group keyboard is defined in `domain/schedule-group-keyboard.ts`. It keeps the configured group labels and the existing `studygroup:2` / `studygroup:1` callback values; Telegram markup construction remains in the JavaScript adapter.
