@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAttendanceButtons, buildAttendanceStatusButtons } from '../../.test-build/domain/attendance-keyboards.js';
+import { buildAttendanceButtons, buildAttendanceStatusButtons, buildLessonAttendanceButtons } from '../../.test-build/domain/attendance-keyboards.js';
 
 test('attendance keyboard preserves statuses, callback data, and student numbering', () => {
   const rows = buildAttendanceButtons({ students: [{ id: 1 }, { id: 2 }, { id: 3 }], attendance: { '1': { '2026-11-26': 'present' }, '2': { '2026-11-26': 'absent' } } }, 0, '2026-11-26', student => student.id);
@@ -25,5 +25,21 @@ test('attendance status keyboard preserves present, absent, clear, and back acti
     [{ text: '✅ Был', callbackData: 'attmark:4:present' }, { text: '❌ Не был', callbackData: 'attmark:4:absent' }],
     [{ text: '↩️ Снять отметку', callbackData: 'attmark:4:clear' }],
     [{ text: '⬅️ К списку', callbackData: 'attback' }]
+  ]);
+});
+
+
+test('per-lesson attendance keyboard preserves callbacks, statuses, and page navigation', () => {
+  const rows = buildLessonAttendanceButtons({
+    items: [{ id: 'a' }, { id: 'b' }],
+    page: 1,
+    pageCount: 3,
+    startIndex: 10
+  }, { a: 'present', b: 'absent' }, student => student.id);
+  assert.deepEqual(rows, [
+    [{ text: '✅ Был 11', callbackData: 'attpairmark:10:present' }, { text: '▫️ Нет 11', callbackData: 'attpairmark:10:absent' }],
+    [{ text: '▫️ Был 12', callbackData: 'attpairmark:11:present' }, { text: '❌ Нет 12', callbackData: 'attpairmark:11:absent' }],
+    [{ text: '⬅️', callbackData: 'attpairpage:0' }, { text: '2/3', callbackData: 'attpairpage:1' }, { text: '➡️', callbackData: 'attpairpage:2' }],
+    [{ text: '↩️ К списку пар', callbackData: 'attpairback' }]
   ]);
 });
