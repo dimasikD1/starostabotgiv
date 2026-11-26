@@ -1,5 +1,4 @@
 import { attendanceKey } from './user-profile.js';
-import { escapeHtml } from '../utils/html.js';
 
 export interface TelegramPollAnswer {
   poll_id?: string;
@@ -190,7 +189,8 @@ export function findLatestAttendancePollRecord(
 /** Render the legacy Telegram /pollreport message, escaping all user-controlled text. */
 export function formatAttendancePollReportMessage(
   groupTitle: unknown,
-  report: AttendancePollReport
+  report: AttendancePollReport,
+  escapeHtml: (value: unknown) => string
 ): string {
   return '📊 <b>Ответы на последний опрос</b>\\n👥 ' + escapeHtml(groupTitle) +
     '\\n📚 ' + escapeHtml(report.subject) + '\\n📅 ' + report.date + ' в ' + report.time +
