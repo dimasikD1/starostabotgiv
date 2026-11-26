@@ -26,6 +26,7 @@ import { buildHelpMessage } from './domain/help-message-entry.mjs';
 import { buildHomeworkMessage } from './domain/homework-message-entry.mjs';
 import { buildHomeworkDestinationButtons } from './domain/homework-destination-buttons-entry.mjs';
 import { buildPollDestinationButtons } from './domain/poll-destination-buttons-entry.mjs';
+import { parsePollCommandInput } from './domain/poll-command-input-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -685,14 +686,14 @@ async function startPoll(ctx) {
     );
   }
 
-  const parts = text.split('|').map(x => x.trim()).filter(Boolean);
-  if (parts.length < 3) return ctx.reply('❌ Нужно минимум: вопрос + 2 варианта. Разделяй их символом |');
-
-  const question = parts.shift();
-  const options = parts.slice(0, 10);
-  if (question.length > 300) return ctx.reply('❌ Вопрос слишком длинный (максимум 300 символов).');
-  if (options.some(x => x.length > 100)) return ctx.reply('❌ Один из вариантов длиннее 100 символов.');
-  if (options.length < 2) return ctx.reply('❌ Нужно минимум два варианта ответа.');
+  const parsed = parsePollCommandInput(text);
+  if (!parsed.ok) {
+    if (parsed.error === 'too_few_parts') return ctx.reply('❌ Нужно минимум: вопрос + 2 варианта. Разделяй их символом |');
+    if (parsed.error === 'question_too_long') return ctx.reply('❌ Вопрос слишком длинный (максимум 300 символов).');
+    if (parsed.error === 'option_too_long') return ctx.reply('❌ Один из вариантов длиннее 100 символов.');
+    return ctx.reply('❌ Нужно минимум два варианта ответа.');
+  }
+  const { question, options } = parsed;
 
   if (!managedChats(ctx.from.id).length) return ctx.reply('❌ В этом Telegram-чате несколько учебных групп. Для общей публикации нужны права на все группы чата.');
   const u = user(ctx.from.id);
