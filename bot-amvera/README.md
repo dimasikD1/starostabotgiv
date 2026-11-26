@@ -65,3 +65,7 @@ Donation amount buttons are described in `domain/donation-keyboard.ts`; the runt
 ## Typed main menu layouts
 
 Student and manager keyboard row layouts are defined in `domain/main-menus.ts`. Telegraf keyboard creation remains in `index.mjs`; tests preserve row ordering and confirm the student menu contains no management-only actions. The donation/support button remains, while no subscription entry is introduced.
+
+## Typed study-group onboarding prompt
+
+The group-selection prompt keyboard is described in `domain/study-group-prompt-keyboard.ts`. Group labels come from the configured study-group names; the existing callback values and help contact link are preserved. No CAPTCHA or additional onboarding step is added.
