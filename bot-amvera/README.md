@@ -87,3 +87,7 @@ The existing Telegram deep-link button for adding the bot to a group is describe
 ## Typed group connection instructions
 
 The concise text used by the `/connectgroup` command is defined in `domain/group-connect-instructions.ts`. The runtime bridge keeps the message content separate from Telegraf markup. Tests check that the existing steps and required group permissions remain present.
+
+## Typed announcement target keyboard
+
+The owner `/announce` chat picker now gets its button labels and `announcechat:<chatId>` callback data from `domain/announcements.ts`. The TypeScript helper preserves the existing 48-character title limit and chat ordering; Telegraf markup remains in the JavaScript runtime adapter.
