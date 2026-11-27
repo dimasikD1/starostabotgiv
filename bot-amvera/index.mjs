@@ -36,6 +36,7 @@ import { buildStudentMenuRows, buildManagerMenuRows } from './domain/main-menus-
 import { buildStudyGroupPromptKeyboard } from './domain/study-group-prompt-keyboard-entry.mjs';
 import { buildScheduleGroupKeyboard } from './domain/schedule-group-keyboard-entry.mjs';
 import { buildStudyGroupChoiceKeyboard } from './domain/study-group-choice-keyboard-entry.mjs';
+import { buildGroupInviteButton } from './domain/group-invite-keyboard-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -899,7 +900,7 @@ bot.start(async ctx => {
     return ctx.reply(
       '👋 Добро пожаловать! Напиши, пожалуйста, свои фамилию и имя (при наличии — отчество) одним сообщением. Это нужно для списка студентов.\n\n' +
       'Если нужно подключить меня к уже существующему учебному чату, нажми кнопку ниже.',
-      Markup.inlineKeyboard([[Markup.button.url('➕ Добавить бота в существующую группу', 'https://t.me/starostagivbot?startgroup=true')]])
+      Markup.inlineKeyboard([[Markup.button.url(...Object.values(buildGroupInviteButton('➕ Добавить бота в существующую группу'))) ]])
     );
   }
   if (isPrivate(ctx) && !u.group) {
@@ -918,7 +919,7 @@ bot.start(async ctx => {
   );
   await ctx.reply(
     '➕ <b>Подключение к существующему чату</b>\nДобавь бота в уже созданную учебную группу и назначь ему права администратора. Существующий чат и его история сохранятся.',
-    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('➕ Добавить бота в группу', 'https://t.me/starostagivbot?startgroup=true')]]) }
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url(...Object.values(buildGroupInviteButton('➕ Добавить бота в группу'))) ]]) }
   );
 });
 
@@ -2105,7 +2106,7 @@ bot.hears('➕ Подключить бота к чату', async ctx => {
     '3. В настройках чата открой «Администраторы» и назначь бота администратором.\n\n' +
     '<b>Нужные права:</b> удаление сообщений, блокировка/ограничение участников и закрепление сообщений. Они нужны для проверки участников и публикации закреплённого расписания. Не выдавай права на добавление других администраторов.\n\n' +
     'После добавления бот сам зарегистрирует чат и сообщит, если каких-то прав не хватает. Существующие сообщения и история чата не затрагиваются.',
-    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('➕ Выбрать существующую группу', 'https://t.me/starostagivbot?startgroup=true')]]) }
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url(...Object.values(buildGroupInviteButton('➕ Выбрать существующую группу'))) ]]) }
   );
 });
 bot.command('openchat', async ctx => {
