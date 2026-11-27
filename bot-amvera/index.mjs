@@ -2037,7 +2037,7 @@ bot.command('mark',async ctx=>{
  if(groups.length>1&&!selected)return ctx.reply('👥 Сначала выбери группу командой /attendance, затем повтори /mark.',{...attendanceGroupPicker(ctx.from.id,groups)});
  const g=managedGroup(ctx.from.id,selected?.id||groups[0].id);if(!g)return ctx.reply('❌ Выбранная группа больше недоступна.');
  const lesson=g.activeAttendanceLessons?.[String(ctx.from.id)];
- const p=ctx.message.text.replace(/^\\/mark(?:@\\S+)?/i,'').trim().split(/\\s+/),i=Number(p[0])-1,status=p[1]==='present'?'present':p[1]==='absent'?'absent':'';
+ const p=ctx.message.text.replace(/^\/mark(?:@\S+)?/i,'').trim().split(/\\s+/),i=Number(p[0])-1,status=p[1]==='present'?'present':p[1]==='absent'?'absent':'';
  if(!lesson)return ctx.reply('Сначала выбери пару через /attendance, затем используй /mark 2 present или /mark 2 absent.');
  if(!Number.isInteger(i)||!g.students[i]||!status)return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
  const key=attendanceLessonKey(lesson);g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][attendanceKey(g.students[i])]=status;saveDb();
