@@ -2491,7 +2491,7 @@ bot.action(/^attgroup:(\d+)$/,async ctx=>{
 });
 bot.action(/^attlesson:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
- const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id,u.selectedAttendanceGroupId);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const lesson=g.todayAttendanceLessons?.[Number(ctx.match[1])];if(!lesson)return ctx.answerCbQuery('Список пар устарел. Отправь /attendance ещё раз.');
  g.activeAttendanceLessons[String(ctx.from.id)]=lesson;g.lessonAttendance||={};saveDb();
  await ctx.answerCbQuery();
@@ -2499,7 +2499,7 @@ bot.action(/^attlesson:(\d+)$/,async ctx=>{
 });
 bot.action(/^attpairmark:(\d+):(present|absent)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
- const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id,u.selectedAttendanceGroupId);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const lesson=g.activeAttendanceLessons?.[String(ctx.from.id)],i=Number(ctx.match[1]),student=g.students?.[i];
  if(!lesson||!student)return ctx.answerCbQuery('Пара или студент не найдены. Открой /attendance заново.');
  const key=attendanceLessonKey(lesson),studentKey=attendanceKey(student);
@@ -2509,14 +2509,14 @@ bot.action(/^attpairmark:(\d+):(present|absent)$/,async ctx=>{
 });
 bot.action(/^attpairpage:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery();
- const g=managedGroup(ctx.from.id),lesson=g?.activeAttendanceLessons?.[String(ctx.from.id)];
+ const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id,u.selectedAttendanceGroupId),lesson=g?.activeAttendanceLessons?.[String(ctx.from.id)];
  if(!g||!lesson)return ctx.answerCbQuery('Открой /attendance заново.');
  await ctx.answerCbQuery();
  return ctx.editMessageText(formatLessonAttendance(g,lesson),{parse_mode:'HTML',...attendancePairButtons(g,lesson,ctx.from.id,Number(ctx.match[1]))});
 });
 bot.action('attpairback',async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery();
- const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
+ const u=normalizeUser(user(ctx.from.id)),g=managedGroup(ctx.from.id,u.selectedAttendanceGroupId);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const lessons=g.todayAttendanceLessons||[];
  await ctx.answerCbQuery();
  if(!lessons.length)return ctx.editMessageText('Список пар устарел. Отправь /attendance ещё раз.');
