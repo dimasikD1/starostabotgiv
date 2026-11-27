@@ -1909,6 +1909,37 @@ bot.command('appointstarosta', async ctx => {
   return ctx.reply('Назначение без конкретной группы отключено. Используй /setstarosta 1 или /setstarosta 2 ответом на сообщение пользователя в нужном учебном чате.');
 });
 
+bot.command('setstudentgroup', async ctx => {
+  if (!['group', 'supergroup'].includes(ctx.chat.type)) {
+    return ctx.reply('❌ Команду /setstudentgroup нужно выполнить в учебном чате.');
+  }
+  if (!isOwner(ctx.from.id) && !canManageChat(ctx.from.id, ctx.chat.id)) {
+    return ctx.reply('❌ Выбрать учебную группу студенту может только староста/заместитель этой группы или разработчик.');
+  }
+  const target = ctx.message.reply_to_message?.from;
+  if (!target || target.is_bot) {
+    return ctx.reply('Ответь командой /setstudentgroup 1 или /setstudentgroup 2 на сообщение студента.');
+  }
+  const groupNumber = String(ctx.message.text || '').trim().split(/\\s+/)[1] || '';
+  if (!['1', '2'].includes(groupNumber)) {
+    return ctx.reply('Укажи номер учебной группы: /setstudentgroup 1 или /setstudentgroup 2 (ответом на сообщение студента).');
+  }
+  const groupName = STUDY_GROUPS[groupNumber];
+  const chat = db.groups[String(ctx.chat.id)];
+  if (!chat) return ctx.reply('❌ Этот чат ещё не зарегистрирован. Сначала подключи бота командой /attach.');
+  const studyGroup = ensureStudyGroups(chat).find(group => group.studyGroup === groupName);
+  if (!studyGroup) return ctx.reply('❌ Учебная группа не найдена в этом чате.');
+  const student = normalizeUser(user(target.id));
+  student.group = groupName;
+  student.studyGroup = groupName;
+  student.groupChatId = String(ctx.chat.id);
+  student.institutionId = String(studyGroup.institutionId || DEFAULT_INSTITUTION_ID);
+  if (!['starosta', 'zam'].includes(String(student.role || ''))) student.role = 'student';
+  saveDb();
+  return ctx.reply('✅ Студент ' + escapeHtml(target.first_name || 'Пользователь') +
+    ' теперь закреплён за учебной группой «' + escapeHtml(groupName) + '».');
+});
+
 bot.command('setstudent', async ctx => {
   if (!['group', 'supergroup'].includes(ctx.chat.type)) return ctx.reply('Эту команду нужно выполнить в группе.');
   if (!(await isGroupAdmin(ctx))) return ctx.reply('❌ Менять роль может только администратор группы.');
