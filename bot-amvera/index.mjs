@@ -1982,7 +1982,7 @@ bot.command('publishstartup', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('📩 Команду /publishstartup используй в личных сообщениях с ботом.');
   if (!isOwner(ctx.from.id)) return ctx.reply('❌ Команда доступна только владельцу бота.');
 
-  const message = buildStartupAnnouncementMessage()
+  const message = buildStartupAnnouncementMessage();
 
   const result = await publishStartupPost({
     channelId: RELEASE_CHANNEL,
