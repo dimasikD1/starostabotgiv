@@ -91,3 +91,7 @@ The concise text used by the `/connectgroup` command is defined in `domain/group
 ## Typed announcement target keyboard
 
 The owner `/announce` chat picker now gets its button labels and `announcechat:<chatId>` callback data from `domain/announcements.ts`. The TypeScript helper preserves the existing 48-character title limit and chat ordering; Telegraf markup remains in the JavaScript runtime adapter.
+
+## Typed startup announcement copy
+
+The owner-only `/publishstartup` command now obtains its existing public announcement text from `domain/startup-announcement.ts`. The copy and HTML markup are preserved; publishing permissions, channel delivery, and error handling remain in the runtime command.
