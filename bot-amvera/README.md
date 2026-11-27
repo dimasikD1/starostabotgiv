@@ -79,3 +79,7 @@ The schedule flow's invalid-or-missing-group keyboard is defined in `domain/sche
 The initial private-chat onboarding group picker now uses `domain/study-group-choice-keyboard.ts`. It keeps the configured group names and the existing callback identifiers, while Telegram-specific button construction stays in the JavaScript adapter.
 
 The shared typed study-group choice keyboard is also used by the `/group` command and the post-FIO verification prompts, so these flows use the same configured group names and callback identifiers as onboarding.
+
+## Typed group invite button
+
+The existing Telegram deep-link button for adding the bot to a group is described in `domain/group-invite-keyboard.ts`. The runtime adapter converts the typed label and URL into Telegraf markup; tests preserve the current invite URL. This only centralizes the existing button and does not change group onboarding behavior.
