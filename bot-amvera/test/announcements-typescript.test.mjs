@@ -5,7 +5,8 @@ import {
   createAnnouncementRecord,
   appendAnnouncement,
   formatAnnouncementMessage,
-  buildAnnouncementChatKeyboardRows
+  buildAnnouncementChatKeyboardRows,
+  isAnnouncementChatConnected
 } from '../domain/.build/announcements.js';
 
 const escapeHtml = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -72,4 +73,17 @@ test('builds announcement target keyboard rows with legacy labels and callback d
     [{ text: '📢 Учебная группа', callbackData: 'announcechat:-100123' }],
     [{ text: '📢 ' + 'x'.repeat(48), callbackData: 'announcechat:456' }]
   ]);
+});
+
+
+test('checks whether an announcement callback still targets a registered chat', () => {
+  const groups = {
+    legacyKey: { chatId: '-1007' },
+    '123': { title: 'Fallback chat' },
+    disabled: null
+  };
+  assert.equal(isAnnouncementChatConnected(groups, '-1007'), true);
+  assert.equal(isAnnouncementChatConnected(groups, '123'), true);
+  assert.equal(isAnnouncementChatConnected(groups, '999'), false);
+  assert.equal(isAnnouncementChatConnected(undefined, '123'), false);
 });
