@@ -93,7 +93,7 @@ import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark, validateH
 import { validateHomeworkMediaUpload } from './api/homework-media-validation-entry.mjs';
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
-import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions, buildAnnouncementChatKeyboardRows } from './domain/announcements-entry.mjs';
+import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions, buildAnnouncementChatKeyboardRows, isAnnouncementChatConnected } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, getSavedStudyGroup, completeFullNameRegistration, parseStudyGroupSelection, resolveStudyGroupRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
@@ -1164,7 +1164,7 @@ bot.on('text', async (ctx,next) => {
   if (!announcementValidation.ok) return ctx.reply(announcementValidation.reason === 'empty' ? '❌ Напиши текст объявления.' : '❌ Объявление слишком длинное. Максимум 3000 символов.');
   const announcementText = announcementValidation.text;
   const chatId = String(u.pendingAnnouncementChatId);
-  const exists = Object.entries(db.groups || {}).some(([id, g]) => String(g.chatId || id) === chatId);
+  const exists = isAnnouncementChatConnected(db.groups || {}, chatId);
   if (!exists) {
    delete u.pendingAnnouncementChatId; saveDb();
    return ctx.reply('❌ Выбранный чат больше не подключён. Запусти /announce ещё раз.');
