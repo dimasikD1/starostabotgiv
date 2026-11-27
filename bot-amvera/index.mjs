@@ -1920,7 +1920,7 @@ bot.command('setstudentgroup', async ctx => {
   if (!target || target.is_bot) {
     return ctx.reply('Ответь командой /setstudentgroup 1 или /setstudentgroup 2 на сообщение студента.');
   }
-  const groupNumber = String(ctx.message.text || '').trim().split(/\\s+/)[1] || '';
+  const groupNumber = String(ctx.message.text || '').trim().split(/\s+/)[1] || '';
   if (!['1', '2'].includes(groupNumber)) {
     return ctx.reply('Укажи номер учебной группы: /setstudentgroup 1 или /setstudentgroup 2 (ответом на сообщение студента).');
   }
