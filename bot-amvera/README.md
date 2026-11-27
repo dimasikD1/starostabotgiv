@@ -95,3 +95,5 @@ The owner `/announce` chat picker now gets its button labels and `announcechat:<
 ## Typed startup announcement copy
 
 The owner-only `/publishstartup` command now obtains its existing public announcement text from `domain/startup-announcement.ts`. The copy and HTML markup are preserved; publishing permissions, channel delivery, and error handling remain in the runtime command.
+
+The `announcechat:<chatId>` callback also uses a typed membership check in `domain/announcements.ts`, preserving the existing lookup rule and stale-chat response when a chat has been disconnected.
