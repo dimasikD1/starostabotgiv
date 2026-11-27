@@ -85,3 +85,11 @@ export function buildAnnouncementChatKeyboardRows(
     callbackData: 'announcechat:' + String(chat.id)
   }]);
 }
+
+/** Check whether a chat selected by an announcement callback is still registered. */
+export function isAnnouncementChatConnected(
+  groups: Record<string, AnnouncementChatGroup | null | undefined> | null | undefined,
+  chatId: string
+): boolean {
+  return Object.entries(groups || {}).some(([id, group]) => String(group?.chatId || id) === String(chatId));
+}
