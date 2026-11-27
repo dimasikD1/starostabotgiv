@@ -79,8 +79,28 @@ body{padding-top:calc(12px + env(safe-area-inset-top))}
 (function(){
   var app=document.getElementById('app');
   function show(message){if(app){var box=document.getElementById('early-diagnostic');if(!box){box=document.createElement('div');box.id='early-diagnostic';box.style.cssText='margin-top:12px;padding:10px;border:1px solid #52658e;border-radius:10px;color:#dce5ff;font-size:13px;white-space:pre-wrap';app.appendChild(box)}box.textContent=message}}
-  window.addEventListener('error',function(e){show('Ошибка JavaScript: '+(e.message||'неизвестная ошибка')+(e.lineno?' (строка '+e.lineno+')':''));console.error('[miniapp early error]',e.message,e.filename,e.lineno)});
-  window.addEventListener('unhandledrejection',function(e){show('Ошибка выполнения: '+String(e.reason&&e.reason.message||e.reason));console.error('[miniapp early rejection]',e.reason)});
+  function reportClientError(payload){
+    try{
+      var body=JSON.stringify(payload);
+      if(navigator.sendBeacon){
+        var sent=navigator.sendBeacon('/__client-error',new Blob([body],{type:'application/json'}));
+        if(sent)return;
+      }
+      fetch('/__client-error',{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true,credentials:'same-origin'}).catch(function(){});
+    }catch(reportError){console.error('[miniapp diagnostic transport]',reportError)}
+  }
+  window.addEventListener('error',function(e){
+    var message=e.message||'Неизвестная ошибка JavaScript';
+    show('Ошибка JavaScript: '+message+(e.lineno?' (строка '+e.lineno+')':''));
+    console.error('[miniapp early error]',message,e.filename,e.lineno,e.colno);
+    reportClientError({kind:e.target&&e.target!==window?'resource-error':'javascript-error',message:message,source:e.filename||(e.target&&(e.target.src||e.target.href))||'',line:e.lineno||0,column:e.colno||0,stage:window.__miniAppStage||'before-main-script',stack:e.error&&e.error.stack||''});
+  },true);
+  window.addEventListener('unhandledrejection',function(e){
+    var reason=e.reason, message=String(reason&&reason.message||reason||'Неизвестная ошибка Promise');
+    show('Ошибка выполнения: '+message);
+    console.error('[miniapp early rejection]',reason);
+    reportClientError({kind:'unhandled-rejection',message:message,stage:window.__miniAppStage||'unknown',stack:reason&&reason.stack||''});
+  });
   setTimeout(function(){if(!window.__miniAppStage)show('Основной скрипт не запустился. Проверьте подключение Telegram SDK и ошибки JavaScript.')},1500);
   var sdk=document.querySelector('script[src*="telegram-web-app.js"]');
   if(sdk)sdk.addEventListener('error',function(){show('Не удалось загрузить Telegram WebApp SDK')});
@@ -96,7 +116,7 @@ function toast(message,type='ok'){let el=document.getElementById('toast');if(!el
 function haptic(kind='light'){try{tg?.HapticFeedback?.impactOccurred(kind)}catch{}}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function initTelegram(){tg=window.Telegram?.WebApp||null;if(tg){tg.ready();tg.expand();return true}return false}
-function setDiagnostic(stage){window.__miniAppStage=stage;console.log('[miniapp]',stage);const el=document.getElementById('load-stage');if(el)el.textContent=stage}
+function setDiagnostic(stage){window.__miniAppStage=stage;console.log('[miniapp stage]',stage);const el=document.getElementById('load-stage');if(el)el.textContent=stage}
 async function waitForTelegram(){
  setDiagnostic('Подключаем Telegram WebApp…');
  const started=Date.now();let nextRetry=0,retries=0;
