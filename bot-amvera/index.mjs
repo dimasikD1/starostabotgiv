@@ -2479,7 +2479,7 @@ bot.action(/^attstudent:(\d+)$/,async ctx=>{
  const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');await ctx.answerCbQuery('Выбери статус');
  await ctx.editMessageText('📋 <b>'+escapeHtml(g.title)+'</b>\n\n'+escapeHtml(studentName(g.students[i])),{parse_mode:'HTML',...attendanceStatusButtons(i)});
 });
-bot.action(/^attgroup:(\\d+)$/,async ctx=>{
+bot.action(/^attgroup:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
  const u=normalizeUser(user(ctx.from.id)),groups=accessibleGroups(ctx.from.id);
  const index=Number(ctx.match[1]),ids=Array.isArray(u.pendingAttendanceGroupIds)?u.pendingAttendanceGroupIds:[];
