@@ -1939,20 +1939,38 @@ bot.command('app', async ctx => {
   });
 });
 
-bot.command('attendance',async ctx=>{
- if(!isPrivate(ctx))return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
- const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
- if(!g.students?.length)return ctx.reply('📋 Сначала добавь студентов в группу командой /importstudents.');
+function attendanceGroupPicker(userId, groups) {
+ const u=normalizeUser(user(userId));
+ u.pendingAttendanceGroupIds=groups.map(g=>g.id);
+ saveDb();
+ return Markup.inlineKeyboard(groups.map((g,i)=>[Markup.button.callback(g.title,'attgroup:'+i)]));
+}
+async function loadAttendanceForGroup(g,ctx,edit=false) {
+ if(!g)return edit?ctx.editMessageText('❌ Группа больше недоступна.'):ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
+ if(!g.students?.length)return edit?ctx.editMessageText('📋 В выбранной группе пока нет студентов. Добавь их командой /importstudents.'):ctx.reply('📋 Сначала добавь студентов в группу командой /importstudents.');
  try{
   const lessons=await getTodayLessons(g);
-  if(!lessons.length)return ctx.reply('📋 На сегодня в расписании нет пар для группы '+escapeHtml(g.scheduleGroup||'')+'.');
+  if(!lessons.length)return edit?ctx.editMessageText('📋 На сегодня в расписании нет пар для группы '+escapeHtml(g.scheduleGroup||'')+'.'):ctx.reply('📋 На сегодня в расписании нет пар для группы '+escapeHtml(g.scheduleGroup||'')+'.');
   g.todayAttendanceLessons=lessons.map(x=>({date:x.date,timeStart:x.timeStart,timeEnd:x.timeEnd,subject:x.subject,room:x.room,teacher:x.teacher}));
   saveDb();
-  return ctx.reply('📋 <b>Посещаемость за '+attendanceDate()+'</b>\n👥 '+escapeHtml(g.title||'Группа')+'\n\nВыбери пару:',{parse_mode:'HTML',...attendanceLessonsKeyboard(lessons)});
+  const text='📋 <b>Посещаемость за '+attendanceDate()+'</b>\\n👥 '+escapeHtml(g.title||'Группа')+'\\n\\nВыбери пару:';
+  return edit?ctx.editMessageText(text,{parse_mode:'HTML',...attendanceLessonsKeyboard(lessons)}):ctx.reply(text,{parse_mode:'HTML',...attendanceLessonsKeyboard(lessons)});
  }catch(e){
   console.error('[attendance] schedule error:',e.message||e);
-  return ctx.reply('❌ Не удалось загрузить пары из расписания. Проверь название группы через /setgroup и попробуй ещё раз.');
+  const text='❌ Не удалось загрузить пары из расписания. Проверь название группы через /setgroup и попробуй ещё раз.';
+  return edit?ctx.editMessageText(text):ctx.reply(text);
  }
+}
+bot.command('attendance',async ctx=>{
+ if(!isPrivate(ctx))return ctx.reply('📩 Посещаемость доступна в личных сообщениях.');
+ const groups=accessibleGroups(ctx.from.id);
+ if(!groups.length)return ctx.reply('❌ Журнал доступен старосте или заместителю группы.');
+ const u=normalizeUser(user(ctx.from.id));
+ const selectedId=String(u.selectedAttendanceGroupId||'');
+ const selected=selectedId?groups.find(g=>g.id===selectedId):null;
+ if(groups.length>1&&!selected)return ctx.reply('👥 Выбери учебную группу для журнала:',{...attendanceGroupPicker(ctx.from.id,groups)});
+ const g=managedGroup(ctx.from.id,selected?.id||groups[0].id);
+ return loadAttendanceForGroup(g,ctx);
 });
 bot.command(['attendanceweb', 'html'], async ctx => {
  if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях.');
@@ -2013,9 +2031,13 @@ bot.action(/^attendanceweb:period:(week|month|all)$/,async ctx=>{
 });
 bot.command('mark',async ctx=>{
  if(!isPrivate(ctx))return ctx.reply('📩 Используй команду в личке.');
- const g=managedGroup(ctx.from.id);if(!g)return ctx.reply('❌ Только староста или заместитель.');
+ const groups=accessibleGroups(ctx.from.id),u=normalizeUser(user(ctx.from.id));
+ if(!groups.length)return ctx.reply('❌ Только староста или заместитель.');
+ const selectedId=String(u.selectedAttendanceGroupId||''),selected=selectedId?groups.find(g=>g.id===selectedId):null;
+ if(groups.length>1&&!selected)return ctx.reply('👥 Сначала выбери группу командой /attendance, затем повтори /mark.',{...attendanceGroupPicker(ctx.from.id,groups)});
+ const g=managedGroup(ctx.from.id,selected?.id||groups[0].id);if(!g)return ctx.reply('❌ Выбранная группа больше недоступна.');
  const lesson=g.activeAttendanceLessons?.[String(ctx.from.id)];
- const p=ctx.message.text.replace(/^\/mark(?:@\S+)?/i,'').trim().split(/\s+/),i=Number(p[0])-1,status=p[1]==='present'?'present':p[1]==='absent'?'absent':'';
+ const p=ctx.message.text.replace(/^\\/mark(?:@\\S+)?/i,'').trim().split(/\\s+/),i=Number(p[0])-1,status=p[1]==='present'?'present':p[1]==='absent'?'absent':'';
  if(!lesson)return ctx.reply('Сначала выбери пару через /attendance, затем используй /mark 2 present или /mark 2 absent.');
  if(!Number.isInteger(i)||!g.students[i]||!status)return ctx.reply('Пример: /mark 2 present или /mark 2 absent');
  const key=attendanceLessonKey(lesson);g.lessonAttendance||={};g.lessonAttendance[key]||={};g.lessonAttendance[key][attendanceKey(g.students[i])]=status;saveDb();
@@ -2456,6 +2478,16 @@ bot.action(/^attstudent:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');const g=managedGroup(ctx.from.id);if(!g)return ctx.answerCbQuery('Группа не найдена.');
  const i=Number(ctx.match[1]);if(!g.students[i])return ctx.answerCbQuery('Студент не найден.');await ctx.answerCbQuery('Выбери статус');
  await ctx.editMessageText('📋 <b>'+escapeHtml(g.title)+'</b>\n\n'+escapeHtml(studentName(g.students[i])),{parse_mode:'HTML',...attendanceStatusButtons(i)});
+});
+bot.action(/^attgroup:(\\d+)$/,async ctx=>{
+ if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
+ const u=normalizeUser(user(ctx.from.id)),groups=accessibleGroups(ctx.from.id);
+ const index=Number(ctx.match[1]),ids=Array.isArray(u.pendingAttendanceGroupIds)?u.pendingAttendanceGroupIds:[];
+ const id=ids[index],g=groups.find(item=>item.id===id);
+ if(!g)return ctx.answerCbQuery('Список групп устарел. Отправь /attendance заново.');
+ u.selectedAttendanceGroupId=g.id;delete u.pendingAttendanceGroupIds;saveDb();
+ await ctx.answerCbQuery('Группа выбрана');
+ return ctx.editMessageText('✅ Выбрана группа: <b>'+escapeHtml(g.title)+'</b>\\n\\nТеперь отправь /attendance, чтобы выбрать пару, или /mark, чтобы отметить посещаемость.',{parse_mode:'HTML'});
 });
 bot.action(/^attlesson:(\d+)$/,async ctx=>{
  if(!isPrivate(ctx))return ctx.answerCbQuery('Открой журнал в личке.');
