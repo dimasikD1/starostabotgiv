@@ -1969,7 +1969,7 @@ bot.action(/^announcechat:(-?\d+)$/, async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.answerCbQuery('Недостаточно прав.', { show_alert: true });
   if (!isPrivate(ctx)) return ctx.answerCbQuery('Открой выбор в личных сообщениях с ботом.', { show_alert: true });
   const chatId = String(ctx.match[1]);
-  const exists = Object.entries(db.groups || {}).some(([id, g]) => String(g.chatId || id) === chatId);
+  const exists = isAnnouncementChatConnected(db.groups || {}, chatId);
   if (!exists) return ctx.answerCbQuery('Чат больше не подключён.', { show_alert: true });
   const u = normalizeUser(user(ctx.from.id));
   u.pendingAnnouncementChatId = chatId;
