@@ -4,5 +4,6 @@ export {
   appendAnnouncement,
   formatAnnouncementMessage,
   getRecentAnnouncements,
-  buildAnnouncementChatOptions
+  buildAnnouncementChatOptions,
+  buildAnnouncementChatKeyboardRows
 } from './.build/announcements.js';
