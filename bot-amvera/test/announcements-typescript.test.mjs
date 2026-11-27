@@ -4,7 +4,8 @@ import {
   normalizeAnnouncementText,
   createAnnouncementRecord,
   appendAnnouncement,
-  formatAnnouncementMessage
+  formatAnnouncementMessage,
+  buildAnnouncementChatKeyboardRows
 } from '../domain/.build/announcements.js';
 
 const escapeHtml = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -60,4 +61,15 @@ test('builds unique announcement chat targets and ignores invalid chat IDs', asy
     { id: '-1002', title: 'Второй чат' }
   ]);
   assert.deepEqual(buildAnnouncementChatOptions(undefined), []);
+});
+
+
+test('builds announcement target keyboard rows with legacy labels and callback data', () => {
+  assert.deepEqual(buildAnnouncementChatKeyboardRows([
+    { id: '-100123', title: 'Учебная группа' },
+    { id: '456', title: 'x'.repeat(60) }
+  ]), [
+    [{ text: '📢 Учебная группа', callbackData: 'announcechat:-100123' }],
+    [{ text: '📢 ' + 'x'.repeat(48), callbackData: 'announcechat:456' }]
+  ]);
 });
