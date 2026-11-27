@@ -991,10 +991,8 @@ bot.command('group', async ctx => {
   if (!selected) {
     return ctx.reply(
       'Укажи одну из двух учебных групп кнопкой ниже или командой /group 1 либо /group 2:',
-      Markup.inlineKeyboard([
-        [Markup.button.callback(STUDY_GROUPS['2'], 'studygroup:2')],
-        [Markup.button.callback(STUDY_GROUPS['1'], 'studygroup:1')]
-      ])
+      Markup.inlineKeyboard(buildStudyGroupChoiceKeyboard(STUDY_GROUPS['2'], STUDY_GROUPS['1'])
+        .map(row => row.map(button => Markup.button.callback(button.text, button.callbackData)))
     );
   }
   const linkedGroup = allStudyGroups().find(g => String(g.studyGroup || '') === selected);
@@ -1189,20 +1187,16 @@ bot.on('text', async (ctx,next) => {
   if (verificationChatId) {
    return ctx.reply(
     '✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>\n\nТеперь выбери свою учебную группу:',
-    { parse_mode: 'HTML', ...Markup.inlineKeyboard([
-      [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
-      [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')]
-    ]) }
+    { parse_mode: 'HTML', ...Markup.inlineKeyboard(buildStudyGroupChoiceKeyboard(STUDY_GROUPS['2'], STUDY_GROUPS['1'])
+      .map(row => row.map(button => Markup.button.callback(button.text, button.callbackData))) }
    );
   }
   if (!['starosta', 'zam'].includes(String(u.role || ''))) u.role = 'student';
   saveDb();
   return ctx.reply(
    '✅ ФИО сохранено: <b>' + escapeHtml(fullName) + '</b>.\n\nТвоя роль — 👨‍🎓 Студент. Теперь выбери учебную группу:',
-   { parse_mode: 'HTML', ...Markup.inlineKeyboard([
-    [Markup.button.callback('БИ(ЭБ)2-ОЗ/Бп/КД26', 'studygroup:2')],
-    [Markup.button.callback('БИ(ЭБ)1-ОЗ/Бп/КД26', 'studygroup:1')]
-   ]) }
+   { parse_mode: 'HTML', ...Markup.inlineKeyboard(buildStudyGroupChoiceKeyboard(STUDY_GROUPS['2'], STUDY_GROUPS['1'])
+    .map(row => row.map(button => Markup.button.callback(button.text, button.callbackData))) }
   );
  }
  if(u.pendingStudentField){
