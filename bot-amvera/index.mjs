@@ -37,6 +37,7 @@ import { buildStudyGroupPromptKeyboard } from './domain/study-group-prompt-keybo
 import { buildScheduleGroupKeyboard } from './domain/schedule-group-keyboard-entry.mjs';
 import { buildStudyGroupChoiceKeyboard } from './domain/study-group-choice-keyboard-entry.mjs';
 import { buildGroupInviteButton } from './domain/group-invite-keyboard-entry.mjs';
+import { buildGroupConnectInstructions } from './domain/group-connect-instructions-entry.mjs';
 import { shouldShowManagerMenu } from './domain/menu-policy-entry.mjs';
 import { isOwnerId } from './domain/owner-access-entry.mjs';
 import { isPrivateChat } from './domain/private-chat-entry.mjs';
@@ -2147,8 +2148,7 @@ bot.command('registerchat', async ctx => {
 bot.command('connectgroup', async ctx => {
   if (!isPrivate(ctx)) return ctx.reply('Открой личные сообщения с ботом.');
   return ctx.reply(
-    '➕ <b>Подключение к уже существующей учебной группе</b>\n\n' +
-    'Нажми кнопку, выбери существующий чат и добавь туда бота. Затем назначь его администратором с правами удаления сообщений, ограничения участников и закрепления сообщений. Не выдавай право добавлять других администраторов. Бот автоматически зарегистрирует чат после добавления.',
+    buildGroupConnectInstructions(),
     { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.url('➕ Выбрать существующую группу', 'https://t.me/starostagivbot?startgroup=true')]]) }
   );
 });
