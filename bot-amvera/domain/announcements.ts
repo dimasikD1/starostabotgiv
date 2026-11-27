@@ -73,3 +73,15 @@ export function buildAnnouncementChatOptions(
     .filter(chat => /^-?\d+$/.test(chat.id));
   return [...new Map(chats.map(chat => [chat.id, chat])).values()];
 }
+
+/** Build callback-button rows for the owner announcement target picker. */
+export function buildAnnouncementChatKeyboardRows(
+  chats: readonly { id: string; title: string }[],
+  maxTitleLength = 48
+): Array<Array<{ text: string; callbackData: string }>> {
+  const safeLength = Math.max(1, Math.floor(Number(maxTitleLength) || 48));
+  return chats.map(chat => [{
+    text: '📢 ' + String(chat.title).slice(0, safeLength),
+    callbackData: 'announcechat:' + String(chat.id)
+  }]);
+}
