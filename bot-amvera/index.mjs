@@ -1974,10 +1974,17 @@ bot.command('attendance',async ctx=>{
 });
 bot.command(['attendanceweb', 'html'], async ctx => {
  if (!isPrivate(ctx)) return ctx.reply('📩 Используй команду в личных сообщениях.');
- const g = managedGroup(ctx.from.id);
- if (!g) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
+ const groups = accessibleGroups(ctx.from.id);
+ if (!groups.length) return ctx.reply('❌ Команда доступна старосте или заместителю прикреплённой группы.');
  const u = normalizeUser(user(ctx.from.id));
- // Закрепляем группу до конца экспорта: права владельца не должны переключать отчёт на другую группу.
+ const selectedId = String(u.selectedAttendanceGroupId || '');
+ const selected = selectedId ? groups.find(group => group.id === selectedId) : null;
+ if (groups.length > 1 && !selected) {
+  return ctx.reply('👥 Выбери учебную группу для HTML-отчёта:', { ...attendanceGroupPicker(ctx.from.id, groups) });
+ }
+ const g = managedGroup(ctx.from.id, selected?.id || groups[0].id);
+ if (!g) return ctx.reply('❌ Выбранная группа больше недоступна.');
+ // Сохраняем выбранную группу до конца экспорта, чтобы отчёт не переключился на первую группу.
  u.pendingAttendanceHtml = true;
  u.pendingAttendanceHtmlGroupId = String(g.chatId) + '::' + String(g.studyGroup || g.title);
  saveDb();
