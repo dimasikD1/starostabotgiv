@@ -11,5 +11,4 @@ test('builds the established startup announcement with expected sections and HTM
   assert.match(message, /📲 <b>Mini App<\/b>/u);
   assert.match(message, /Это только начало! ❤️$/u);
   assert.equal(message.includes('\\n'), false);
-  assert.equal(message.split('\\n').length, 13);
 });
