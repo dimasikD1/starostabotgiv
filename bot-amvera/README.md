@@ -83,3 +83,7 @@ The shared typed study-group choice keyboard is also used by the `/group` comman
 ## Typed group invite button
 
 The existing Telegram deep-link button for adding the bot to a group is described in `domain/group-invite-keyboard.ts`. The runtime adapter converts the typed label and URL into Telegraf markup; tests preserve the current invite URL. This only centralizes the existing button and does not change group onboarding behavior.
+
+## Typed group connection instructions
+
+The concise text used by the `/connectgroup` command is defined in `domain/group-connect-instructions.ts`. The runtime bridge keeps the message content separate from Telegraf markup. Tests check that the existing steps and required group permissions remain present.
