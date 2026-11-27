@@ -92,7 +92,7 @@ import { validateMiniAppHomeworkFields, validateMiniAppAttendanceMark, validateH
 import { validateHomeworkMediaUpload } from './api/homework-media-validation-entry.mjs';
 import { validateNewHomeworkAttachments, validateUpdatedHomeworkAttachments } from './api/homework-attachment-validation-entry.mjs';
 import { createJsonStore } from './domain/json-store-entry.mjs';
-import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions } from './domain/announcements-entry.mjs';
+import { normalizeAnnouncementText, createAnnouncementRecord, appendAnnouncement, formatAnnouncementMessage, getRecentAnnouncements, buildAnnouncementChatOptions, buildAnnouncementChatKeyboardRows } from './domain/announcements-entry.mjs';
 import { validateAndNormalizeFullName, applyStudyGroupSelection, shouldPromptStudyGroup, getSavedStudyGroup, completeFullNameRegistration, parseStudyGroupSelection, resolveStudyGroupRegistration } from './domain/registration-entry.mjs';
 import { groupRoleReportSources, filterRoleReportGroups, buildRoleReportMemberRows } from './domain/role-report-entry.mjs';
 import { assignAndPersistStudyGroupRole, removeAndPersistStudyGroupRoles, setSelfAsStudentAndSave, setGroupMemberAsStudentAndSave } from './domain/role-command-workflows-entry.mjs';
@@ -1960,7 +1960,7 @@ bot.command('announce', async ctx => {
   if (!isOwner(ctx.from.id)) return ctx.reply('🔒 Публиковать объявления через эту команду может только владелец бота.');
   const unique = buildAnnouncementChatOptions(db.groups || {});
   if (!unique.length) return ctx.reply('❌ Пока нет подключённых Telegram-чатов. Сначала добавь бота в нужный чат.');
-  const rows = unique.map(x => [Markup.button.callback('📢 ' + x.title.slice(0, 48), 'announcechat:' + x.id)]);
+  const rows = buildAnnouncementChatKeyboardRows(unique).map(row => row.map(button => Markup.button.callback(button.text, button.callbackData)));
   return ctx.reply('📨 <b>Выбери чат для объявления</b>:', { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
 });
 
